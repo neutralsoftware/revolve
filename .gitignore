@@ -1,0 +1,12 @@
+build
+dist
+compile_commands.json
+.jj
+CMakeCache.txt
+cmake_install.cmake
+.DS_Store
+bin
+.cache
+_deps
+.cmake
+__pycache__
