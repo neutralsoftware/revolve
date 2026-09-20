@@ -10,3 +10,4 @@ bin
 _deps
 .cmake
 __pycache__
+tests/build
