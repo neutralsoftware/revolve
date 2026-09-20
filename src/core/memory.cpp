@@ -4,6 +4,7 @@
 #include "device.h"
 #include <cstdint>
 #include <span>
+#include <sys/types.h>
 #include <vector>
 
 ResolvedAddress Bus::resolveAddress(uint32_t addr) {
@@ -585,4 +586,31 @@ BigEndianStream Bus::readToStream(uint32_t addr, size_t count) {
     std::vector<uint8_t> buffer(count);
     readBlock(addr, buffer);
     return BigEndianStream(buffer);
+}
+
+MemoryStream::MemoryStream(uint32_t startAddress)
+    : currentAddress(startAddress) {}
+
+uint8_t MemoryStream::read8() {
+    uint8_t value = Bus::read8(currentAddress);
+    currentAddress += 1;
+    return value;
+}
+
+uint16_t MemoryStream::read16() {
+    uint16_t value = Bus::read16(currentAddress);
+    currentAddress += 2;
+    return value;
+}
+
+uint32_t MemoryStream::read32() {
+    uint32_t value = Bus::read32(currentAddress);
+    currentAddress += 4;
+    return value;
+}
+
+uint64_t MemoryStream::read64() {
+    uint64_t value = Bus::read64(currentAddress);
+    currentAddress += 8;
+    return value;
 }

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <sys/types.h>
 #include <vector>
 
 constexpr uint32_t MEM1_CACHED_START = 0x80000000;
@@ -130,6 +131,22 @@ class Bus {
     BigEndianStream readToStream(uint32_t addr, size_t count);
 
     static ResolvedAddress resolveAddress(uint32_t addr);
+};
+
+class MemoryStream {
+  public:
+    MemoryStream(uint32_t startAddress);
+
+    uint8_t read8();
+    uint16_t read16();
+    uint32_t read32();
+    uint64_t read64();
+
+    float readFloat();
+    double readDouble();
+
+  private:
+    uint32_t currentAddress;
 };
 
 #endif // REVOLVE_MEMORY
