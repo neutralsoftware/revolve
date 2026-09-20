@@ -96,3 +96,11 @@ void Logger::log(std::string system, LogLevel level,
 void Logger::logObject(const Loggable &object, LogLevel level) {
     log(object.getLogSystem(), level, object.log());
 }
+
+void BigEndianStream::skipBytes(size_t n) {
+    file.seekg(n, std::ios::cur);
+
+    if (!file) {
+        throw std::runtime_error("Failed to skip bytes");
+    }
+}

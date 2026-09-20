@@ -1,7 +1,9 @@
 #include "core/executable.h"
 #include "core/utils.h"
+#include <cstdint>
 #include <sstream>
 #include <string>
+#include <sys/types.h>
 
 static std::string hex(uint32_t value) {
     std::stringstream ss;
@@ -74,6 +76,102 @@ Executable Executable::parseFromDolphin(const std::string &filename) {
     executable.bssAddress = stream.readInt();
     executable.bssSize = stream.readInt();
     executable.entryPoint = stream.readInt();
+
+    return executable;
+}
+
+Executable Executable::parseFromElf(const std::string &filename) {
+    uint32_t magicCorrect = 0x7F454C46; // 0x7F 'E' 'L' 'F'
+    Executable executable;
+
+    BigEndianStream stream(filename);
+    uint32_t magic = stream.readInt();
+    if (magic != magicCorrect) {
+        throw std::runtime_error("Invalid ELF file: incorrect magic number");
+    }
+
+    uint8_t classType = stream.readByte();
+    if (classType != 1) {
+        throw std::runtime_error("Invalid ELF file: unsupported class type. "
+                                 "Just 32-bit is supported.");
+    }
+
+    uint8_t endianness = stream.readByte();
+    if (endianness != 2) {
+        throw std::runtime_error("Invalid ELF file: unsupported endianness. "
+                                 "Just big-endian is supported.");
+    }
+
+    stream.skipBytes(10); // Skip version, OS ABI, ABI version, and padding
+
+    uint16_t type = stream.readShort();
+    if (type != 2) {
+        throw std::runtime_error("Invalid ELF file: unsupported type. Just "
+                                 "executable is supported.");
+    }
+
+    uint16_t machine = stream.readShort();
+    if (machine != 0x14) {
+        throw std::runtime_error("Invalid ELF file: unsupported machine. Just "
+                                 "PowerPC is supported.");
+    }
+
+    stream.skipBytes(4); // Skip version
+
+    uint32_t entryPoint = stream.readInt();
+    executable.entryPoint = entryPoint;
+
+    uint32_t programHeaderOffset = stream.readInt();
+    uint32_t sectionHeaderOffset = stream.readInt();
+    stream.skipBytes(4); // Skip flags
+    stream.skipBytes(2); // Skip header size
+    uint16_t programHeaderEntrySize = stream.readShort();
+    uint16_t programHeaderCount = stream.readShort();
+    uint16_t sectionHeaderEntrySize = stream.readShort();
+    uint16_t sectionHeaderCount = stream.readShort();
+    stream.skipBytes(2); // Skip section header string table index
+
+    stream.moveTo(programHeaderOffset);
+
+    for (uint16_t i = 0; i < programHeaderCount; ++i) {
+        stream.moveTo(programHeaderOffset +
+                      static_cast<uint32_t>(i) * programHeaderEntrySize);
+
+        uint32_t type = stream.readInt();
+        uint32_t offset = stream.readInt();
+        uint32_t vaddr = stream.readInt();
+        uint32_t paddr = stream.readInt();
+        uint32_t filesz = stream.readInt();
+        uint32_t memsz = stream.readInt();
+        uint32_t flags = stream.readInt();
+        uint32_t align = stream.readInt();
+
+        if (type != 1)
+            continue;
+
+        constexpr uint32_t PF_X = 0x1;
+
+        if (flags & PF_X) {
+            TextSection section;
+            section.startAddress = offset;
+            section.loadAddress = vaddr;
+            section.size = filesz;
+
+            executable.textSections.push_back(section);
+        } else {
+            DataSection section;
+            section.startAddress = offset;
+            section.loadAddress = vaddr;
+            section.size = filesz;
+
+            executable.dataSections.push_back(section);
+        }
+
+        if (memsz > filesz) {
+            executable.bssAddress = vaddr + filesz;
+            executable.bssSize = memsz - filesz;
+        }
+    }
 
     return executable;
 }

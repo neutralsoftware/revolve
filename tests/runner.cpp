@@ -14,7 +14,9 @@ std::string getTestBuildOutputPath(const std::string &fileName) {
 std::tuple<bool, std::string> runCommand(const std::string &command) {
     std::string result;
 
-    FILE *pipe = popen(command.c_str(), "r");
+    std::string redirectedCommand = command + " 2>&1";
+
+    FILE *pipe = popen(redirectedCommand.c_str(), "r");
     if (!pipe) {
         throw std::runtime_error("popen() failed");
     }
@@ -83,7 +85,7 @@ void runExecutableSuite() {
         runCommand(std::string(REVOLVE_PATH) + " parse " +
                    getTestBuildOutputPath("executable.elf"));
     if (!runElfSuccess) {
-        throw std::runtime_error("Dolphin execution failed: " + runElfOutput);
+        throw std::runtime_error("ELF execution failed: " + runElfOutput);
     }
     std::cout << runElfOutput << std::endl;
 }

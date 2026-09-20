@@ -16,16 +16,17 @@ int main(int argc, const char *argv[]) {
         }
         const std::string &filename = arguments[1];
         std::string extension = filename.substr(filename.find_last_of(".") + 1);
-        if (extension != "dol") {
-            std::cerr << "Error: Unsupported file extension. Only .dol files "
-                         "are supported."
-                      << std::endl;
-            return 1;
-        }
         try {
             if (extension == "dol") {
                 Executable executable = Executable::parseFromDolphin(filename);
                 Logger::logObject(executable, LogLevel::Info);
+            } else if (extension == "elf") {
+                Executable executable = Executable::parseFromElf(filename);
+                Logger::logObject(executable, LogLevel::Info);
+            } else {
+                std::cerr << "Error: Unsupported file extension: " << extension
+                          << std::endl;
+                return 1;
             }
         } catch (const std::exception &e) {
             std::cerr << "Error parsing file: " << e.what() << std::endl;

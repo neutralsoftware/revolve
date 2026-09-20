@@ -1,6 +1,7 @@
 #ifndef REVOLVE_UTILS
 #define REVOLVE_UTILS
 
+#include <cstdarg>
 #include <cstdint>
 #include <fstream>
 #include <string>
@@ -16,6 +17,8 @@ class BigEndianStream {
     uint8_t readByte();
     uint16_t readShort();
     uint32_t readInt();
+
+    void skipBytes(size_t n);
 
     std::vector<uint8_t> readNBytes(size_t n);
 

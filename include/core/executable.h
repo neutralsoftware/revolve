@@ -23,11 +23,12 @@ struct Executable : public Loggable {
     std::vector<TextSection> textSections;
     std::vector<DataSection> dataSections;
 
-    uint32_t bssAddress;
-    uint32_t bssSize;
-    uint32_t entryPoint;
+    uint32_t bssAddress = 0;
+    uint32_t bssSize = 0;
+    uint32_t entryPoint = 0;
 
     static Executable parseFromDolphin(const std::string &filename);
+    static Executable parseFromElf(const std::string &filename);
 
     std::string log() const override;
     std::string getLogSystem() const override { return "Core"; }

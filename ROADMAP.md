@@ -6,8 +6,8 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 
 ## Executable Loading
 
-- [ ] Load DOL executables
-- [ ] Load ELF executables
+- [x] Load DOL executables
+- [x] Load ELF executables
 
 ## Memory
 
