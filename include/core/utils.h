@@ -1,9 +1,11 @@
 #ifndef REVOLVE_UTILS
 #define REVOLVE_UTILS
 
+#include <concepts>
 #include <cstdarg>
 #include <cstdint>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -46,5 +48,17 @@ class Logger {
                     const std::string &message);
     static void logObject(const Loggable &object, LogLevel level);
 };
+
+namespace utils {
+template <std::integral T> inline std::string toHexString(T value) {
+    using U = std::make_unsigned_t<T>;
+
+    std::ostringstream ss;
+    ss << "0x" << std::hex << std::uppercase << std::setfill('0')
+       << std::setw(sizeof(T) * 2) << static_cast<U>(value);
+
+    return ss.str();
+}
+} // namespace utils
 
 #endif // REVOLVE_UTILS

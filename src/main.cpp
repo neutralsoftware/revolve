@@ -1,4 +1,5 @@
 #include "core/executable.h"
+#include "device.h"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -8,6 +9,8 @@ int main(int argc, const char *argv[]) {
     for (int i = 1; i < argc; ++i) {
         arguments.push_back(argv[i]);
     }
+
+    Device::createDevice();
 
     if (arguments[0] == "parse") {
         if (arguments.size() < 2) {

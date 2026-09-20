@@ -3,6 +3,7 @@
 
 #include "core/utils.h"
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,8 @@ struct Executable : public Loggable {
 
     std::string log() const override;
     std::string getLogSystem() const override { return "Core"; }
+
+    std::shared_ptr<BigEndianStream> data;
 };
 
 #endif

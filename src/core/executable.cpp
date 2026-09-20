@@ -40,9 +40,9 @@ std::string Executable::log() const {
 }
 
 Executable Executable::parseFromDolphin(const std::string &filename) {
-    BigEndianStream stream(filename);
 
     Executable executable;
+    BigEndianStream stream(filename);
     executable.textSections.reserve(7);
     executable.dataSections.reserve(11);
 
@@ -76,6 +76,7 @@ Executable Executable::parseFromDolphin(const std::string &filename) {
     executable.bssAddress = stream.readInt();
     executable.bssSize = stream.readInt();
     executable.entryPoint = stream.readInt();
+    executable.data = std::make_shared<BigEndianStream>(std::move(stream));
 
     return executable;
 }
@@ -172,6 +173,7 @@ Executable Executable::parseFromElf(const std::string &filename) {
             executable.bssSize = memsz - filesz;
         }
     }
+    executable.data = std::make_shared<BigEndianStream>(std::move(stream));
 
     return executable;
 }
