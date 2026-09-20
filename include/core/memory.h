@@ -1,8 +1,11 @@
 #ifndef REVOLVE_MEMORY
 #define REVOLVE_MEMORY
 
+#include "core/utils.h"
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -37,6 +40,8 @@ struct ResolvedAddress {
 
 class Memory {
   public:
+    Memory() : mem1(MEM1_SIZE, 0), mem2(MEM2_SIZE, 0) {}
+
     void write8(uint32_t addr, uint8_t value, int memIndex = 1);
     void write16(uint32_t addr, uint16_t value, int memIndex = 1);
     void write32(uint32_t addr, uint32_t value, int memIndex = 1);
@@ -53,9 +58,17 @@ class Memory {
     float readFloat(uint32_t addr, int memIndex = 1);
     double readDouble(uint32_t addr, int memIndex = 1);
 
+    void writeBlock(uint32_t addr, std::span<const uint8_t> bytes,
+                    int memIndex = 1);
+    void readBlock(uint32_t addr, std::vector<uint8_t> &buffer,
+                   int memIndex = 1);
+
   private:
-    std::array<uint8_t, 0x1800000> mem1;
-    std::array<uint8_t, 0x4000000> mem2;
+    static constexpr size_t MEM1_SIZE = 0x1800000;
+    static constexpr size_t MEM2_SIZE = 0x4000000;
+
+    std::vector<uint8_t> mem1;
+    std::vector<uint8_t> mem2;
 };
 
 enum class AccessSize { U8, U16, U32, U64 };
@@ -101,13 +114,20 @@ class Bus {
     static float readFloat(uint32_t addr);
     static double readDouble(uint32_t addr);
 
-    void write8(uint32_t addr, uint8_t value);
-    void write16(uint32_t addr, uint16_t value);
-    void write32(uint32_t addr, uint32_t value);
-    void write64(uint32_t addr, uint64_t value);
+    static void write8(uint32_t addr, uint8_t value);
+    static void write16(uint32_t addr, uint16_t value);
+    static void write32(uint32_t addr, uint32_t value);
+    static void write64(uint32_t addr, uint64_t value);
 
-    void writeFloat(uint32_t addr, float value);
-    void writeDouble(uint32_t addr, double value);
+    static void writeFloat(uint32_t addr, float value);
+    static void writeDouble(uint32_t addr, double value);
+
+    static void writeBlock(uint32_t addr, std::span<const uint8_t> bytes);
+    static void readBlock(uint32_t addr, std::vector<uint8_t> &buffer);
+
+    static void writeFromStream(uint32_t addr, size_t count,
+                                BigEndianStream &stream);
+    BigEndianStream readToStream(uint32_t addr, size_t count);
 
     static ResolvedAddress resolveAddress(uint32_t addr);
 };

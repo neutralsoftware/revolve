@@ -4,6 +4,7 @@
 #include "core/utils.h"
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,11 +31,14 @@ struct Executable : public Loggable {
 
     static Executable parseFromDolphin(const std::string &filename);
     static Executable parseFromElf(const std::string &filename);
+    static std::optional<Executable> parseFromFile(const std::string &filename);
 
     std::string log() const override;
     std::string getLogSystem() const override { return "Core"; }
 
     std::shared_ptr<BigEndianStream> data;
+
+    void loadIntoMemory();
 };
 
 #endif

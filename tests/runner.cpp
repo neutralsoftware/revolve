@@ -90,6 +90,47 @@ void runExecutableSuite() {
     std::cout << runElfOutput << std::endl;
 }
 
+void runMemorySuite() {
+    // Compile sources
+    std::string compileCommand =
+        "powerpc-eabi-as -mbroadway " + std::string(TESTS_PATH) +
+        "/core/executable.s -o " + getTestBuildOutputPath("executable.o");
+    std::string linkCommand = "powerpc-eabi-ld -Ttext=0x80004000 -e _start " +
+                              getTestBuildOutputPath("executable.o") + " -o " +
+                              getTestBuildOutputPath("executable.elf");
+    std::string toDolfCommand = "elf2dol " +
+                                getTestBuildOutputPath("executable.elf") + " " +
+                                getTestBuildOutputPath("executable.dol");
+
+    auto [compileSuccess, compileOutput] = runCommand(compileCommand);
+    if (!compileSuccess) {
+        throw std::runtime_error("Compilation failed: " + compileOutput);
+    }
+    auto [linkSuccess, linkOutput] = runCommand(linkCommand);
+    if (!linkSuccess) {
+        throw std::runtime_error("Linking failed: " + linkOutput);
+    }
+    auto [toDolfSuccess, toDolfOutput] = runCommand(toDolfCommand);
+    if (!toDolfSuccess) {
+        throw std::runtime_error("elf2dol failed: " + toDolfOutput);
+    }
+    auto [runDolSuccess, runDolOutput] =
+        runCommand(std::string(REVOLVE_PATH) + " exec " +
+                   getTestBuildOutputPath("executable.dol"));
+    if (!runDolSuccess) {
+        throw std::runtime_error("Dolphin execution failed: " + runDolOutput);
+    }
+    std::cout << runDolOutput << std::endl;
+    std::cout << "-------------" << std::endl;
+    auto [runElfSuccess, runElfOutput] =
+        runCommand(std::string(REVOLVE_PATH) + " exec " +
+                   getTestBuildOutputPath("executable.elf"));
+    if (!runElfSuccess) {
+        throw std::runtime_error("ELF execution failed: " + runElfOutput);
+    }
+    std::cout << runElfOutput << std::endl;
+}
+
 int main(int argc, char *argv[]) {
     std::string suite;
     if (argc > 1) {
@@ -104,6 +145,8 @@ int main(int argc, char *argv[]) {
 
     if (suite == "executable") {
         runExecutableSuite();
+    } else if (suite == "memory") {
+        runMemorySuite();
     }
 
     if (suite == "clean") {

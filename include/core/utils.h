@@ -12,6 +12,7 @@
 class BigEndianStream {
   public:
     explicit BigEndianStream(const std::string &path);
+    explicit BigEndianStream(std::vector<uint8_t> data);
 
     void moveTo(uint32_t offset);
     void moveBy(int32_t offset);
@@ -26,6 +27,8 @@ class BigEndianStream {
 
   private:
     std::ifstream file;
+    std::vector<uint8_t> data;
+    size_t position = 0;
 };
 
 enum class LogLevel {

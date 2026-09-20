@@ -3,6 +3,8 @@
 #include "core/utils.h"
 #include "device.h"
 #include <cstdint>
+#include <span>
+#include <vector>
 
 ResolvedAddress Bus::resolveAddress(uint32_t addr) {
     if (addr >= MEM1_CACHED_START && addr <= MEM1_CACHED_END) {
@@ -491,4 +493,96 @@ uint32_t MMIO::read32(uint32_t addr) {
                 "MMIO read32: Address not mapped to any device (" +
                     utils::toHexString(addr) + ")");
     return 0;
+}
+
+void Bus::writeFromStream(uint32_t addr, size_t count,
+                          BigEndianStream &stream) {
+    auto bytes = stream.readNBytes(count);
+    writeBlock(addr, bytes);
+}
+
+void Bus::writeBlock(uint32_t addr, std::span<const uint8_t> bytes) {
+    if (bytes.empty())
+        return;
+
+    auto first = resolveAddress(addr);
+    auto last = resolveAddress(addr + static_cast<uint32_t>(bytes.size() - 1));
+
+    if (first.region != last.region)
+        throw std::runtime_error("Memory block crosses regions");
+
+    Memory &memory = Device::globalDevice->memory;
+
+    switch (first.region) {
+    case MemoryRegion::MEM1:
+        memory.writeBlock(first.offset, bytes, 1);
+        break;
+
+    case MemoryRegion::MEM2:
+        memory.writeBlock(first.offset, bytes, 2);
+        break;
+
+    default:
+        throw std::runtime_error("Cannot block-write this region");
+    }
+}
+
+void Memory::writeBlock(uint32_t addr, std::span<const uint8_t> bytes,
+                        int memIndex) {
+    if (memIndex == 1) {
+        std::copy(bytes.begin(), bytes.end(), mem1.begin() + addr);
+    } else if (memIndex == 2) {
+        std::copy(bytes.begin(), bytes.end(), mem2.begin() + addr);
+    } else {
+        Logger::log("Memory", LogLevel::Error,
+                    "writeBlock: Invalid memory index (" +
+                        std::to_string(memIndex) + ")");
+    }
+}
+
+void Bus::readBlock(uint32_t addr, std::vector<uint8_t> &buffer) {
+    if (buffer.empty())
+        return;
+
+    auto first = resolveAddress(addr);
+    auto last = resolveAddress(addr + static_cast<uint32_t>(buffer.size() - 1));
+
+    if (first.region != last.region)
+        throw std::runtime_error("Memory block crosses regions");
+
+    Memory &memory = Device::globalDevice->memory;
+
+    switch (first.region) {
+    case MemoryRegion::MEM1:
+        memory.readBlock(first.offset, buffer, 1);
+        break;
+
+    case MemoryRegion::MEM2:
+        memory.readBlock(first.offset, buffer, 2);
+        break;
+
+    default:
+        throw std::runtime_error("Cannot block-read this region");
+    }
+}
+
+void Memory::readBlock(uint32_t addr, std::vector<uint8_t> &buffer,
+                       int memIndex) {
+    if (memIndex == 1) {
+        std::copy(mem1.begin() + addr, mem1.begin() + addr + buffer.size(),
+                  buffer.begin());
+    } else if (memIndex == 2) {
+        std::copy(mem2.begin() + addr, mem2.begin() + addr + buffer.size(),
+                  buffer.begin());
+    } else {
+        Logger::log("Memory", LogLevel::Error,
+                    "readBlock: Invalid memory index (" +
+                        std::to_string(memIndex) + ")");
+    }
+}
+
+BigEndianStream Bus::readToStream(uint32_t addr, size_t count) {
+    std::vector<uint8_t> buffer(count);
+    readBlock(addr, buffer);
+    return BigEndianStream(buffer);
 }
