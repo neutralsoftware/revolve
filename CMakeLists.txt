@@ -31,3 +31,10 @@ include_directories(extern include)
 
 file(GLOB_RECURSE REVOLVE_SOURCES CONFIGURE_DEPENDS src/*.cpp)
 add_executable(revolve ${REVOLVE_SOURCES})
+
+file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS tests/runner.cpp)
+add_compile_definitions(
+    REVOLVE_PATH="${CMAKE_BINARY_DIR}/revolve"
+    TESTS_PATH="${CMAKE_SOURCE_DIR}/tests"
+)
+add_executable(revolve_test ${TEST_SOURCES})

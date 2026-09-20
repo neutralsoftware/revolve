@@ -10,6 +10,12 @@ run:
     clear
     ./build/revolve
 
+test suite:
+    just config
+    just build
+    clear
+    ./build/revolve_test {{ suite }}
+
 config:
     mkdir -p build
     cd build && cmake -G "{{ GENERATOR }}"  \
