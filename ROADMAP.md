@@ -11,14 +11,14 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 
 ## Memory
 
-- [ ] Implement generic memory interface and research physical memory map
-- [ ] Implement RAM
-- [ ] Implement MEM1
-- [ ] Implement MEM2
-- [ ] Implement big-endian reads and writes
-- [ ] Implement floating-point memory accesses
-- [ ] Add address validation, memory traces and dumps
-- [ ] Implement MMIO dispatch
+- [x] Implement generic memory interface and research physical memory map
+- [x] Implement RAM
+- [x] Implement MEM1
+- [x] Implement MEM2
+- [x] Implement big-endian reads and writes
+- [x] Implement floating-point memory accesses
+- [x] Add address validation, memory traces and dumps
+- [x] Implement MMIO dispatch
 
 ## PowerPC / Broadway
 

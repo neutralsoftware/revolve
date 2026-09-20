@@ -1,6 +1,10 @@
 #include "core/executable.h"
+#include "core/memory.h"
 #include "core/utils.h"
+#include "device.h"
 #include <cstdint>
+#include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <sys/types.h>
@@ -40,9 +44,9 @@ std::string Executable::log() const {
 }
 
 Executable Executable::parseFromDolphin(const std::string &filename) {
-    BigEndianStream stream(filename);
 
     Executable executable;
+    BigEndianStream stream(filename);
     executable.textSections.reserve(7);
     executable.dataSections.reserve(11);
 
@@ -76,6 +80,7 @@ Executable Executable::parseFromDolphin(const std::string &filename) {
     executable.bssAddress = stream.readInt();
     executable.bssSize = stream.readInt();
     executable.entryPoint = stream.readInt();
+    executable.data = std::make_shared<BigEndianStream>(std::move(stream));
 
     return executable;
 }
@@ -172,6 +177,55 @@ Executable Executable::parseFromElf(const std::string &filename) {
             executable.bssSize = memsz - filesz;
         }
     }
+    executable.data = std::make_shared<BigEndianStream>(std::move(stream));
 
     return executable;
+}
+
+void Executable::loadIntoMemory() {
+    GET_DEVICE();
+    for (const auto &section : textSections) {
+        if (section.size == 0)
+            continue;
+
+        data->moveTo(section.startAddress);
+
+        Bus::writeFromStream(section.loadAddress, section.size, *data);
+    }
+
+    for (const auto &section : dataSections) {
+        if (section.size == 0)
+            continue;
+
+        data->moveTo(section.startAddress);
+
+        Bus::writeFromStream(section.loadAddress, section.size, *data);
+    }
+
+    for (uint32_t i = 0; i < bssSize; ++i) {
+        Bus::write8(bssAddress + i, 0);
+    }
+}
+
+std::optional<Executable>
+Executable::parseFromFile(const std::string &filename) {
+    std::string extension = filename.substr(filename.find_last_of(".") + 1);
+    try {
+        if (extension == "dol") {
+            Executable executable = Executable::parseFromDolphin(filename);
+            return executable;
+        } else if (extension == "elf") {
+            Executable executable = Executable::parseFromElf(filename);
+            return executable;
+        } else {
+            std::cerr << "Error: Unsupported file extension: " << extension
+                      << std::endl;
+            return std::nullopt;
+        }
+    } catch (const std::exception &e) {
+        std::cerr << "Error parsing file: " << e.what() << std::endl;
+        return std::nullopt;
+    }
+
+    return std::nullopt;
 }

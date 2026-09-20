@@ -5,13 +5,27 @@
 #include <stdexcept>
 
 BigEndianStream::BigEndianStream(const std::string &path)
-    : file(path, std::ios::binary) {
+    : file(path, std::ios::binary), data() {
     if (!file) {
         throw std::runtime_error("Failed to open file: " + path);
     }
 }
 
+BigEndianStream::BigEndianStream(std::vector<uint8_t> data)
+    : file(), data(std::move(data)) {
+    if (this->data.empty()) {
+        throw std::runtime_error("Data vector is empty");
+    }
+}
+
 void BigEndianStream::moveTo(uint32_t offset) {
+    if (!data.empty()) {
+        if (offset >= data.size()) {
+            throw std::runtime_error("Offset out of bounds");
+        }
+        position = offset;
+        return;
+    }
     file.seekg(offset, std::ios::beg);
 
     if (!file) {
@@ -20,6 +34,15 @@ void BigEndianStream::moveTo(uint32_t offset) {
 }
 
 void BigEndianStream::moveBy(int32_t offset) {
+    if (!data.empty()) {
+        int64_t newPosition = static_cast<int64_t>(position) + offset;
+        if (newPosition < 0 ||
+            newPosition >= static_cast<int64_t>(data.size())) {
+            throw std::runtime_error("Offset out of bounds");
+        }
+        position = static_cast<size_t>(newPosition);
+        return;
+    }
     file.seekg(offset, std::ios::cur);
 
     if (!file) {
@@ -29,6 +52,13 @@ void BigEndianStream::moveBy(int32_t offset) {
 
 uint8_t BigEndianStream::readByte() {
     uint8_t value;
+    if (!data.empty()) {
+        if (position >= data.size()) {
+            throw std::runtime_error("Unexpected end of data");
+        }
+        value = data[position++];
+        return value;
+    }
 
     file.read(reinterpret_cast<char *>(&value), 1);
 
@@ -41,6 +71,15 @@ uint8_t BigEndianStream::readByte() {
 
 uint16_t BigEndianStream::readShort() {
     uint8_t bytes[2];
+    if (!data.empty()) {
+        if (position + 1 >= data.size()) {
+            throw std::runtime_error("Unexpected end of data");
+        }
+        bytes[0] = data[position++];
+        bytes[1] = data[position++];
+        return (static_cast<uint16_t>(bytes[0]) << 8) |
+               static_cast<uint16_t>(bytes[1]);
+    }
 
     file.read(reinterpret_cast<char *>(bytes), 2);
 
@@ -54,6 +93,19 @@ uint16_t BigEndianStream::readShort() {
 
 uint32_t BigEndianStream::readInt() {
     uint8_t bytes[4];
+    if (!data.empty()) {
+        if (position + 3 >= data.size()) {
+            throw std::runtime_error("Unexpected end of data");
+        }
+        bytes[0] = data[position++];
+        bytes[1] = data[position++];
+        bytes[2] = data[position++];
+        bytes[3] = data[position++];
+        return (static_cast<uint32_t>(bytes[0]) << 24) |
+               (static_cast<uint32_t>(bytes[1]) << 16) |
+               (static_cast<uint32_t>(bytes[2]) << 8) |
+               static_cast<uint32_t>(bytes[3]);
+    }
 
     file.read(reinterpret_cast<char *>(bytes), 4);
 
@@ -69,6 +121,16 @@ uint32_t BigEndianStream::readInt() {
 
 std::vector<uint8_t> BigEndianStream::readNBytes(size_t n) {
     std::vector<uint8_t> bytes(n);
+
+    if (!data.empty()) {
+        if (position + n > data.size()) {
+            throw std::runtime_error("Unexpected end of data");
+        }
+        std::copy(data.begin() + position, data.begin() + position + n,
+                  bytes.begin());
+        position += n;
+        return bytes;
+    }
 
     file.read(reinterpret_cast<char *>(bytes.data()),
               static_cast<std::streamsize>(n));
