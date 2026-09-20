@@ -12,7 +12,6 @@ std::string getTestBuildOutputPath(const std::string &fileName) {
 }
 
 std::tuple<bool, std::string> runCommand(const std::string &command) {
-    std::array<char, 256> buffer{};
     std::string result;
 
     FILE *pipe = popen(command.c_str(), "r");
@@ -20,13 +19,18 @@ std::tuple<bool, std::string> runCommand(const std::string &command) {
         throw std::runtime_error("popen() failed");
     }
 
-    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
-        result += buffer.data();
+    char *buffer = nullptr;
+    size_t capacity = 0;
+
+    while (getline(&buffer, &capacity, pipe) != -1) {
+        result += buffer;
     }
+
+    free(buffer);
 
     int status = pclose(pipe);
 
-    return std::make_tuple(status == 0, result);
+    return {status == 0, result};
 }
 
 std::string readFile(const std::string &path) {
