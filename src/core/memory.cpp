@@ -60,6 +60,21 @@ uint32_t Bus::readPhysical32(uint32_t addr) {
     }
 }
 
+uint32_t Bus::readPhysical8(uint32_t addr) {
+    ResolvedAddress resolved = resolveAddress(addr);
+    Memory &mem = Device::globalDevice->memory;
+    switch (resolved.region) {
+    case MemoryRegion::MEM1:
+        return mem.read8(resolved.offset, 1);
+    case MemoryRegion::MEM2:
+        return mem.read8(resolved.offset, 2);
+    case MemoryRegion::MMIO:
+        return Device::globalDevice->mmioDispatcher.read8(resolved.offset);
+    default:
+        return 0;
+    }
+}
+
 void Bus::writePhysical32(uint32_t addr, uint32_t value) {
     ResolvedAddress resolved = resolveAddress(addr);
     Memory &mem = Device::globalDevice->memory;
