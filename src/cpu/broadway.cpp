@@ -315,6 +315,29 @@ void Broadway::executeMType(uint32_t instruction) {
         if (rc)
             state.updateCR0(result);
     }
+    case static_cast<uint32_t>(BroadwayMTypeInstruction::RLWINM): {
+        uint32_t rotated = std::rotl(state.gpr[rs], sh_or_rb);
+        uint32_t mask = utils::makeMask(mb, me);
+
+        uint32_t result = rotated & mask;
+
+        state.gpr[ra] = result;
+
+        if (rc)
+            state.updateCR0(result);
+    }
+    case static_cast<uint32_t>(BroadwayMTypeInstruction::RLWNM): {
+        uint32_t amount = state.gpr[sh_or_rb] & 0x1F;
+
+        uint32_t rotated = std::rotl(state.gpr[rs], amount);
+
+        uint32_t result = rotated & utils::makeMask(mb, me);
+
+        state.gpr[ra] = result;
+
+        if (rc)
+            state.updateCR0(result);
+    }
     }
 }
 
