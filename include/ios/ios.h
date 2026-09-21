@@ -3,7 +3,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 enum class IOSCommand : uint32_t {
@@ -58,9 +60,8 @@ struct IOSIoctlRequest {
 struct IOSIoctlvRequest {
     uint32_t request;
     uint32_t inCount;
-    uint32_t inPtr;
     uint32_t outCount;
-    uint32_t outPtr;
+    uint32_t vectorsAddress;
 };
 
 struct IOSVector {
@@ -68,9 +69,28 @@ struct IOSVector {
     uint32_t size;
 };
 
+class IOSDevice {
+  public:
+    virtual ~IOSDevice() = default;
+
+    virtual int32_t open(const std::string &path, uint32_t mode) { return 0; };
+    virtual int32_t close(int32_t fd) { return 0; };
+    virtual int32_t read(uint32_t buffer, uint32_t size) { return -1; };
+    virtual int32_t write(uint32_t buffer, uint32_t size) { return -1; };
+    virtual int32_t seek(uint32_t offset, uint32_t whence) { return -1; };
+    virtual int32_t ioctl(const IOSIoctlRequest &request) { return -1; };
+    virtual int32_t ioctlv(const IOSIoctlvRequest &request) { return -1; };
+};
+
+struct IOSFileDescriptor {
+    std::string path;
+};
+
 class IOS {
   public:
     IOSRequest parseRequest(uint32_t address);
+
+    void init();
 
     void submitRequest(uint32_t address);
 
@@ -87,6 +107,12 @@ class IOS {
 
   private:
     int32_t dispatch(const IOSRequest &request);
+
+    int32_t allocateFileDescriptor(const std::string &path);
+
+    std::unordered_map<uint32_t, IOSFileDescriptor> fileDescriptors;
+    std::unordered_map<std::string, std::shared_ptr<IOSDevice>> devices;
+    int32_t nextFileDescriptor = 0;
 };
 
 #endif
