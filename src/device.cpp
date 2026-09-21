@@ -7,6 +7,7 @@
 #include "cpu/interface.h"
 #include <cstdint>
 #include <memory>
+#include <string>
 
 std::shared_ptr<Device> Device::globalDevice = nullptr;
 
@@ -24,6 +25,7 @@ void Device::step() {
 
     uint32_t cycles = cpu.executeInstruction();
 
+    cpu.advanceTime(cycles);
     scheduler.advance(cycles);
 }
 
@@ -39,9 +41,9 @@ void Scheduler::advance(tick ticks) {
     while (!eventQueue.empty() && eventQueue.top().time <= currentTime) {
         Event event = eventQueue.top();
         eventQueue.pop();
-        event.callback();
         Logger::log("Scheduler", LogLevel::Info,
                     "Executed event: " + event.name + " at time " +
-                        utils::toHexString(event.time));
+                        std::to_string(event.time));
+        event.callback();
     }
 }

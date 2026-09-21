@@ -563,10 +563,6 @@ void Broadway::executeMType(uint32_t instruction) {
 
 uint32_t Broadway::executeInstruction() {
     state.exceptionTaken = false;
-    ++state.timeBase;
-    uint32_t oldDecrementer = state.spr[SPR::DEC]--;
-    if (oldDecrementer == 0)
-        state.decrementerPending = true;
     state.nia = state.cia + 4;
     if (deliverPendingException()) {
         state.cia = state.nia;
@@ -682,4 +678,27 @@ void Broadway::setupWiiBATs() {
 
     state.spr[SPR::DBAT5U] = 0xD0001FFF;
     state.spr[SPR::DBAT5L] = 0x1000002A;
+}
+
+void Broadway::advanceTime(uint64_t cycles) {
+    state.timeBase += cycles;
+
+    uint32_t oldDecrementer = state.spr[SPR::DEC];
+
+    state.spr[SPR::DEC] -= static_cast<uint32_t>(cycles);
+
+    if (cycles > static_cast<uint64_t>(oldDecrementer)) {
+        state.decrementerPending = true;
+    }
+}
+
+uint32_t Broadway::readSPR(uint32_t spr) {
+    switch (spr) {
+    case SPR::TBL:
+        return static_cast<uint32_t>(state.timeBase & 0xFFFFFFFFull);
+    case SPR::TBU:
+        return static_cast<uint32_t>(state.timeBase >> 32);
+    default:
+        return state.spr[spr];
+    }
 }

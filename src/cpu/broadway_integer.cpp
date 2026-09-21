@@ -104,7 +104,7 @@ void Broadway::executeXFXType(uint32_t instruction) {
         }
         break;
     case 339:
-        state.gpr[d] = state.spr[spr];
+        state.gpr[d] = readSPR(spr);
         break;
     case 371: {
         uint32_t tbr = spr;

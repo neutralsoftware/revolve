@@ -298,6 +298,8 @@ class Broadway {
     void requestSystemReset();
     void requestMachineCheck();
 
+    void advanceTime(uint64_t cycles);
+
     void executeDType(uint32_t instruction);
     void executeIType(uint32_t instruction);
     void executeBType(uint32_t instruction);
@@ -375,6 +377,8 @@ class Broadway {
     bool branchCondition(uint32_t bo, uint32_t bi, bool useCTR);
     void executePaired(uint32_t instruction);
     void executeQuantized(uint32_t instruction, bool indexed);
+
+    uint32_t readSPR(uint32_t spr);
 };
 
 #endif
