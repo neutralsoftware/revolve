@@ -8,6 +8,11 @@
 #include <vector>
 
 ResolvedAddress Bus::resolveAddress(uint32_t addr) {
+    if (addr < 0x01800000)
+        return {MemoryRegion::MEM1, addr};
+    if (addr >= MEM2_PHYS_START && addr < MEM2_PHYS_START + 0x04000000)
+        return {MemoryRegion::MEM2, addr - MEM2_PHYS_START};
+
     if (addr >= MEM1_CACHED_START && addr <= MEM1_CACHED_END) {
         return {MemoryRegion::MEM1, addr - MEM1_CACHED_START};
     }
@@ -37,7 +42,7 @@ ResolvedAddress Bus::resolveAddress(uint32_t addr) {
 
 uint8_t Bus::read8(uint32_t addr) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         return mem.read8(resolved.offset, 1);
@@ -55,7 +60,7 @@ uint8_t Bus::read8(uint32_t addr) {
 
 uint16_t Bus::read16(uint32_t addr) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         return mem.read16(resolved.offset, 1);
@@ -73,7 +78,7 @@ uint16_t Bus::read16(uint32_t addr) {
 
 uint32_t Bus::read32(uint32_t addr) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         return mem.read32(resolved.offset, 1);
@@ -91,7 +96,7 @@ uint32_t Bus::read32(uint32_t addr) {
 
 uint64_t Bus::read64(uint32_t addr) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         return mem.read64(resolved.offset, 1);
@@ -107,7 +112,7 @@ uint64_t Bus::read64(uint32_t addr) {
 
 float Bus::readFloat(uint32_t addr) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         return mem.readFloat(resolved.offset, 1);
@@ -123,7 +128,7 @@ float Bus::readFloat(uint32_t addr) {
 
 double Bus::readDouble(uint32_t addr) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         return mem.readDouble(resolved.offset, 1);
@@ -139,7 +144,15 @@ double Bus::readDouble(uint32_t addr) {
 
 void Bus::write8(uint32_t addr, uint8_t value) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid) {
+        ResolvedAddress reserved = resolveAddress(cpu.state.reservationAddress);
+        if (reserved.region == resolved.region &&
+            (reserved.offset & ~31u) >= (resolved.offset & ~31u) &&
+            (reserved.offset & ~31u) <= (resolved.offset & ~31u))
+            cpu.state.reservationValid = false;
+    }
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write8(resolved.offset, value, 1);
@@ -159,7 +172,15 @@ void Bus::write8(uint32_t addr, uint8_t value) {
 
 void Bus::write16(uint32_t addr, uint16_t value) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid) {
+        ResolvedAddress reserved = resolveAddress(cpu.state.reservationAddress);
+        if (reserved.region == resolved.region &&
+            (reserved.offset & ~31u) >= (resolved.offset & ~31u) &&
+            (reserved.offset & ~31u) <= ((resolved.offset + 1) & ~31u))
+            cpu.state.reservationValid = false;
+    }
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write16(resolved.offset, value, 1);
@@ -179,7 +200,15 @@ void Bus::write16(uint32_t addr, uint16_t value) {
 
 void Bus::write32(uint32_t addr, uint32_t value) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid) {
+        ResolvedAddress reserved = resolveAddress(cpu.state.reservationAddress);
+        if (reserved.region == resolved.region &&
+            (reserved.offset & ~31u) >= (resolved.offset & ~31u) &&
+            (reserved.offset & ~31u) <= ((resolved.offset + 3) & ~31u))
+            cpu.state.reservationValid = false;
+    }
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write32(resolved.offset, value, 1);
@@ -199,7 +228,15 @@ void Bus::write32(uint32_t addr, uint32_t value) {
 
 void Bus::write64(uint32_t addr, uint64_t value) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid) {
+        ResolvedAddress reserved = resolveAddress(cpu.state.reservationAddress);
+        if (reserved.region == resolved.region &&
+            (reserved.offset & ~31u) >= (resolved.offset & ~31u) &&
+            (reserved.offset & ~31u) <= ((resolved.offset + 7) & ~31u))
+            cpu.state.reservationValid = false;
+    }
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write64(resolved.offset, value, 1);
@@ -216,7 +253,15 @@ void Bus::write64(uint32_t addr, uint64_t value) {
 
 void Bus::writeFloat(uint32_t addr, float value) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid) {
+        ResolvedAddress reserved = resolveAddress(cpu.state.reservationAddress);
+        if (reserved.region == resolved.region &&
+            (reserved.offset & ~31u) >= (resolved.offset & ~31u) &&
+            (reserved.offset & ~31u) <= ((resolved.offset + 3) & ~31u))
+            cpu.state.reservationValid = false;
+    }
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.writeFloat(resolved.offset, value, 1);
@@ -233,7 +278,15 @@ void Bus::writeFloat(uint32_t addr, float value) {
 
 void Bus::writeDouble(uint32_t addr, double value) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid) {
+        ResolvedAddress reserved = resolveAddress(cpu.state.reservationAddress);
+        if (reserved.region == resolved.region &&
+            (reserved.offset & ~31u) >= (resolved.offset & ~31u) &&
+            (reserved.offset & ~31u) <= ((resolved.offset + 7) & ~31u))
+            cpu.state.reservationValid = false;
+    }
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.writeDouble(resolved.offset, value, 1);

@@ -22,21 +22,21 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 
 ## PowerPC / Broadway
 
-- [ ] Implement CPU state for PowerPC
-- [ ] Instruction fetch and decode
-- [ ] Integer instructions
-- [ ] Logical instructions
-- [ ] Shift and rotate instructions
-- [ ] Comparison instructions
-- [ ] Load instructions
-- [ ] Store instructions
-- [ ] Branch instructions
-- [ ] Special register instructions
-- [ ] Floating-point instructions
-- [ ] Paired singles
-- [ ] Run simple PowerPC programs
-- [ ] Implement exceptions
-- [ ] Add MMU and memory protection
+- [x] Implement CPU state for PowerPC
+- [x] Instruction fetch and decode
+- [x] Integer instructions
+- [x] Logical instructions
+- [x] Shift and rotate instructions
+- [x] Comparison instructions
+- [x] Load instructions
+- [x] Store instructions
+- [x] Branch instructions
+- [x] Special register instructions
+- [x] Floating-point instructions
+- [x] Paired singles
+- [x] Run simple PowerPC programs
+- [x] Implement exceptions
+- [x] Add MMU and memory protection
 
 ## Core Hardware
 

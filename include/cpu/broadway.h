@@ -96,7 +96,7 @@ enum class BroadwayDTypeInstruction : uint32_t {
 enum class BroadwayMTypeInstruction : uint32_t {
     RLWIMI = 20,
     RLWINM = 21,
-    RLWNM = 22,
+    RLWNM = 23,
 };
 
 enum class BroadwayXOTypeInstruction : uint32_t {
@@ -114,7 +114,7 @@ enum class BroadwayXOTypeInstruction : uint32_t {
     SUBF = 40,
     SUBFC = 8,
     SUBFE = 136,
-    SUFME = 232,
+    SUBFME = 232,
     SUBFZE = 200,
 };
 
@@ -137,6 +137,7 @@ enum class InstructionType {
 struct BroadwayState : public Loggable {
     uint32_t gpr[32]{}; // General Purpose Registers
 
+    uint64_t ps1[32]{};
     uint64_t fpr[32]{}; // Floating Point Registers
 
     uint32_t cr{};    // Condition Register
@@ -228,6 +229,18 @@ constexpr int32_t signExtend(uint32_t x, unsigned bits) {
     return static_cast<int32_t>((x ^ sign) - sign);
 }
 
+constexpr uint32_t singleStoreBits(uint64_t value) {
+    uint32_t exponent = (value >> 52) & 2047;
+    uint32_t sign = (value >> 32) & 0x80000000u;
+    if (exponent >= 874 && exponent <= 896) {
+        uint32_t significand =
+            0x80000000u | ((value & 0x000FFFFFFFFFFFFFull) >> 21);
+        return sign | (significand >> (905 - exponent));
+    }
+    return static_cast<uint32_t>(((value >> 32) & 0xC0000000u) |
+                                 ((value >> 29) & 0x3FFFFFFFu));
+}
+
 class Broadway {
   public:
     BroadwayState state{};
@@ -300,7 +313,10 @@ class Broadway {
     void executeADD(uint32_t rt, uint32_t ra, uint32_t rb, bool oe, bool rc);
 
   private:
-    MemoryStream instructionStream{0};
+    void raiseException(uint32_t vector, uint32_t cause = 0);
+    bool branchCondition(uint32_t bo, uint32_t bi, bool useCTR);
+    void executePaired(uint32_t instruction);
+    void executeQuantized(uint32_t instruction, bool indexed);
 };
 
 #endif

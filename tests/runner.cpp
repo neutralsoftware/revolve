@@ -7,6 +7,8 @@
 #include <tuple>
 #include <vector>
 
+int runBroadwaySuite();
+
 std::string getTestBuildOutputPath(const std::string &fileName) {
     return std::string(TESTS_PATH) + "/build/" + fileName;
 }
@@ -139,6 +141,9 @@ int main(int argc, char *argv[]) {
         throw std::invalid_argument("No test suite specified. Please provide a "
                                     "test suite name as an argument.");
     }
+
+    if (suite == "broadway")
+        return runBroadwaySuite();
 
     std::string cleanCommand = "mkdir -p " + std::string(TESTS_PATH) + "/build";
     runCommand(cleanCommand);

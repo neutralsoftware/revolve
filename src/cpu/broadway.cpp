@@ -8,7 +8,7 @@ void Broadway::reset(uint32_t entryPoint) {
     state = {};
     state.cia = entryPoint;
 
-    instructionStream = MemoryStream(entryPoint);
+    state.nia = entryPoint + 4;
 }
 
 std::string BroadwayState::log() const {
@@ -95,7 +95,41 @@ InstructionType Broadway::getInstructionType(uint32_t instruction) {
         return InstructionType::B;
     }
 
-    return InstructionType::I; // Default to I-Type for unrecognized opcodes
+    if (op == 17)
+        return InstructionType::SC;
+    if (op == 19)
+        return InstructionType::XL;
+    if (op == 56 || op == 57 || op == 60 || op == 61)
+        return InstructionType::PSQ_D;
+    if (op == 4)
+        return InstructionType::PSQ_X;
+    if (op == 59 || op == 63)
+        return InstructionType::A;
+    if (op == 31) {
+        uint32_t xo = (instruction >> 1) & 0x3FF;
+        switch (xo & 0x1FF) {
+        case 266:
+        case 10:
+        case 138:
+        case 234:
+        case 202:
+        case 491:
+        case 459:
+        case 235:
+        case 104:
+        case 40:
+        case 8:
+        case 136:
+        case 232:
+        case 200:
+            return InstructionType::XO;
+        }
+        if (xo == 75 || xo == 11)
+            return InstructionType::XO;
+        if (xo == 19 || xo == 144 || xo == 339 || xo == 467 || xo == 371)
+            return InstructionType::XFX;
+    }
+    return InstructionType::X;
 }
 
 void Broadway::executeDType(uint32_t instruction) {
@@ -254,36 +288,38 @@ void Broadway::executeIType(uint32_t instruction) {
     state.nia = targetAddress;
 }
 
-void Broadway::executeBType(uint32_t instruction) {
-    int32_t displacement = signExtend(instruction & 0x03FFFFFC, 26);
-
-    bool aa = (instruction >> 1) & 1;
-    bool lk = instruction & 1;
-
-    uint32_t oldCIA = state.cia;
-
-    if (lk) {
-        state.spr[SPR::LR] = oldCIA + 4;
-    }
-
-    if (aa) {
-        state.nia = static_cast<uint32_t>(displacement);
-    } else {
-        state.nia = oldCIA + static_cast<uint32_t>(displacement);
-    }
+void Broadway::raiseException(uint32_t vector, uint32_t cause) {
+    state.spr[SPR::SRR0] = state.cia;
+    state.spr[SPR::SRR1] = (state.msr & 0x87C0FFFFu) | cause;
+    state.nia = ((state.msr & 0x40) ? 0xFFF00000u : 0) | vector;
+    state.msr = (state.msr & ~0x0004EF36u) | ((state.msr >> 16) & 1);
+    state.reservationValid = false;
 }
 
-void Broadway::executeSCType(uint32_t instruction) {
-    (void)instruction;
+bool Broadway::branchCondition(uint32_t bo, uint32_t bi, bool useCTR) {
+    if (useCTR && !(bo & 4))
+        --state.spr[SPR::CTR];
+    bool counter =
+        !useCTR || (bo & 4) || ((state.spr[SPR::CTR] != 0) != ((bo & 2) != 0));
+    bool condition =
+        (bo & 16) || (((state.cr >> (31 - bi)) & 1) == ((bo >> 3) & 1));
+    return counter && condition;
+}
 
+void Broadway::executeBType(uint32_t instruction) {
+    uint32_t bo = (instruction >> 21) & 31;
+    uint32_t bi = (instruction >> 16) & 31;
+    int32_t displacement = signExtend(instruction & 0xFFFC, 16);
+    if (branchCondition(bo, bi, true))
+        state.nia = (instruction & 2) ? static_cast<uint32_t>(displacement)
+                                      : state.cia + displacement;
+    if (instruction & 1)
+        state.spr[SPR::LR] = state.cia + 4;
+}
+
+void Broadway::executeSCType(uint32_t) {
+    raiseException(0xC00);
     state.spr[SPR::SRR0] = state.cia + 4;
-
-    // SRR1 receives the architecturally required MSR bits.
-    state.spr[SPR::SRR1] = state.msr;
-
-    // Enter exception state.
-    // You should centralize this in raiseException().
-    // state.enterException(Exception::SystemCall);
 }
 
 void Broadway::executeMType(uint32_t instruction) {
@@ -314,6 +350,7 @@ void Broadway::executeMType(uint32_t instruction) {
 
         if (rc)
             state.updateCR0(result);
+        break;
     }
     case static_cast<uint32_t>(BroadwayMTypeInstruction::RLWINM): {
         uint32_t rotated = std::rotl(state.gpr[rs], sh_or_rb);
@@ -325,6 +362,7 @@ void Broadway::executeMType(uint32_t instruction) {
 
         if (rc)
             state.updateCR0(result);
+        break;
     }
     case static_cast<uint32_t>(BroadwayMTypeInstruction::RLWNM): {
         uint32_t amount = state.gpr[sh_or_rb] & 0x1F;
@@ -337,29 +375,40 @@ void Broadway::executeMType(uint32_t instruction) {
 
         if (rc)
             state.updateCR0(result);
+        break;
     }
     }
-}
-
-void Broadway::executeXType(uint32_t instruction) {
-    uint32_t op = instruction >> 26;
-    uint32_t d = (instruction >> 21) & 0x1F;
-    uint32_t a = (instruction >> 16) & 0x1F;
-    uint32_t b = (instruction >> 11) & 0x1F;
-    uint32_t xo10 = (instruction >> 1) & 0x3FF;
-    bool rc = instruction & 0x1;
-}
-
-void Broadway::executeXOType(uint32_t instruction) {
-    uint32_t d = (instruction >> 21) & 0x1F;
 }
 
 void Broadway::executeInstruction() {
-    uint32_t instruction = instructionStream.read32();
+    if (state.cia & 3) {
+        raiseException(0x600);
+        state.cia = state.nia;
+        return;
+    }
+    uint32_t instruction = Bus::read32(state.cia);
 
     state.nia = state.cia + 4;
 
     InstructionType type = getInstructionType(instruction);
+    uint32_t op = instruction >> 26;
+    uint32_t xo = (instruction >> 1) & 1023;
+    bool floating = (op >= 48 && op <= 57) || op == 59 || op == 60 ||
+                    op == 61 || op == 63 || (op == 4 && xo != 1014) ||
+                    (op == 31 && (xo == 535 || xo == 567 || xo == 599 ||
+                                  xo == 631 || xo == 663 || xo == 695 ||
+                                  xo == 727 || xo == 759 || xo == 983));
+    if (floating && !(state.msr & 0x2000)) {
+        raiseException(0x800);
+        state.cia = state.nia;
+        return;
+    }
+    if ((op == 4 || type == InstructionType::PSQ_D) &&
+        !(state.spr[SPR::HID2] & 0x20000000)) {
+        raiseException(0x700, 0x80000);
+        state.cia = state.nia;
+        return;
+    }
 
     switch (type) {
     case InstructionType::D:
@@ -379,6 +428,12 @@ void Broadway::executeInstruction() {
         break;
     case InstructionType::XO:
         executeXOType(instruction);
+        break;
+    case InstructionType::XFX:
+        executeXFXType(instruction);
+        break;
+    case InstructionType::XFL:
+        executeXFLType(instruction);
         break;
     case InstructionType::XL:
         executeXLType(instruction);
