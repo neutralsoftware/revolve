@@ -14,9 +14,9 @@ ResolvedAddress Bus::resolveAddress(uint32_t addr) {
     if (addr >= MEM2_PHYS_START && addr < MEM2_PHYS_START + 0x04000000)
         return {MemoryRegion::MEM2, addr - MEM2_PHYS_START};
     if (addr >= MMIO_GAMECUBE_PHYS_START && addr <= MMIO_GAMECUBE_PHYS_END)
-        return {MemoryRegion::MMIO, addr + 0xC0000000};
+        return {MemoryRegion::MMIO, addr};
     if (addr >= MMIO_WII_PHYS_START && addr <= MMIO_WII_PHYS_END)
-        return {MemoryRegion::MMIO, addr + 0xC0000000};
+        return {MemoryRegion::MMIO, addr};
 
     if (addr >= MEM1_CACHED_START && addr <= MEM1_CACHED_END) {
         return {MemoryRegion::MEM1, addr - MEM1_CACHED_START};
@@ -35,11 +35,11 @@ ResolvedAddress Bus::resolveAddress(uint32_t addr) {
     }
 
     if (addr >= MMIO_GAMECUBE_START && addr <= MMIO_GAMECUBE_END) {
-        return {MemoryRegion::MMIO, addr};
+        return {MemoryRegion::MMIO, addr - 0xC0000000};
     }
 
     if (addr >= MMIO_WII_START && addr <= MMIO_WII_END) {
-        return {MemoryRegion::MMIO, addr};
+        return {MemoryRegion::MMIO, addr - 0xC0000000};
     }
 
     return {MemoryRegion::Invalid, 0};

@@ -23,7 +23,7 @@ int main(int argc, const char *argv[]) {
 
     if (arguments.empty()) {
         std::cerr << "Usage: revolve [-S] <parse|exec> <file>\n"
-                  << "       revolve disc <image.iso>\n"
+                  << "       revolve disc <image.iso|image.wbfs|image.rvz>\n"
                   << "       revolve -S <file>\n";
         return 1;
     }
@@ -33,16 +33,16 @@ int main(int argc, const char *argv[]) {
 
     Device::createDevice();
 
-    auto loadExecutable = [](const std::string &filename)
-        -> std::optional<Executable> {
+    auto loadExecutable =
+        [](const std::string &filename) -> std::optional<Executable> {
         size_t separator = filename.find_last_of('.');
-        std::string extension =
-            separator == std::string::npos ? "" : filename.substr(separator + 1);
-        std::transform(extension.begin(), extension.end(), extension.begin(),
-                       [](unsigned char character) {
-                           return std::tolower(character);
-                       });
-        if (extension != "iso")
+        std::string extension = separator == std::string::npos
+                                    ? ""
+                                    : filename.substr(separator + 1);
+        std::transform(
+            extension.begin(), extension.end(), extension.begin(),
+            [](unsigned char character) { return std::tolower(character); });
+        if (extension != "iso" && extension != "wbfs" && extension != "rvz")
             return Executable::parseFromFile(filename);
         if (!Device::globalDevice->disc->open(filename)) {
             std::cerr << "Error: Failed to open Wii disc image." << std::endl;

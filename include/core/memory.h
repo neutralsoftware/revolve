@@ -32,9 +32,9 @@ constexpr uint32_t MMIO_GAMECUBE_PHYS_START = 0x0C000000;
 constexpr uint32_t MMIO_GAMECUBE_PHYS_END = 0x0C008003;
 
 constexpr uint32_t MMIO_WII_START = 0xCD000000;
-constexpr uint32_t MMIO_WII_END = 0xCD008000;
+constexpr uint32_t MMIO_WII_END = 0xCDFFFFFF;
 constexpr uint32_t MMIO_WII_PHYS_START = 0x0D000000;
-constexpr uint32_t MMIO_WII_PHYS_END = 0x0D008000;
+constexpr uint32_t MMIO_WII_PHYS_END = 0x0DFFFFFF;
 
 enum class MemoryRegion { MEM1, MEM2, MMIO, Invalid };
 

@@ -1,5 +1,6 @@
 #include "core/utils.h"
 #include "ios/ios.h"
+#include <algorithm>
 #include <cstdint>
 #include <span>
 
@@ -68,6 +69,38 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
         Logger::log("DI", LogLevel::Info,
                     "DVDLowGetLength: " + std::to_string(lastLength));
 
+        return static_cast<int32_t>(DIResult::Success);
+    }
+    case DIIoctl::Read: {
+        if (!disc || !disc->isOpen() || !currentPartition)
+            return static_cast<int32_t>(DIResult::DriveError);
+        if (request.inSize < 0x20)
+            return static_cast<int32_t>(DIResult::BadArgument);
+
+        uint32_t length = memory.read32(request.inPtr + 4);
+        uint64_t offset =
+            static_cast<uint64_t>(memory.read32(request.inPtr + 8)) << 2;
+        if (request.outSize < length)
+            return static_cast<int32_t>(DIResult::ReadTimedOut);
+        if ((request.outPtr & 0x1F) != 0 || (length & 0x1F) != 0)
+            return static_cast<int32_t>(DIResult::BadArgument);
+
+        auto partitions = disc->getPartitions();
+        auto partition =
+            std::find_if(partitions.begin(), partitions.end(),
+                         [&](const DiscPartition &candidate) {
+                             return candidate.offset == *currentPartition;
+                         });
+        if (partition == partitions.end())
+            return static_cast<int32_t>(DIResult::DriveError);
+
+        std::vector<uint8_t> buffer(length);
+        if (!disc->readPartition(*partition, offset, buffer)) {
+            lastDriveError = 0x052100;
+            return static_cast<int32_t>(DIResult::DriveError);
+        }
+        memory.writeBlock(request.outPtr, std::span<uint8_t>(buffer));
+        lastLength = length;
         return static_cast<int32_t>(DIResult::Success);
     }
     case DIIoctl::UnencryptedRead: {
