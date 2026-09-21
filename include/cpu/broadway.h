@@ -99,6 +99,25 @@ enum class BroadwayMTypeInstruction : uint32_t {
     RLWNM = 22,
 };
 
+enum class BroadwayXOTypeInstruction : uint32_t {
+    ADD = 266,
+    ADDC = 10,
+    ADDE = 138,
+    ADDME = 234,
+    ADDZE = 202,
+    DIVW = 491,
+    DIVWU = 459,
+    MULHW = 75,
+    MULHWU = 11,
+    MULLW = 235,
+    NEG = 104,
+    SUBF = 40,
+    SUBFC = 8,
+    SUBFE = 136,
+    SUFME = 232,
+    SUBFZE = 200,
+};
+
 enum class InstructionType {
     D,
     I,
@@ -277,6 +296,8 @@ class Broadway {
     void executeSTFSU(uint32_t field0, uint32_t field1, uint32_t, int32_t simm);
     void executeSTFD(uint32_t field0, uint32_t field1, uint32_t, int32_t simm);
     void executeSTFDU(uint32_t field0, uint32_t field1, uint32_t, int32_t simm);
+
+    void executeADD(uint32_t rt, uint32_t ra, uint32_t rb, bool oe, bool rc);
 
   private:
     MemoryStream instructionStream{0};
