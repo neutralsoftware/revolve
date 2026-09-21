@@ -11,3 +11,4 @@ _deps
 .cmake
 __pycache__
 tests/build
+tests/games

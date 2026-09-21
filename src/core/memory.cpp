@@ -3,10 +3,21 @@
 #include "core/utils.h"
 #include "device.h"
 #include <cstdint>
+#include <cstring>
 #include <span>
+#include <sys/types.h>
 #include <vector>
 
 ResolvedAddress Bus::resolveAddress(uint32_t addr) {
+    if (addr < 0x01800000)
+        return {MemoryRegion::MEM1, addr};
+    if (addr >= MEM2_PHYS_START && addr < MEM2_PHYS_START + 0x04000000)
+        return {MemoryRegion::MEM2, addr - MEM2_PHYS_START};
+    if (addr >= MMIO_GAMECUBE_PHYS_START && addr <= MMIO_GAMECUBE_PHYS_END)
+        return {MemoryRegion::MMIO, addr + 0xC0000000};
+    if (addr >= MMIO_WII_PHYS_START && addr <= MMIO_WII_PHYS_END)
+        return {MemoryRegion::MMIO, addr + 0xC0000000};
+
     if (addr >= MEM1_CACHED_START && addr <= MEM1_CACHED_END) {
         return {MemoryRegion::MEM1, addr - MEM1_CACHED_START};
     }
@@ -34,9 +45,44 @@ ResolvedAddress Bus::resolveAddress(uint32_t addr) {
     return {MemoryRegion::Invalid, 0};
 }
 
-uint8_t Bus::read8(uint32_t addr) {
+uint32_t Bus::readPhysical32(uint32_t addr) {
     ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    Memory &mem = Device::globalDevice->memory;
+    switch (resolved.region) {
+    case MemoryRegion::MEM1:
+        return mem.read32(resolved.offset, 1);
+    case MemoryRegion::MEM2:
+        return mem.read32(resolved.offset, 2);
+    case MemoryRegion::MMIO:
+        return Device::globalDevice->mmioDispatcher.read32(resolved.offset);
+    default:
+        return 0;
+    }
+}
+
+void Bus::writePhysical32(uint32_t addr, uint32_t value) {
+    ResolvedAddress resolved = resolveAddress(addr);
+    Memory &mem = Device::globalDevice->memory;
+    switch (resolved.region) {
+    case MemoryRegion::MEM1:
+        mem.write32(resolved.offset, value, 1);
+        break;
+    case MemoryRegion::MEM2:
+        mem.write32(resolved.offset, value, 2);
+        break;
+    case MemoryRegion::MMIO:
+        Device::globalDevice->mmioDispatcher.write32(resolved.offset, value);
+        break;
+    default:
+        break;
+    }
+}
+
+uint8_t Bus::read8(uint32_t addr) {
+    uint32_t physical =
+        Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Read);
+    ResolvedAddress resolved = resolveAddress(physical);
+    Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         return mem.read8(resolved.offset, 1);
@@ -53,8 +99,10 @@ uint8_t Bus::read8(uint32_t addr) {
 }
 
 uint16_t Bus::read16(uint32_t addr) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    uint32_t physical =
+        Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Read);
+    ResolvedAddress resolved = resolveAddress(physical);
+    Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         return mem.read16(resolved.offset, 1);
@@ -71,26 +119,22 @@ uint16_t Bus::read16(uint32_t addr) {
 }
 
 uint32_t Bus::read32(uint32_t addr) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
-    switch (resolved.region) {
-    case MemoryRegion::MEM1:
-        return mem.read32(resolved.offset, 1);
-    case MemoryRegion::MEM2:
-        return mem.read32(resolved.offset, 2);
-    case MemoryRegion::MMIO:
-        return Device::globalDevice->mmioDispatcher.read32(resolved.offset);
-    default:
-        Logger::log("Memory", LogLevel::Error,
-                    "read32: Invalid memory region for address (" +
-                        utils::toHexString(addr) + ")");
-        return 0;
-    }
+    uint32_t physical =
+        Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Read);
+    return readPhysical32(physical);
+}
+
+uint32_t Bus::fetch32(uint32_t addr) {
+    uint32_t physical = Device::globalDevice->cpu.translateAddress(
+        addr, MemoryAccess::Instruction);
+    return readPhysical32(physical);
 }
 
 uint64_t Bus::read64(uint32_t addr) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    uint32_t physical =
+        Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Read);
+    ResolvedAddress resolved = resolveAddress(physical);
+    Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         return mem.read64(resolved.offset, 1);
@@ -105,40 +149,28 @@ uint64_t Bus::read64(uint32_t addr) {
 }
 
 float Bus::readFloat(uint32_t addr) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
-    switch (resolved.region) {
-    case MemoryRegion::MEM1:
-        return mem.readFloat(resolved.offset, 1);
-    case MemoryRegion::MEM2:
-        return mem.readFloat(resolved.offset, 2);
-    default:
-        Logger::log("Memory", LogLevel::Error,
-                    "readFloat: Invalid memory region for address (" +
-                        utils::toHexString(addr) + ")");
-        return 0.0f;
-    }
+    uint32_t value = read32(addr);
+    float result;
+    std::memcpy(&result, &value, sizeof(result));
+    return result;
 }
 
 double Bus::readDouble(uint32_t addr) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
-    switch (resolved.region) {
-    case MemoryRegion::MEM1:
-        return mem.readDouble(resolved.offset, 1);
-    case MemoryRegion::MEM2:
-        return mem.readDouble(resolved.offset, 2);
-    default:
-        Logger::log("Memory", LogLevel::Error,
-                    "readDouble: Invalid memory region for address (" +
-                        utils::toHexString(addr) + ")");
-        return 0.0;
-    }
+    uint64_t value = read64(addr);
+    double result;
+    std::memcpy(&result, &value, sizeof(result));
+    return result;
 }
 
 void Bus::write8(uint32_t addr, uint8_t value) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    uint32_t physical =
+        Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Write);
+    ResolvedAddress resolved = resolveAddress(physical);
+    Memory &mem = Device::globalDevice->memory;
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid &&
+        (cpu.state.reservationAddress & ~31u) == (addr & ~31u))
+        cpu.state.reservationValid = false;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write8(resolved.offset, value, 1);
@@ -157,8 +189,15 @@ void Bus::write8(uint32_t addr, uint8_t value) {
 }
 
 void Bus::write16(uint32_t addr, uint16_t value) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    uint32_t physical =
+        Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Write);
+    ResolvedAddress resolved = resolveAddress(physical);
+    Memory &mem = Device::globalDevice->memory;
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid &&
+        (cpu.state.reservationAddress & ~31u) >= (addr & ~31u) &&
+        (cpu.state.reservationAddress & ~31u) <= ((addr + 1) & ~31u))
+        cpu.state.reservationValid = false;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write16(resolved.offset, value, 1);
@@ -177,8 +216,15 @@ void Bus::write16(uint32_t addr, uint16_t value) {
 }
 
 void Bus::write32(uint32_t addr, uint32_t value) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    uint32_t physical =
+        Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Write);
+    ResolvedAddress resolved = resolveAddress(physical);
+    Memory &mem = Device::globalDevice->memory;
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid &&
+        (cpu.state.reservationAddress & ~31u) >= (addr & ~31u) &&
+        (cpu.state.reservationAddress & ~31u) <= ((addr + 3) & ~31u))
+        cpu.state.reservationValid = false;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write32(resolved.offset, value, 1);
@@ -197,8 +243,15 @@ void Bus::write32(uint32_t addr, uint32_t value) {
 }
 
 void Bus::write64(uint32_t addr, uint64_t value) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
+    uint32_t physical =
+        Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Write);
+    ResolvedAddress resolved = resolveAddress(physical);
+    Memory &mem = Device::globalDevice->memory;
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid &&
+        (cpu.state.reservationAddress & ~31u) >= (addr & ~31u) &&
+        (cpu.state.reservationAddress & ~31u) <= ((addr + 7) & ~31u))
+        cpu.state.reservationValid = false;
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write64(resolved.offset, value, 1);
@@ -214,37 +267,15 @@ void Bus::write64(uint32_t addr, uint64_t value) {
 }
 
 void Bus::writeFloat(uint32_t addr, float value) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
-    switch (resolved.region) {
-    case MemoryRegion::MEM1:
-        mem.writeFloat(resolved.offset, value, 1);
-        break;
-    case MemoryRegion::MEM2:
-        mem.writeFloat(resolved.offset, value, 2);
-        break;
-    default:
-        Logger::log("Memory", LogLevel::Error,
-                    "writeFloat: Invalid memory region for address (" +
-                        utils::toHexString(addr) + ")");
-    }
+    uint32_t bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    write32(addr, bits);
 }
 
 void Bus::writeDouble(uint32_t addr, double value) {
-    ResolvedAddress resolved = resolveAddress(addr);
-    Memory mem = Device::globalDevice->memory;
-    switch (resolved.region) {
-    case MemoryRegion::MEM1:
-        mem.writeDouble(resolved.offset, value, 1);
-        break;
-    case MemoryRegion::MEM2:
-        mem.writeDouble(resolved.offset, value, 2);
-        break;
-    default:
-        Logger::log("Memory", LogLevel::Error,
-                    "writeDouble: Invalid memory region for address (" +
-                        utils::toHexString(addr) + ")");
-    }
+    uint64_t bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    write64(addr, bits);
 }
 
 void Memory::write8(uint32_t addr, uint8_t value, int memIndex) {
@@ -585,4 +616,31 @@ BigEndianStream Bus::readToStream(uint32_t addr, size_t count) {
     std::vector<uint8_t> buffer(count);
     readBlock(addr, buffer);
     return BigEndianStream(buffer);
+}
+
+MemoryStream::MemoryStream(uint32_t startAddress)
+    : currentAddress(startAddress) {}
+
+uint8_t MemoryStream::read8() {
+    uint8_t value = Bus::read8(currentAddress);
+    currentAddress += 1;
+    return value;
+}
+
+uint16_t MemoryStream::read16() {
+    uint16_t value = Bus::read16(currentAddress);
+    currentAddress += 2;
+    return value;
+}
+
+uint32_t MemoryStream::read32() {
+    uint32_t value = Bus::read32(currentAddress);
+    currentAddress += 4;
+    return value;
+}
+
+uint64_t MemoryStream::read64() {
+    uint64_t value = Bus::read64(currentAddress);
+    currentAddress += 8;
+    return value;
 }

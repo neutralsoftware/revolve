@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <sys/types.h>
 #include <vector>
 
 constexpr uint32_t MEM1_CACHED_START = 0x80000000;
@@ -27,11 +28,19 @@ constexpr uint32_t MEM2_PHYS_START = 0x10000000;
 
 constexpr uint32_t MMIO_GAMECUBE_START = 0xCC000000;
 constexpr uint32_t MMIO_GAMECUBE_END = 0xCC008003;
+constexpr uint32_t MMIO_GAMECUBE_PHYS_START = 0x0C000000;
+constexpr uint32_t MMIO_GAMECUBE_PHYS_END = 0x0C008003;
 
 constexpr uint32_t MMIO_WII_START = 0xCD000000;
 constexpr uint32_t MMIO_WII_END = 0xCD008000;
+constexpr uint32_t MMIO_WII_PHYS_START = 0x0D000000;
+constexpr uint32_t MMIO_WII_PHYS_END = 0x0D008000;
 
 enum class MemoryRegion { MEM1, MEM2, MMIO, Invalid };
+
+enum class MemoryAccess { Read, Write, Instruction };
+
+struct MemoryAccessException {};
 
 struct ResolvedAddress {
     MemoryRegion region;
@@ -110,6 +119,8 @@ class Bus {
     static uint16_t read16(uint32_t addr);
     static uint32_t read32(uint32_t addr);
     static uint64_t read64(uint32_t addr);
+    static uint32_t fetch32(uint32_t addr);
+    static uint32_t readPhysical32(uint32_t addr);
 
     static float readFloat(uint32_t addr);
     static double readDouble(uint32_t addr);
@@ -118,6 +129,7 @@ class Bus {
     static void write16(uint32_t addr, uint16_t value);
     static void write32(uint32_t addr, uint32_t value);
     static void write64(uint32_t addr, uint64_t value);
+    static void writePhysical32(uint32_t addr, uint32_t value);
 
     static void writeFloat(uint32_t addr, float value);
     static void writeDouble(uint32_t addr, double value);
@@ -130,6 +142,22 @@ class Bus {
     BigEndianStream readToStream(uint32_t addr, size_t count);
 
     static ResolvedAddress resolveAddress(uint32_t addr);
+};
+
+class MemoryStream {
+  public:
+    MemoryStream(uint32_t startAddress);
+
+    uint8_t read8();
+    uint16_t read16();
+    uint32_t read32();
+    uint64_t read64();
+
+    float readFloat();
+    double readDouble();
+
+  private:
+    uint32_t currentAddress;
 };
 
 #endif // REVOLVE_MEMORY

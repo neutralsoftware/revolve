@@ -2,6 +2,7 @@
 #define REVOLVE_DEVICE
 
 #include "core/memory.h"
+#include "cpu/broadway.h"
 #include <memory>
 #include <stdexcept>
 
@@ -19,6 +20,7 @@ class Device {
 
     Memory memory;
     MMIO mmioDispatcher;
+    Broadway cpu;
 };
 
 #endif

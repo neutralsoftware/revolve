@@ -62,6 +62,27 @@ template <std::integral T> inline std::string toHexString(T value) {
 
     return ss.str();
 }
+
+inline uint32_t makeMask(uint32_t mb, uint32_t me) {
+    uint32_t mask = 0;
+
+    for (uint32_t i = 0; i < 32; ++i) {
+        bool enabled;
+
+        if (mb <= me)
+            enabled = i >= mb && i <= me;
+        else
+            enabled = i >= mb || i <= me;
+
+        if (enabled) {
+            // PowerPC bit i = host bit 31-i
+            mask |= 1u << (31 - i);
+        }
+    }
+
+    return mask;
+}
+
 } // namespace utils
 
 #endif // REVOLVE_UTILS
