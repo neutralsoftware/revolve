@@ -64,7 +64,7 @@ int main(int argc, const char *argv[]) {
             Debugger debugger(Device::globalDevice->cpu, *exec);
             debugger.run();
         } else {
-            Device::globalDevice->cpu.start();
+            Device::globalDevice->start();
         }
     } else {
         std::cerr << "Unknown command: " << arguments[0] << std::endl;

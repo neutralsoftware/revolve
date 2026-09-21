@@ -29,13 +29,13 @@ class ProcessorInterface : public MMIODevice {
   public:
     uint32_t read(uint32_t offset, AccessSize size) override;
     void write(uint32_t offset, uint32_t value, AccessSize size) override;
-    inline std::string getName() const { return "ProcessorInterface"; }
+    inline std::string getName() override { return "ProcessorInterface"; }
 
     inline bool interruptPending() const {
-        return (interruptCause & interruptMask & 0x0000FFFF) != 0;
+        return (interruptCause & interruptMask & 0x7FFFu) != 0;
     }
 
-    inline void raiseIntererupt(PIInterrupt interrupt) {
+    inline void raiseInterrupt(PIInterrupt interrupt) {
         interruptCause |= (1u << static_cast<uint32_t>(interrupt));
     }
 
@@ -44,8 +44,8 @@ class ProcessorInterface : public MMIODevice {
     }
 
   private:
-    uint32_t interruptMask;
-    uint32_t interruptCause;
+    uint32_t interruptMask = 0;
+    uint32_t interruptCause = 0;
 };
 
 #endif

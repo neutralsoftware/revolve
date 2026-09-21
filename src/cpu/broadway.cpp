@@ -561,7 +561,7 @@ void Broadway::executeMType(uint32_t instruction) {
     }
 }
 
-void Broadway::executeInstruction() {
+uint32_t Broadway::executeInstruction() {
     state.exceptionTaken = false;
     ++state.timeBase;
     uint32_t oldDecrementer = state.spr[SPR::DEC]--;
@@ -570,19 +570,19 @@ void Broadway::executeInstruction() {
     state.nia = state.cia + 4;
     if (deliverPendingException()) {
         state.cia = state.nia;
-        return;
+        return 0;
     }
     if (state.cia & 3) {
         raiseException(0x600);
         state.cia = state.nia;
-        return;
+        return 0;
     }
     uint32_t instruction;
     try {
         instruction = Bus::fetch32(state.cia);
     } catch (const MemoryAccessException &) {
         state.cia = state.nia;
-        return;
+        return 0;
     }
 
     InstructionType type = getInstructionType(instruction);
@@ -596,13 +596,13 @@ void Broadway::executeInstruction() {
     if (floating && !(state.msr & 0x2000)) {
         raiseException(0x800);
         state.cia = state.nia;
-        return;
+        return 0;
     }
     if ((op == 4 || type == InstructionType::PSQ_D) &&
         !(state.spr[SPR::HID2] & 0x20000000)) {
         raiseException(0x700, 0x80000);
         state.cia = state.nia;
-        return;
+        return 0;
     }
 
     try {
@@ -660,6 +660,8 @@ void Broadway::executeInstruction() {
     }
 
     state.cia = state.nia;
+
+    return 1;
 }
 
 void Broadway::setupWiiBATs() {

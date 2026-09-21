@@ -290,7 +290,7 @@ class Broadway {
 
     void reset(uint32_t entryPoint);
     void setupWiiBATs();
-    void executeInstruction();
+    uint32_t executeInstruction();
     uint32_t translateAddress(uint32_t address, MemoryAccess access);
     void raiseException(uint32_t vector, uint32_t cause = 0);
     void requestExternalInterrupt();
@@ -313,6 +313,10 @@ class Broadway {
     void executePSQ_XType(uint32_t instruction);
 
     InstructionType getInstructionType(uint32_t instruction);
+
+    inline void setExternalInterrupt(bool asserted) {
+        state.externalInterruptPending = asserted;
+    }
 
     void start();
 

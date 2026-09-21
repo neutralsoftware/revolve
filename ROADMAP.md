@@ -40,8 +40,8 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 
 ## Core Hardware
 
-- [ ] Add hardware registers
-- [ ] Add the Processor Interface (PI)
+- [x] Add hardware registers
+- [x] Add the Processor Interface (PI)
 - [ ] Implement global clock and event scheduler
 - [ ] Implement system timers
 - [ ] Implement interrupts
