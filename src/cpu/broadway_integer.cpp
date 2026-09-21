@@ -106,13 +106,22 @@ void Broadway::executeXFXType(uint32_t instruction) {
     case 339:
         state.gpr[d] = state.spr[spr];
         break;
-    case 371:
-        if (spr != 268 && spr != 269) {
+    case 371: {
+        uint32_t tbr = spr;
+
+        if (tbr != SPR::TBL && tbr != SPR::TBU) {
             raiseException(0x700, 0x80000);
             return;
         }
-        state.gpr[d] = state.spr[spr];
+
+        if (tbr == SPR::TBL) {
+            state.gpr[d] = static_cast<uint32_t>(state.timeBase);
+        } else {
+            state.gpr[d] = static_cast<uint32_t>(state.timeBase >> 32);
+        }
+
         break;
+    }
     case 467:
         spr = spr == 284 ? 268 : spr == 285 ? 269 : spr;
         state.spr[spr] = state.gpr[d];

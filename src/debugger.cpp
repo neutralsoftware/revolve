@@ -34,7 +34,7 @@ std::string hexValue(uint64_t value, uint32_t width) {
            << std::setw(width) << value;
     return stream.str();
 }
-}
+} // namespace
 
 Debugger::Debugger(Broadway &cpu, const Executable &executable)
     : cpu(cpu), executable(executable),
@@ -869,24 +869,37 @@ void Debugger::printInfo(const std::vector<std::string> &arguments) {
                            cpu.state.msr & 0x10 ? "on" : "off")
                   << color("90", "  sdr1 ")
                   << formatAddress(cpu.state.spr[SPR::SDR1]) << '\n';
+
         for (uint32_t index = 0; index < 16; ++index) {
             std::cout << color("1;33", "sr" + std::to_string(index)) << ' '
                       << formatAddress(cpu.state.sr[index])
                       << (index % 4 == 3 ? '\n' : ' ');
         }
+
+        std::cout << '\n';
+
         for (uint32_t index = 0; index < 8; ++index) {
-            uint32_t ibat = index < 4 ? SPR::IBAT0U + index * 2
-                                      : SPR::IBAT4U + (index - 4) * 2;
-            uint32_t dbat = index < 4 ? SPR::DBAT0U + index * 2
-                                      : SPR::DBAT4U + (index - 4) * 2;
-            if (cpu.state.spr[ibat] || cpu.state.spr[ibat + 1])
-                std::cout << color("1;33", "ibat" + std::to_string(index))
-                          << ' ' << formatAddress(cpu.state.spr[ibat]) << ' '
-                          << formatAddress(cpu.state.spr[ibat + 1]) << '\n';
-            if (cpu.state.spr[dbat] || cpu.state.spr[dbat + 1])
-                std::cout << color("1;33", "dbat" + std::to_string(index))
-                          << ' ' << formatAddress(cpu.state.spr[dbat]) << ' '
-                          << formatAddress(cpu.state.spr[dbat + 1]) << '\n';
+            uint32_t ibat =
+                index < 4
+                    ? static_cast<uint32_t>(SPR::IBAT0U) + index * 2
+                    : static_cast<uint32_t>(SPR::IBAT4U) + (index - 4) * 2;
+
+            uint32_t dbat =
+                index < 4
+                    ? static_cast<uint32_t>(SPR::DBAT0U) + index * 2
+                    : static_cast<uint32_t>(SPR::DBAT4U) + (index - 4) * 2;
+
+            std::cout << color("1;33", "ibat" + std::to_string(index))
+                      << color("90", " U=")
+                      << formatAddress(cpu.state.spr[ibat])
+                      << color("90", " L=")
+                      << formatAddress(cpu.state.spr[ibat + 1]) << '\n';
+
+            std::cout << color("1;33", "dbat" + std::to_string(index))
+                      << color("90", " U=")
+                      << formatAddress(cpu.state.spr[dbat])
+                      << color("90", " L=")
+                      << formatAddress(cpu.state.spr[dbat + 1]) << '\n';
         }
     } else if (topic == "sections") {
         for (uint32_t index = 0; index < executable.textSections.size();

@@ -319,6 +319,7 @@ bool Broadway::deliverPendingException() {
     if (state.machineCheckPending && (state.msr & 0x1000)) {
         state.machineCheckPending = false;
         raiseException(0x200);
+        state.msr &= ~0x1000u; // Clear ME bit
         return true;
     }
     if (!(state.msr & 0x8000))
@@ -563,8 +564,6 @@ void Broadway::executeMType(uint32_t instruction) {
 void Broadway::executeInstruction() {
     state.exceptionTaken = false;
     ++state.timeBase;
-    state.spr[SPR::TBL] = static_cast<uint32_t>(state.timeBase);
-    state.spr[SPR::TBU] = static_cast<uint32_t>(state.timeBase >> 32);
     uint32_t oldDecrementer = state.spr[SPR::DEC]--;
     if (oldDecrementer == 0)
         state.decrementerPending = true;
@@ -661,4 +660,24 @@ void Broadway::executeInstruction() {
     }
 
     state.cia = state.nia;
+}
+
+void Broadway::setupWiiBATs() {
+    state.spr[SPR::IBAT0U] = 0x80001FFF;
+    state.spr[SPR::IBAT0L] = 0x00000002;
+
+    state.spr[SPR::DBAT0U] = 0x80001FFF;
+    state.spr[SPR::DBAT0L] = 0x00000002;
+
+    state.spr[SPR::DBAT1U] = 0xC0001FFF;
+    state.spr[SPR::DBAT1L] = 0x0000002A;
+
+    state.spr[SPR::IBAT4U] = 0x90001FFF;
+    state.spr[SPR::IBAT4L] = 0x10000002;
+
+    state.spr[SPR::DBAT4U] = 0x90001FFF;
+    state.spr[SPR::DBAT4L] = 0x10000002;
+
+    state.spr[SPR::DBAT5U] = 0xD0001FFF;
+    state.spr[SPR::DBAT5L] = 0x1000002A;
 }

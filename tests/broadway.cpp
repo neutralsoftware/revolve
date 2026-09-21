@@ -61,7 +61,7 @@ struct BroadwayTest {
     const char *name;
     std::function<void(Broadway &)> run;
 };
-}
+} // namespace
 
 int runBroadwaySuite() {
     auto device = Device::createDevice();
@@ -1364,13 +1364,15 @@ int runBroadwaySuite() {
                                 "link after reading target");
                      }});
     tests.push_back({"SC", [](Broadway &cpu) {
-                         cpu.state.msr = 0xF032;
+                         cpu.state.msr = 0xF002;
+
                          step(cpu, (17u << 26) | 2);
+
                          expect(cpu.state.cia, 0xC00, "system call vector");
                          expect(cpu.state.spr[SPR::SRR0], CODE + 4,
                                 "return PC");
-                         expect(cpu.state.spr[SPR::SRR1], 0xF032, "saved MSR");
-                         expect(cpu.state.msr & 0xE032, 0, "exception MSR");
+                         expect(cpu.state.spr[SPR::SRR1], 0xF002, "saved MSR");
+                         expect(cpu.state.msr & 0xE002, 0, "exception MSR");
                      }});
     tests.push_back({"RFI", [](Broadway &cpu) {
                          cpu.state.spr[SPR::SRR0] = CODE + 19;
@@ -1459,18 +1461,16 @@ int runBroadwaySuite() {
                                        (144 << 1));
                          expect(cpu.state.cr, 0x1FFFFFF8, "selected CR fields");
                      }});
-    tests.push_back({"MFMSR", [](Broadway &cpu) {
-                         cpu.state.msr = 0x2030;
-                         step(cpu, xtype(31, 83, 3, 0, 0));
-                         expect(cpu.state.gpr[3], 0x2030, "MSR read");
+    tests.push_back(
+        {"MFTB", [](Broadway &cpu) {
+             cpu.state.gpr[3] = 0x12345678;
 
-                         cpu.state.msr |= 0x4000;
-                         step(cpu, xtype(31, 83, 3, 0, 0));
-                         expect(cpu.state.cia, 0x700,
-                                "privileged instruction trap");
-                         expect(cpu.state.spr[SPR::SRR1] & 0x40000, 0x40000,
-                                "privilege cause");
-                     }});
+             cpu.state.timeBase = 0xABCDEF00ull;
+
+             step(cpu, (31u << 26) | (3 << 21) | 802816u | (371 << 1));
+
+             expect(cpu.state.gpr[3], 0xABCDEF01, "split TBR encoding");
+         }});
     tests.push_back({"MTMSR", [](Broadway &cpu) {
                          cpu.state.gpr[3] = 0x2030;
                          step(cpu, xtype(31, 146, 3, 0, 0));
@@ -1489,13 +1489,6 @@ int runBroadwaySuite() {
              cpu.state.spr[912] = 0xABCDEF01;
              step(cpu, (31u << 26) | (3 << 21) | 1105920u | (467 << 1));
              expect(cpu.state.spr[912], 0x12345678, "split SPR encoding");
-         }});
-    tests.push_back(
-        {"MFTB", [](Broadway &cpu) {
-             cpu.state.gpr[3] = 0x12345678;
-             cpu.state.spr[268] = 0xABCDEF01;
-             step(cpu, (31u << 26) | (3 << 21) | 802816u | (371 << 1));
-             expect(cpu.state.gpr[3], 0xABCDEF01, "split SPR encoding");
          }});
     tests.push_back({"MFSR", [](Broadway &cpu) {
                          cpu.state.gpr[3] = 0x12345678;
@@ -2516,11 +2509,17 @@ int runBroadwaySuite() {
                                 "high external vector");
                      }});
     tests.push_back({"TIME_BASE", [](Broadway &cpu) {
-                         cpu.state.timeBase = 0x12345678FFFFFFFFull;
-                         step(cpu, dtype(14, 3, 0, 1));
-                         expect(cpu.state.spr[SPR::TBL], 0, "time base low");
-                         expect(cpu.state.spr[SPR::TBU], 0x12345679,
-                                "time base high");
+                         cpu.state.timeBase = 0x12345678FFFFFFFEull;
+
+                         step(cpu, dtype(24, 0, 0, 0));
+
+                         expect(cpu.state.timeBase, 0x12345678FFFFFFFFull,
+                                "time base increments");
+
+                         step(cpu, dtype(24, 0, 0, 0));
+
+                         expect(cpu.state.timeBase, 0x1234567900000000ull,
+                                "time base carry");
                      }});
     tests.push_back({"DBAT_TRANSLATION", [](Broadway &cpu) {
                          cpu.state.spr[SPR::DBAT0U] = 0x40000002;
@@ -2645,6 +2644,7 @@ int runBroadwaySuite() {
     size_t passed = 0;
     for (const auto &test : tests) {
         device->cpu.reset(CODE);
+        device->cpu.setupWiiBATs();
         device->cpu.state.msr = 0x2000;
         device->cpu.state.spr[SPR::HID2] = 0xA0000000;
         for (uint32_t i = 0; i < 256; ++i)

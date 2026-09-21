@@ -59,6 +59,7 @@ int main(int argc, const char *argv[]) {
         exec->loadIntoMemory();
 
         Device::globalDevice->cpu.reset(exec->entryPoint);
+        Device::globalDevice->cpu.setupWiiBATs();
         if (debug) {
             Debugger debugger(Device::globalDevice->cpu, *exec);
             debugger.run();

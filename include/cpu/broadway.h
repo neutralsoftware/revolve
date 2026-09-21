@@ -289,6 +289,7 @@ class Broadway {
     BroadwayState state{};
 
     void reset(uint32_t entryPoint);
+    void setupWiiBATs();
     void executeInstruction();
     uint32_t translateAddress(uint32_t address, MemoryAccess access);
     void raiseException(uint32_t vector, uint32_t cause = 0);
