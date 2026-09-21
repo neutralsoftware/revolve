@@ -93,6 +93,12 @@ enum class BroadwayDTypeInstruction : uint32_t {
     STFDU = 55,
 };
 
+enum class BroadwayMTypeInstruction : uint32_t {
+    RLWIMI = 20,
+    RLWINM = 21,
+    RLWNM = 22,
+};
+
 enum class InstructionType {
     D,
     I,

@@ -1,5 +1,6 @@
 #include "cpu/broadway.h"
 #include "core/utils.h"
+#include <bit>
 #include <cstdint>
 #include <string>
 
@@ -79,6 +80,19 @@ InstructionType Broadway::getInstructionType(uint32_t instruction) {
     case BroadwayDTypeInstruction::LBZ:
     case BroadwayDTypeInstruction::LBZU:
         return InstructionType::D;
+    }
+
+    switch (static_cast<BroadwayMTypeInstruction>(op)) {
+    case BroadwayMTypeInstruction::RLWIMI:
+    case BroadwayMTypeInstruction::RLWINM:
+    case BroadwayMTypeInstruction::RLWNM:
+        return InstructionType::M;
+    }
+
+    if (op == 18) {
+        return InstructionType::I;
+    } else if (op == 16) {
+        return InstructionType::B;
     }
 
     return InstructionType::I; // Default to I-Type for unrecognized opcodes
@@ -220,6 +234,87 @@ void Broadway::executeDType(uint32_t instruction) {
                     "executeDType: Unknown D-Type instruction. CIA: " +
                         utils::toHexString(state.cia));
         break;
+    }
+}
+
+void Broadway::executeIType(uint32_t instruction) {
+    int32_t displacement = signExtend(instruction & 0x03FFFFFC, 26);
+
+    bool aa = (instruction >> 1) & 0x1;
+    bool lk = instruction & 0x1;
+
+    uint32_t targetAddress =
+        aa ? static_cast<uint32_t>(displacement)
+           : state.cia + static_cast<uint32_t>(displacement);
+
+    if (lk) {
+        state.spr[SPR::LR] = state.cia + 4;
+    }
+
+    state.nia = targetAddress;
+}
+
+void Broadway::executeBType(uint32_t instruction) {
+    int32_t displacement = signExtend(instruction & 0x03FFFFFC, 26);
+
+    bool aa = (instruction >> 1) & 1;
+    bool lk = instruction & 1;
+
+    uint32_t oldCIA = state.cia;
+
+    if (lk) {
+        state.spr[SPR::LR] = oldCIA + 4;
+    }
+
+    if (aa) {
+        state.nia = static_cast<uint32_t>(displacement);
+    } else {
+        state.nia = oldCIA + static_cast<uint32_t>(displacement);
+    }
+}
+
+void Broadway::executeSCType(uint32_t instruction) {
+    (void)instruction;
+
+    state.spr[SPR::SRR0] = state.cia + 4;
+
+    // SRR1 receives the architecturally required MSR bits.
+    state.spr[SPR::SRR1] = state.msr;
+
+    // Enter exception state.
+    // You should centralize this in raiseException().
+    // state.enterException(Exception::SystemCall);
+}
+
+void Broadway::executeMType(uint32_t instruction) {
+    uint32_t op = instruction >> 26;
+
+    uint32_t rs = (instruction >> 21) & 0x1F;
+    uint32_t ra = (instruction >> 16) & 0x1F;
+
+    uint32_t sh_or_rb = (instruction >> 11) & 0x1F;
+
+    uint32_t mb = (instruction >> 6) & 0x1F;
+    uint32_t me = (instruction >> 1) & 0x1F;
+
+    bool rc = instruction & 1;
+
+    switch (op) {
+    case static_cast<uint32_t>(BroadwayMTypeInstruction::RLWIMI): {
+        uint32_t source = state.gpr[rs];
+        uint32_t oldRA = state.gpr[ra];
+
+        uint32_t rotated = std::rotl(source, sh_or_rb);
+
+        uint32_t mask = utils::makeMask(mb, me);
+
+        uint32_t result = (oldRA & ~mask) | (rotated & mask);
+
+        state.gpr[ra] = result;
+
+        if (rc)
+            state.updateCR0(result);
+    }
     }
 }
 

@@ -45,6 +45,9 @@ int main(int argc, const char *argv[]) {
         }
         Logger::logObject(*exec, LogLevel::Info);
         exec->loadIntoMemory();
+
+        Device::globalDevice->cpu.reset(exec->entryPoint);
+        Device::globalDevice->cpu.start();
     } else {
         std::cerr << "Unknown command: " << arguments[0] << std::endl;
         return 1;
