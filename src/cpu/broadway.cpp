@@ -7,8 +7,9 @@
 void Broadway::reset(uint32_t entryPoint) {
     state = {};
     state.cia = entryPoint;
-
     state.nia = entryPoint + 4;
+    state.spr[SPR::DEC] = 0xFFFFFFFF;
+    state.spr[SPR::PVR] = 0x00087200;
 }
 
 std::string BroadwayState::log() const {
@@ -294,6 +295,185 @@ void Broadway::raiseException(uint32_t vector, uint32_t cause) {
     state.nia = ((state.msr & 0x40) ? 0xFFF00000u : 0) | vector;
     state.msr = (state.msr & ~0x0004EF36u) | ((state.msr >> 16) & 1);
     state.reservationValid = false;
+    state.exceptionTaken = true;
+}
+
+void Broadway::requestExternalInterrupt() {
+    state.externalInterruptPending = true;
+}
+
+void Broadway::clearExternalInterrupt() {
+    state.externalInterruptPending = false;
+}
+
+void Broadway::requestSystemReset() { state.systemResetPending = true; }
+
+void Broadway::requestMachineCheck() { state.machineCheckPending = true; }
+
+bool Broadway::deliverPendingException() {
+    if (state.systemResetPending) {
+        state.systemResetPending = false;
+        raiseException(0x100);
+        return true;
+    }
+    if (state.machineCheckPending && (state.msr & 0x1000)) {
+        state.machineCheckPending = false;
+        raiseException(0x200);
+        return true;
+    }
+    if (!(state.msr & 0x8000))
+        return false;
+    if (state.externalInterruptPending) {
+        raiseException(0x500);
+        return true;
+    }
+    if (state.decrementerPending) {
+        state.decrementerPending = false;
+        raiseException(0x900);
+        return true;
+    }
+    return false;
+}
+
+bool Broadway::protectionAllows(uint32_t protection, bool key,
+                                MemoryAccess access) {
+    if (access == MemoryAccess::Instruction)
+        access = MemoryAccess::Read;
+    switch (protection) {
+    case 0:
+        return !key;
+    case 1:
+        return access == MemoryAccess::Read || !key;
+    case 2:
+        return true;
+    case 3:
+        return access == MemoryAccess::Read;
+    }
+    return false;
+}
+
+bool Broadway::translateBAT(uint32_t address, MemoryAccess access,
+                            uint32_t &physicalAddress) {
+    bool instruction = access == MemoryAccess::Instruction;
+    uint32_t first = instruction ? SPR::IBAT0U : SPR::DBAT0U;
+    uint32_t second = instruction ? SPR::IBAT4U : SPR::DBAT4U;
+    bool user = state.msr & 0x4000;
+    for (uint32_t index = 0; index < 8; ++index) {
+        uint32_t upperIndex = (index < 4 ? first : second) + (index & 3) * 2;
+        uint32_t upper = state.spr[upperIndex];
+        uint32_t lower = state.spr[upperIndex + 1];
+        if (!(upper & (user ? 1u : 2u)))
+            continue;
+        uint32_t blockMask = ((upper & 0x00001FFCu) << 15) | 0x1FFFFu;
+        if ((address & ~blockMask) != (upper & 0xFFFE0000u))
+            continue;
+        uint32_t protection = lower & 3;
+        if (protection == 0 ||
+            (access == MemoryAccess::Write && protection != 2)) {
+            if (instruction)
+                raiseException(0x400, 0x08000000);
+            else {
+                state.spr[SPR::DAR] = address;
+                state.spr[SPR::DSISR] =
+                    0x08000000 |
+                    (access == MemoryAccess::Write ? 0x02000000 : 0);
+                raiseException(0x300);
+            }
+            throw MemoryAccessException{};
+        }
+        if (instruction && (lower & 8)) {
+            raiseException(0x400, 0x10000000);
+            throw MemoryAccessException{};
+        }
+        physicalAddress = (lower & 0xFFFE0000u) | (address & blockMask);
+        return true;
+    }
+    return false;
+}
+
+uint32_t Broadway::translatePage(uint32_t address, MemoryAccess access) {
+    uint32_t segment = state.sr[address >> 28];
+    bool instruction = access == MemoryAccess::Instruction;
+    if (segment & 0x80000000) {
+        if (instruction)
+            raiseException(0x400, 0x40000000);
+        else {
+            state.spr[SPR::DAR] = address;
+            state.spr[SPR::DSISR] =
+                0x40000000 | (access == MemoryAccess::Write ? 0x02000000 : 0);
+            raiseException(0x300);
+        }
+        throw MemoryAccessException{};
+    }
+    if (instruction && (segment & 0x10000000)) {
+        raiseException(0x400, 0x08000000);
+        throw MemoryAccessException{};
+    }
+
+    uint32_t vsid = segment & 0x00FFFFFF;
+    uint32_t pageIndex = (address >> 12) & 0xFFFF;
+    uint32_t api = (address >> 22) & 0x3F;
+    uint32_t hash = vsid ^ pageIndex;
+    uint32_t sdr1 = state.spr[SPR::SDR1];
+    uint32_t tableBase = sdr1 & 0xFFFF0000;
+    uint32_t tableMask = ((sdr1 & 0x1FF) << 16) | 0xFFC0;
+    bool key = segment & ((state.msr & 0x4000) ? 0x20000000 : 0x40000000);
+
+    for (uint32_t secondary = 0; secondary < 2; ++secondary) {
+        uint32_t selectedHash = secondary ? ~hash : hash;
+        uint32_t pteg = tableBase | ((selectedHash << 6) & tableMask);
+        uint32_t expected =
+            0x80000000 | (vsid << 7) | (secondary ? 0x40 : 0) | api;
+        for (uint32_t entry = 0; entry < 8; ++entry) {
+            uint32_t addressOfEntry = pteg + entry * 8;
+            if (Bus::readPhysical32(addressOfEntry) != expected)
+                continue;
+            uint32_t lower = Bus::readPhysical32(addressOfEntry + 4);
+            if (!protectionAllows(lower & 3, key, access)) {
+                if (instruction)
+                    raiseException(0x400, 0x08000000);
+                else {
+                    state.spr[SPR::DAR] = address;
+                    state.spr[SPR::DSISR] =
+                        0x08000000 |
+                        (access == MemoryAccess::Write ? 0x02000000 : 0);
+                    raiseException(0x300);
+                }
+                throw MemoryAccessException{};
+            }
+            if (instruction && (lower & 8)) {
+                raiseException(0x400, 0x10000000);
+                throw MemoryAccessException{};
+            }
+            uint32_t accessBits = 0x100;
+            if (access == MemoryAccess::Write)
+                accessBits |= 0x80;
+            if ((lower & accessBits) != accessBits)
+                Bus::writePhysical32(addressOfEntry + 4, lower | accessBits);
+            return (lower & 0xFFFFF000) | (address & 0xFFF);
+        }
+    }
+
+    if (instruction)
+        raiseException(0x400, 0x40000000);
+    else {
+        state.spr[SPR::DAR] = address;
+        state.spr[SPR::DSISR] =
+            0x40000000 | (access == MemoryAccess::Write ? 0x02000000 : 0);
+        raiseException(0x300);
+    }
+    throw MemoryAccessException{};
+}
+
+uint32_t Broadway::translateAddress(uint32_t address, MemoryAccess access) {
+    bool enabled = access == MemoryAccess::Instruction ? state.msr & 0x20
+                                                       : state.msr & 0x10;
+    if (!enabled)
+        return address;
+    uint32_t physicalAddress;
+    if (translateBAT(address, access, physicalAddress))
+        return physicalAddress;
+    return translatePage(address, access);
 }
 
 bool Broadway::branchCondition(uint32_t bo, uint32_t bi, bool useCTR) {
@@ -381,14 +561,30 @@ void Broadway::executeMType(uint32_t instruction) {
 }
 
 void Broadway::executeInstruction() {
+    state.exceptionTaken = false;
+    ++state.timeBase;
+    state.spr[SPR::TBL] = static_cast<uint32_t>(state.timeBase);
+    state.spr[SPR::TBU] = static_cast<uint32_t>(state.timeBase >> 32);
+    uint32_t oldDecrementer = state.spr[SPR::DEC]--;
+    if (oldDecrementer == 0)
+        state.decrementerPending = true;
+    state.nia = state.cia + 4;
+    if (deliverPendingException()) {
+        state.cia = state.nia;
+        return;
+    }
     if (state.cia & 3) {
         raiseException(0x600);
         state.cia = state.nia;
         return;
     }
-    uint32_t instruction = Bus::read32(state.cia);
-
-    state.nia = state.cia + 4;
+    uint32_t instruction;
+    try {
+        instruction = Bus::fetch32(state.cia);
+    } catch (const MemoryAccessException &) {
+        state.cia = state.nia;
+        return;
+    }
 
     InstructionType type = getInstructionType(instruction);
     uint32_t op = instruction >> 26;
@@ -410,50 +606,58 @@ void Broadway::executeInstruction() {
         return;
     }
 
-    switch (type) {
-    case InstructionType::D:
-        executeDType(instruction);
-        break;
-    case InstructionType::I:
-        executeIType(instruction);
-        break;
-    case InstructionType::B:
-        executeBType(instruction);
-        break;
-    case InstructionType::SC:
-        executeSCType(instruction);
-        break;
-    case InstructionType::X:
-        executeXType(instruction);
-        break;
-    case InstructionType::XO:
-        executeXOType(instruction);
-        break;
-    case InstructionType::XFX:
-        executeXFXType(instruction);
-        break;
-    case InstructionType::XFL:
-        executeXFLType(instruction);
-        break;
-    case InstructionType::XL:
-        executeXLType(instruction);
-        break;
-    case InstructionType::M:
-        executeMType(instruction);
-        break;
-    case InstructionType::A:
-        executeAType(instruction);
-        break;
-    case InstructionType::PSQ_D:
-        executePSQ_DType(instruction);
-        break;
-    case InstructionType::PSQ_X:
-        executePSQ_XType(instruction);
-        break;
-    default:
-        Logger::log("Broadway", LogLevel::Error,
-                    "executeInstruction: Unknown instruction type");
-        break;
+    try {
+        switch (type) {
+        case InstructionType::D:
+            executeDType(instruction);
+            break;
+        case InstructionType::I:
+            executeIType(instruction);
+            break;
+        case InstructionType::B:
+            executeBType(instruction);
+            break;
+        case InstructionType::SC:
+            executeSCType(instruction);
+            break;
+        case InstructionType::X:
+            executeXType(instruction);
+            break;
+        case InstructionType::XO:
+            executeXOType(instruction);
+            break;
+        case InstructionType::XFX:
+            executeXFXType(instruction);
+            break;
+        case InstructionType::XFL:
+            executeXFLType(instruction);
+            break;
+        case InstructionType::XL:
+            executeXLType(instruction);
+            break;
+        case InstructionType::M:
+            executeMType(instruction);
+            break;
+        case InstructionType::A:
+            executeAType(instruction);
+            break;
+        case InstructionType::PSQ_D:
+            executePSQ_DType(instruction);
+            break;
+        case InstructionType::PSQ_X:
+            executePSQ_XType(instruction);
+            break;
+        default:
+            raiseException(0x700, 0x80000);
+            break;
+        }
+    } catch (const MemoryAccessException &) {
+    }
+
+    if (!state.exceptionTaken && (state.msr & 0x400)) {
+        uint32_t resumeAddress = state.nia;
+        raiseException(0xD00);
+        state.spr[SPR::SRR0] = resumeAddress;
     }
 
     state.cia = state.nia;

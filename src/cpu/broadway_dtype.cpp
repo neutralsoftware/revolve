@@ -313,6 +313,13 @@ void Broadway::executeLMW(uint32_t field0, uint32_t field1, uint32_t,
     uint32_t a = (ra == 0) ? 0 : state.gpr[ra];
     uint32_t effectiveAddress = a + static_cast<uint32_t>(simm);
 
+    if (effectiveAddress & 3) {
+        state.spr[SPR::DAR] = effectiveAddress;
+        state.spr[SPR::DSISR] = 0;
+        raiseException(0x600);
+        return;
+    }
+
     for (uint32_t i = 0; i < 32 - field0; ++i) {
         state.gpr[field0 + i] = Bus::read32(effectiveAddress + i * 4);
     }
@@ -324,6 +331,13 @@ void Broadway::executeSTMW(uint32_t field0, uint32_t field1, uint32_t,
 
     uint32_t a = (ra == 0) ? 0 : state.gpr[ra];
     uint32_t effectiveAddress = a + static_cast<uint32_t>(simm);
+
+    if (effectiveAddress & 3) {
+        state.spr[SPR::DAR] = effectiveAddress;
+        state.spr[SPR::DSISR] = 0x02000000;
+        raiseException(0x600);
+        return;
+    }
 
     for (uint32_t i = 0; i < 32 - field0; ++i) {
         Bus::write32(effectiveAddress + i * 4, state.gpr[field0 + i]);

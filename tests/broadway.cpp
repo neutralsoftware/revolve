@@ -38,6 +38,25 @@ void step(Broadway &cpu, uint32_t instruction) {
     cpu.executeInstruction();
 }
 
+uint32_t installPage(Broadway &cpu, uint32_t effective, uint32_t physical,
+                     uint32_t segment, uint32_t protection = 2,
+                     bool secondary = false, uint32_t attributes = 0) {
+    uint32_t vsid = segment & 0x00FFFFFF;
+    cpu.state.sr[effective >> 28] = segment;
+    uint32_t hash = vsid ^ ((effective >> 12) & 0xFFFF);
+    if (secondary)
+        hash = ~hash;
+    uint32_t tableBase = cpu.state.spr[SPR::SDR1] & 0xFFFF0000;
+    uint32_t tableMask = ((cpu.state.spr[SPR::SDR1] & 0x1FF) << 16) | 0xFFC0;
+    uint32_t pteg = tableBase | ((hash << 6) & tableMask);
+    uint32_t upper = 0x80000000 | (vsid << 7) | (secondary ? 0x40 : 0) |
+                     ((effective >> 22) & 0x3F);
+    Bus::writePhysical32(pteg, upper);
+    Bus::writePhysical32(pteg + 4,
+                         (physical & 0xFFFFF000) | attributes | protection);
+    return pteg;
+}
+
 struct BroadwayTest {
     const char *name;
     std::function<void(Broadway &)> run;
@@ -2431,6 +2450,197 @@ int runBroadwaySuite() {
                          expect(Bus::read8(DATA + 1), 12, "quantized PS1");
                          expect(cpu.state.gpr[4], DATA,
                                 "quantized base update");
+                     }});
+    tests.push_back({"EXTERNAL_EXCEPTION", [](Broadway &cpu) {
+                         cpu.state.msr = 0xA000;
+                         cpu.requestExternalInterrupt();
+                         cpu.executeInstruction();
+                         expect(cpu.state.cia, 0x500, "external vector");
+                         expect(cpu.state.spr[SPR::SRR0], CODE,
+                                "external resume");
+                         expect(cpu.state.spr[SPR::SRR1] & 0xA000, 0xA000,
+                                "external saved MSR");
+                         expect(cpu.state.msr & 0x8000, 0, "external masks EE");
+                         expect(cpu.state.reservationValid, 0,
+                                "external clears reservation");
+                     }});
+    tests.push_back({"SYSTEM_RESET_EXCEPTION", [](Broadway &cpu) {
+                         cpu.state.msr = 0x2040;
+                         cpu.requestSystemReset();
+                         cpu.executeInstruction();
+                         expect(cpu.state.cia, 0xFFF00100, "reset vector");
+                         expect(cpu.state.spr[SPR::SRR0], CODE, "reset resume");
+                     }});
+    tests.push_back(
+        {"MACHINE_CHECK_EXCEPTION", [](Broadway &cpu) {
+             cpu.state.msr = 0x3000;
+             cpu.requestMachineCheck();
+             cpu.executeInstruction();
+             expect(cpu.state.cia, 0x200, "machine-check vector");
+             expect(cpu.state.spr[SPR::SRR0], CODE, "machine-check resume");
+             expect(cpu.state.msr & 0x1000, 0, "machine-check clears ME");
+         }});
+    tests.push_back({"DECREMENTER_EXCEPTION", [](Broadway &cpu) {
+                         cpu.state.msr = 0xA000;
+                         cpu.state.spr[SPR::DEC] = 0;
+                         cpu.executeInstruction();
+                         expect(cpu.state.cia, 0x900, "decrementer vector");
+                         expect(cpu.state.spr[SPR::DEC], 0xFFFFFFFF,
+                                "decrementer wraps");
+                         expect(cpu.state.decrementerPending, 0,
+                                "decrementer acknowledged");
+                     }});
+    tests.push_back({"TRACE_EXCEPTION", [](Broadway &cpu) {
+                         cpu.state.msr = 0x2400;
+                         step(cpu, dtype(14, 3, 0, 7));
+                         expect(cpu.state.gpr[3], 7,
+                                "traced instruction result");
+                         expect(cpu.state.cia, 0xD00, "trace vector");
+                         expect(cpu.state.spr[SPR::SRR0], CODE + 4,
+                                "trace resumes after instruction");
+                     }});
+    tests.push_back(
+        {"ALIGNMENT_EXCEPTION", [](Broadway &cpu) {
+             cpu.state.gpr[4] = DATA + 1;
+             Bus::writePhysical32(CODE, dtype(46, 30, 4, 0));
+             cpu.executeInstruction();
+             expect(cpu.state.cia, 0x600, "alignment vector");
+             expect(cpu.state.spr[SPR::DAR], DATA + 1, "alignment DAR");
+             expect(cpu.state.gpr[30], 0, "alignment preserves destination");
+         }});
+    tests.push_back({"HIGH_EXCEPTION_PREFIX", [](Broadway &cpu) {
+                         cpu.state.msr = 0xA040;
+                         cpu.requestExternalInterrupt();
+                         cpu.executeInstruction();
+                         expect(cpu.state.cia, 0xFFF00500,
+                                "high external vector");
+                     }});
+    tests.push_back({"TIME_BASE", [](Broadway &cpu) {
+                         cpu.state.timeBase = 0x12345678FFFFFFFFull;
+                         step(cpu, dtype(14, 3, 0, 1));
+                         expect(cpu.state.spr[SPR::TBL], 0, "time base low");
+                         expect(cpu.state.spr[SPR::TBU], 0x12345679,
+                                "time base high");
+                     }});
+    tests.push_back({"DBAT_TRANSLATION", [](Broadway &cpu) {
+                         cpu.state.spr[SPR::DBAT0U] = 0x40000002;
+                         cpu.state.spr[SPR::DBAT0L] = 0x00000002;
+                         Bus::writePhysical32(0x80, 0x12345678);
+                         cpu.state.msr |= 0x10;
+                         expect(Bus::read32(0x40000080), 0x12345678,
+                                "DBAT read translation");
+                         Bus::write32(0x40000084, 0xABCDEF01);
+                         expect(Bus::readPhysical32(0x84), 0xABCDEF01,
+                                "DBAT write translation");
+                     }});
+    tests.push_back({"IBAT_TRANSLATION", [](Broadway &cpu) {
+                         cpu.state.spr[SPR::IBAT0U] = 0x40000002;
+                         cpu.state.spr[SPR::IBAT0L] = 0x00000002;
+                         Bus::writePhysical32(0, dtype(14, 3, 0, 42));
+                         cpu.state.cia = 0x40000000;
+                         cpu.state.msr |= 0x20;
+                         cpu.executeInstruction();
+                         expect(cpu.state.gpr[3], 42, "IBAT instruction fetch");
+                         expect(cpu.state.cia, 0x40000004,
+                                "IBAT virtual PC advance");
+                     }});
+    tests.push_back({"BAT_PROTECTION", [](Broadway &cpu) {
+                         cpu.state.spr[SPR::DBAT0U] = 0x40000002;
+                         cpu.state.spr[SPR::DBAT0L] = 0x00000001;
+                         cpu.state.gpr[3] = 0x12345678;
+                         cpu.state.gpr[4] = 0x40000000;
+                         Bus::writePhysical32(CODE, dtype(36, 3, 4, 0));
+                         cpu.state.msr |= 0x10;
+                         cpu.executeInstruction();
+                         expect(cpu.state.cia, 0x300, "BAT protection vector");
+                         expect(cpu.state.spr[SPR::DAR], 0x40000000,
+                                "BAT protection DAR");
+                         expect(cpu.state.spr[SPR::DSISR], 0x0A000000,
+                                "BAT store protection DSISR");
+                     }});
+    tests.push_back(
+        {"HASHED_PAGE_PRIMARY", [](Broadway &cpu) {
+             cpu.state.spr[SPR::SDR1] = 0x00100000;
+             uint32_t pteg =
+                 installPage(cpu, 0x20001000, 0x00009000, 0x00012345);
+             Bus::writePhysical32(0x9000, 0x12345678);
+             cpu.state.msr |= 0x10;
+             expect(Bus::read32(0x20001000), 0x12345678, "primary PTE read");
+             expect(Bus::readPhysical32(pteg + 4) & 0x100, 0x100,
+                    "PTE referenced bit");
+             Bus::write32(0x20001000, 0xABCDEF01);
+             expect(Bus::readPhysical32(0x9000), 0xABCDEF01,
+                    "primary PTE write");
+             expect(Bus::readPhysical32(pteg + 4) & 0x180, 0x180,
+                    "PTE changed bit");
+         }});
+    tests.push_back(
+        {"HASHED_PAGE_SECONDARY", [](Broadway &cpu) {
+             cpu.state.spr[SPR::SDR1] = 0x00100000;
+             installPage(cpu, 0x30002000, 0x0000A000, 0x00023456, 2, true);
+             Bus::writePhysical32(0xA000, 0xCAFEBABE);
+             cpu.state.msr |= 0x10;
+             expect(Bus::read32(0x30002000), 0xCAFEBABE, "secondary PTE read");
+         }});
+    tests.push_back({"PAGE_KEY_PROTECTION", [](Broadway &cpu) {
+                         cpu.state.spr[SPR::SDR1] = 0x00100000;
+                         installPage(cpu, 0x20001000, 0x00009000, 0x40012345,
+                                     0);
+                         cpu.state.gpr[4] = 0x20001000;
+                         Bus::writePhysical32(CODE, dtype(32, 3, 4, 0));
+                         cpu.state.msr |= 0x10;
+                         cpu.executeInstruction();
+                         expect(cpu.state.cia, 0x300, "key protection vector");
+                         expect(cpu.state.spr[SPR::DSISR], 0x08000000,
+                                "key protection DSISR");
+                     }});
+    tests.push_back({"DATA_PAGE_FAULT", [](Broadway &cpu) {
+                         cpu.state.spr[SPR::SDR1] = 0x00100000;
+                         cpu.state.sr[6] = 0x00045678;
+                         cpu.state.gpr[4] = 0x60003000;
+                         cpu.state.gpr[3] = 0xFFFFFFFF;
+                         Bus::writePhysical32(CODE, dtype(32, 3, 4, 0));
+                         cpu.state.msr |= 0x10;
+                         cpu.executeInstruction();
+                         expect(cpu.state.cia, 0x300, "DSI vector");
+                         expect(cpu.state.spr[SPR::DAR], 0x60003000, "DSI DAR");
+                         expect(cpu.state.spr[SPR::DSISR], 0x40000000,
+                                "page fault DSISR");
+                         expect(cpu.state.gpr[3], 0xFFFFFFFF,
+                                "fault preserves destination");
+                     }});
+    tests.push_back({"INSTRUCTION_PAGE_FAULT", [](Broadway &cpu) {
+                         cpu.state.spr[SPR::SDR1] = 0x00100000;
+                         cpu.state.sr[6] = 0x00045678;
+                         cpu.state.cia = 0x60003000;
+                         cpu.state.msr |= 0x20;
+                         cpu.executeInstruction();
+                         expect(cpu.state.cia, 0x400, "ISI vector");
+                         expect(cpu.state.spr[SPR::SRR0], 0x60003000,
+                                "ISI address");
+                         expect(cpu.state.spr[SPR::SRR1] & 0x40000000,
+                                0x40000000, "ISI translation cause");
+                     }});
+    tests.push_back({"NO_EXECUTE_SEGMENT", [](Broadway &cpu) {
+                         cpu.state.spr[SPR::SDR1] = 0x00100000;
+                         cpu.state.sr[2] = 0x10012345;
+                         cpu.state.cia = 0x20001000;
+                         cpu.state.msr |= 0x20;
+                         cpu.executeInstruction();
+                         expect(cpu.state.cia, 0x400, "no-execute ISI vector");
+                         expect(cpu.state.spr[SPR::SRR1] & 0x08000000,
+                                0x08000000, "no-execute cause");
+                     }});
+    tests.push_back({"GUARDED_INSTRUCTION_PAGE", [](Broadway &cpu) {
+                         cpu.state.spr[SPR::SDR1] = 0x00100000;
+                         installPage(cpu, 0x20001000, 0x00009000, 0x00012345, 2,
+                                     false, 8);
+                         cpu.state.cia = 0x20001000;
+                         cpu.state.msr |= 0x20;
+                         cpu.executeInstruction();
+                         expect(cpu.state.cia, 0x400, "guarded ISI vector");
+                         expect(cpu.state.spr[SPR::SRR1] & 0x10000000,
+                                0x10000000, "guarded cause");
                      }});
     size_t passed = 0;
     for (const auto &test : tests) {

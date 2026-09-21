@@ -24,12 +24,48 @@ enum SPR : uint16_t {
     SRR0 = 26,
     SRR1 = 27,
 
+    TBL = 268,
+    TBU = 269,
+
     SPRG0 = 272,
     SPRG1 = 273,
     SPRG2 = 274,
     SPRG3 = 275,
 
     PVR = 287,
+
+    IBAT0U = 528,
+    IBAT0L = 529,
+    IBAT1U = 530,
+    IBAT1L = 531,
+    IBAT2U = 532,
+    IBAT2L = 533,
+    IBAT3U = 534,
+    IBAT3L = 535,
+    DBAT0U = 536,
+    DBAT0L = 537,
+    DBAT1U = 538,
+    DBAT1L = 539,
+    DBAT2U = 540,
+    DBAT2L = 541,
+    DBAT3U = 542,
+    DBAT3L = 543,
+    IBAT4U = 560,
+    IBAT4L = 561,
+    IBAT5U = 562,
+    IBAT5L = 563,
+    IBAT6U = 564,
+    IBAT6L = 565,
+    IBAT7U = 566,
+    IBAT7L = 567,
+    DBAT4U = 568,
+    DBAT4L = 569,
+    DBAT5U = 570,
+    DBAT5L = 571,
+    DBAT6U = 572,
+    DBAT6L = 573,
+    DBAT7U = 574,
+    DBAT7L = 575,
 
     GQR0 = 912,
     GQR1 = 913,
@@ -154,6 +190,13 @@ struct BroadwayState : public Loggable {
     bool reservationValid{};       // Reservation Valid Bit
     uint32_t reservationAddress{}; // Reservation Address
 
+    uint64_t timeBase{};
+    bool externalInterruptPending{};
+    bool decrementerPending{};
+    bool systemResetPending{};
+    bool machineCheckPending{};
+    bool exceptionTaken{};
+
     std::string log() const override;
     std::string getLogSystem() const override { return "Broadway"; }
 
@@ -247,6 +290,12 @@ class Broadway {
 
     void reset(uint32_t entryPoint);
     void executeInstruction();
+    uint32_t translateAddress(uint32_t address, MemoryAccess access);
+    void raiseException(uint32_t vector, uint32_t cause = 0);
+    void requestExternalInterrupt();
+    void clearExternalInterrupt();
+    void requestSystemReset();
+    void requestMachineCheck();
 
     void executeDType(uint32_t instruction);
     void executeIType(uint32_t instruction);
@@ -313,7 +362,11 @@ class Broadway {
     void executeADD(uint32_t rt, uint32_t ra, uint32_t rb, bool oe, bool rc);
 
   private:
-    void raiseException(uint32_t vector, uint32_t cause = 0);
+    bool deliverPendingException();
+    bool translateBAT(uint32_t address, MemoryAccess access,
+                      uint32_t &physicalAddress);
+    uint32_t translatePage(uint32_t address, MemoryAccess access);
+    bool protectionAllows(uint32_t protection, bool key, MemoryAccess access);
     bool branchCondition(uint32_t bo, uint32_t bi, bool useCTR);
     void executePaired(uint32_t instruction);
     void executeQuantized(uint32_t instruction, bool indexed);

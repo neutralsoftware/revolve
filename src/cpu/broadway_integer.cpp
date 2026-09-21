@@ -114,7 +114,16 @@ void Broadway::executeXFXType(uint32_t instruction) {
         state.gpr[d] = state.spr[spr];
         break;
     case 467:
-        state.spr[spr == 284 ? 268 : spr == 285 ? 269 : spr] = state.gpr[d];
+        spr = spr == 284 ? 268 : spr == 285 ? 269 : spr;
+        state.spr[spr] = state.gpr[d];
+        if (spr == SPR::DEC)
+            state.decrementerPending = false;
+        else if (spr == SPR::TBL)
+            state.timeBase =
+                (state.timeBase & 0xFFFFFFFF00000000ull) | state.gpr[d];
+        else if (spr == SPR::TBU)
+            state.timeBase = (state.timeBase & 0xFFFFFFFFull) |
+                             (static_cast<uint64_t>(state.gpr[d]) << 32);
         break;
     default:
         raiseException(0x700, 0x80000);
@@ -329,6 +338,7 @@ void Broadway::executeXType(uint32_t instruction) {
     case 20:
         if (address & 3) {
             state.spr[SPR::DAR] = address;
+            state.spr[SPR::DSISR] = 0;
             raiseException(0x600);
             return;
         }
@@ -342,6 +352,7 @@ void Broadway::executeXType(uint32_t instruction) {
         state.reservationValid = false;
         if (address & 3) {
             state.spr[SPR::DAR] = address;
+            state.spr[SPR::DSISR] = 0x02000000;
             raiseException(0x600);
             return;
         }
@@ -367,6 +378,12 @@ void Broadway::executeXType(uint32_t instruction) {
         return;
     case 310:
     case 438:
+        if (address & 3) {
+            state.spr[SPR::DAR] = address;
+            state.spr[SPR::DSISR] = xo == 438 ? 0x02000000 : 0;
+            raiseException(0x600);
+            return;
+        }
         if (!(state.spr[282] & 0x80000000u)) {
             state.spr[SPR::DAR] = address;
             state.spr[SPR::DSISR] = 0x00100000u | (xo == 438 ? 0x02000000u : 0);
