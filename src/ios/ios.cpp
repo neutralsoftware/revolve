@@ -46,79 +46,101 @@ int32_t IOS::dispatch(const IOSRequest &request) {
                     "OPEN path=\"" + path +
                         "\" mode=" + std::to_string(open.mode));
 
-        int32_t fd = allocateFileDescriptor(path);
-        return fd;
+        auto it = devices.find(path);
+
+        if (it == devices.end()) {
+            Logger::log("IOS", LogLevel::Warning,
+                        "No resource manager for " + path);
+
+            return -1;
+        }
+
+        std::shared_ptr<IOSDevice> device = it->second;
+
+        int32_t result = device->open(path, open.mode);
+
+        if (result < 0)
+            return result;
+
+        return allocateFileDescriptor(path, device);
     }
 
     case IOSCommand::Close: {
-        Logger::log("IOS", LogLevel::Info,
-                    "CLOSE fd=" + std::to_string(request.fd));
         auto it = fileDescriptors.find(request.fd);
-        if (it == fileDescriptors.end()) {
-            return -1;
-        }
-        fileDescriptors.erase(it);
 
-        return 0;
+        if (it == fileDescriptors.end())
+            return -1;
+
+        int32_t result = it->second.device->close(request.fd);
+
+        if (result >= 0)
+            fileDescriptors.erase(it);
+
+        return result;
     }
 
     case IOSCommand::Read: {
+        auto it = fileDescriptors.find(request.fd);
+
+        if (it == fileDescriptors.end())
+            return -1;
+
         IOSReadRequest read = parseReadRequest(request);
 
-        Logger::log("IOS", LogLevel::Info,
-                    "READ fd=" + std::to_string(request.fd) + " buffer=0x" +
-                        utils::toHexString(read.bufferAddress) +
-                        " size=" + std::to_string(read.size));
-
-        return -1;
+        return it->second.device->read(read.bufferAddress, read.size);
     }
 
     case IOSCommand::Write: {
+        auto it = fileDescriptors.find(request.fd);
+
+        if (it == fileDescriptors.end())
+            return -1;
+
         IOSWriteRequest write = parseWriteRequest(request);
 
-        Logger::log("IOS", LogLevel::Info,
-                    "WRITE fd=" + std::to_string(request.fd) + " buffer=0x" +
-                        utils::toHexString(write.bufferAddress) +
-                        " size=" + std::to_string(write.size));
-
-        return -1;
+        return it->second.device->write(write.bufferAddress, write.size);
     }
 
     case IOSCommand::Seek: {
+        auto it = fileDescriptors.find(request.fd);
+
+        if (it == fileDescriptors.end())
+            return -1;
+
         IOSSeekRequest seek = parseSeekRequest(request);
 
-        Logger::log("IOS", LogLevel::Info,
-                    "SEEK fd=" + std::to_string(request.fd) +
-                        " offset=" + std::to_string(seek.offset) +
-                        " whence=" + std::to_string(seek.whence));
-
-        return -1;
+        return it->second.device->seek(seek.offset, seek.whence);
     }
 
     case IOSCommand::Ioctl: {
+        auto it = fileDescriptors.find(request.fd);
+
+        if (it == fileDescriptors.end())
+            return -1;
+
         IOSIoctlRequest ioctl = parseIoctlRequest(request);
 
-        Logger::log("IOS", LogLevel::Info,
-                    "IOCTL fd=" + std::to_string(request.fd) +
-                        " request=" + std::to_string(ioctl.request));
-
-        return -1;
+        return it->second.device->ioctl(ioctl);
     }
 
     case IOSCommand::Ioctlv: {
+        auto it = fileDescriptors.find(request.fd);
+
+        if (it == fileDescriptors.end())
+            return -1;
+
         IOSIoctlvRequest ioctlv = parseIoctlvRequest(request);
 
         auto vectors = parseVectors(ioctlv.vectorsAddress,
                                     ioctlv.inCount + ioctlv.outCount);
 
-        Logger::log("IOS", LogLevel::Info,
-                    "IOCTLV fd=" + std::to_string(request.fd) +
-                        " request=" + std::to_string(ioctlv.request) +
-                        " in=" + std::to_string(ioctlv.inCount) +
-                        " out=" + std::to_string(ioctlv.outCount));
-
-        return -1;
+        return it->second.device->ioctlv(ioctlv, vectors);
     }
+
+    case IOSCommand::Reply:
+        Logger::log("IOS", LogLevel::Warning,
+                    "Unexpected IPC Reply command from PPC");
+        return -1;
 
     default:
         Logger::log("IOS", LogLevel::Warning,
@@ -159,7 +181,7 @@ IOSWriteRequest IOS::parseWriteRequest(const IOSRequest &request) {
 IOSSeekRequest IOS::parseSeekRequest(const IOSRequest &request) {
     IOSSeekRequest seekRequest{};
 
-    seekRequest.offset = request.args[0];
+    seekRequest.offset = static_cast<int32_t>(request.args[0]);
     seekRequest.whence = request.args[1];
 
     return seekRequest;
@@ -218,8 +240,19 @@ std::string IOS::readGuestString(uint32_t address, size_t maxLength) {
     throw std::runtime_error("Unterminated IOS guest string");
 }
 
-int32_t IOS::allocateFileDescriptor(const std::string &path) {
+int32_t IOS::allocateFileDescriptor(const std::string &path,
+                                    std::shared_ptr<IOSDevice> device) {
     int32_t fd = nextFileDescriptor++;
-    fileDescriptors.emplace(fd, IOSFileDescriptor{.path = path});
+
+    fileDescriptors.emplace(fd, IOSFileDescriptor{
+                                    .path = path,
+                                    .device = std::move(device),
+                                });
+
     return fd;
+}
+
+void IOS::registerDevice(const std::string &path,
+                         std::shared_ptr<IOSDevice> device) {
+    devices[path] = device;
 }

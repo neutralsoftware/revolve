@@ -45,7 +45,7 @@ struct IOSWriteRequest {
 };
 
 struct IOSSeekRequest {
-    uint32_t offset;
+    int32_t offset;
     uint32_t whence;
 };
 
@@ -77,13 +77,17 @@ class IOSDevice {
     virtual int32_t close(int32_t fd) { return 0; };
     virtual int32_t read(uint32_t buffer, uint32_t size) { return -1; };
     virtual int32_t write(uint32_t buffer, uint32_t size) { return -1; };
-    virtual int32_t seek(uint32_t offset, uint32_t whence) { return -1; };
+    virtual int32_t seek(int32_t offset, uint32_t whence) { return -1; };
     virtual int32_t ioctl(const IOSIoctlRequest &request) { return -1; };
-    virtual int32_t ioctlv(const IOSIoctlvRequest &request) { return -1; };
+    virtual int32_t ioctlv(const IOSIoctlvRequest &request,
+                           const std::vector<IOSVector> &vectors) {
+        return -1;
+    }
 };
 
 struct IOSFileDescriptor {
     std::string path;
+    std::shared_ptr<IOSDevice> device;
 };
 
 class IOS {
@@ -93,6 +97,9 @@ class IOS {
     void init();
 
     void submitRequest(uint32_t address);
+
+    void registerDevice(const std::string &path,
+                        std::shared_ptr<IOSDevice> device);
 
     IOSOpenRequest parseOpenRequest(const IOSRequest &request);
     IOSReadRequest parseReadRequest(const IOSRequest &request);
@@ -108,9 +115,10 @@ class IOS {
   private:
     int32_t dispatch(const IOSRequest &request);
 
-    int32_t allocateFileDescriptor(const std::string &path);
+    int32_t allocateFileDescriptor(const std::string &path,
+                                   std::shared_ptr<IOSDevice> device);
 
-    std::unordered_map<uint32_t, IOSFileDescriptor> fileDescriptors;
+    std::unordered_map<int32_t, IOSFileDescriptor> fileDescriptors;
     std::unordered_map<std::string, std::shared_ptr<IOSDevice>> devices;
     int32_t nextFileDescriptor = 0;
 };
