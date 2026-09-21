@@ -8,6 +8,7 @@
 #include <vector>
 
 int runBroadwaySuite();
+int runIOSSuite();
 
 std::string getTestBuildOutputPath(const std::string &fileName) {
     return std::string(TESTS_PATH) + "/build/" + fileName;
@@ -144,6 +145,8 @@ int main(int argc, char *argv[]) {
 
     if (suite == "broadway")
         return runBroadwaySuite();
+    if (suite == "ios")
+        return runIOSSuite();
 
     std::string cleanCommand = "mkdir -p " + std::string(TESTS_PATH) + "/build";
     runCommand(cleanCommand);

@@ -5,6 +5,8 @@
 #include "core/time.h"
 #include "cpu/broadway.h"
 #include "cpu/interface.h"
+#include "ios/ios.h"
+#include "ios/ipc.h"
 #include <memory>
 #include <stdexcept>
 
@@ -13,6 +15,43 @@
         throw std::runtime_error("Device not initialized");                    \
     }                                                                          \
     auto device = Device::globalDevice
+
+enum class HollywoodIRQ : uint32_t {
+    IPC = 30,
+};
+
+class HollywoodInterruptController {
+  public:
+    inline void raise(HollywoodIRQ irq) {
+        flags |= 1u << static_cast<uint32_t>(irq);
+        updatePI();
+    }
+
+    inline void clear(HollywoodIRQ irq) {
+        flags &= ~(1u << static_cast<uint32_t>(irq));
+        updatePI();
+    }
+
+    inline void setMask(uint32_t value) {
+        mask = value;
+        updatePI();
+    }
+
+    inline void setPI(ProcessorInterface *piDevice) { pi = piDevice; }
+
+  private:
+    uint32_t flags = 0;
+    uint32_t mask = 0;
+
+    ProcessorInterface *pi = nullptr;
+
+    inline void updatePI() {
+        if (flags & mask)
+            pi->raiseInterrupt(PIInterrupt::Hollywood);
+        else
+            pi->clearInterrupt(PIInterrupt::Hollywood);
+    }
+};
 
 class Device {
   public:
@@ -23,13 +62,19 @@ class Device {
     void step();
     void start();
 
+    void processIPC();
+
     Memory memory;
     MMIO mmioDispatcher;
     Broadway cpu;
     Scheduler scheduler;
+    HollywoodInterruptController controller;
+
+    IOS ios;
 
     std::shared_ptr<ProcessorInterface> pi =
         std::make_shared<ProcessorInterface>();
+    std::shared_ptr<IPC> ipc = std::make_shared<IPC>();
 };
 
 #endif

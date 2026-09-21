@@ -121,6 +121,7 @@ class Bus {
     static uint64_t read64(uint32_t addr);
     static uint32_t fetch32(uint32_t addr);
     static uint32_t readPhysical32(uint32_t addr);
+    static uint32_t readPhysical8(uint32_t addr);
 
     static float readFloat(uint32_t addr);
     static double readDouble(uint32_t addr);

@@ -14,14 +14,35 @@ std::shared_ptr<Device> Device::globalDevice = nullptr;
 std::shared_ptr<Device> Device::createDevice() {
     globalDevice = std::make_shared<Device>();
 
+    globalDevice->controller.setPI(globalDevice->pi.get());
+
     globalDevice->mmioDispatcher.registerDevice(
         PI_MMIO_BASE, PI_MMIO_END - PI_MMIO_BASE + 1, globalDevice->pi.get());
+    globalDevice->mmioDispatcher.registerDevice(
+        IPC_MMIO_BASE, IPC_MMIO_END - IPC_MMIO_BASE + 1,
+        globalDevice->ipc.get());
+
+    globalDevice->ios.init();
 
     return globalDevice;
 }
 
+void Device::processIPC() {
+    if (!ipc->ppcRequestPending()) {
+        return;
+    }
+
+    uint32_t requestAddress = ipc->getPPCMessage();
+
+    ipc->acknoledgeFromStarlet();
+
+    ios.submitRequest(requestAddress);
+}
+
 void Device::step() {
     cpu.setExternalInterrupt(pi->interruptPending());
+
+    processIPC();
 
     uint32_t cycles = cpu.executeInstruction();
 
