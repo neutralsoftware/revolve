@@ -3,8 +3,24 @@
 #include "device.h"
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
+
+void IOS::init() {
+    registerDevice("/dev/stm/immediate",
+                   std::make_shared<STMImmediateDevice>());
+    registerDevice("/dev/stm/eventhook",
+                   std::make_shared<STMEventHookDevice>());
+    registerDevice("/dev/es", std::make_shared<ESDevice>());
+    registerDevice("/dev/fs", std::make_shared<FSDevice>());
+    registerDevice("/dev/di", std::make_shared<DIDevice>());
+}
+
+void IOS::registerDevice(const std::string &path,
+                         std::shared_ptr<IOSDevice> device) {
+    devices[path] = device;
+}
 
 IOSRequest IOS::parseRequest(uint32_t address) {
     IOSRequest request{};
@@ -34,9 +50,15 @@ void IOS::submitRequest(uint32_t address) {
 
     int32_t result = dispatch(request);
 
-    Bus::writePhysical32(address + 0x04, static_cast<uint32_t>(result));
+    Bus::writePhysical32(request.address + 0x04, static_cast<uint32_t>(result));
 
-    Device::globalDevice->ipc->replyFromStarlet(address);
+    Bus::writePhysical32(request.address + 0x08,
+                         static_cast<uint32_t>(request.command));
+
+    Bus::writePhysical32(request.address + 0x00,
+                         static_cast<uint32_t>(IOSCommand::Reply));
+
+    Device::globalDevice->ipc->replyFromStarlet(request.address);
 }
 
 int32_t IOS::dispatch(const IOSRequest &request) {
@@ -55,7 +77,7 @@ int32_t IOS::dispatch(const IOSRequest &request) {
             Logger::log("IOS", LogLevel::Warning,
                         "No resource manager for " + path);
 
-            return -1;
+            return IOS::error(IOSError::NotFound);
         }
 
         std::shared_ptr<IOSDevice> device = it->second;
@@ -63,7 +85,7 @@ int32_t IOS::dispatch(const IOSRequest &request) {
         int32_t result = device->open(path, open.mode);
 
         if (result < 0)
-            return result;
+            return IOS::error(IOSError::NotFound);
 
         return allocateFileDescriptor(path, device);
     }
@@ -72,7 +94,7 @@ int32_t IOS::dispatch(const IOSRequest &request) {
         auto it = fileDescriptors.find(request.fd);
 
         if (it == fileDescriptors.end())
-            return -1;
+            return IOS::error(IOSError::NotFound);
 
         int32_t result = it->second.device->close(request.fd);
 
@@ -86,7 +108,7 @@ int32_t IOS::dispatch(const IOSRequest &request) {
         auto it = fileDescriptors.find(request.fd);
 
         if (it == fileDescriptors.end())
-            return -1;
+            return IOS::error(IOSError::NotFound);
 
         IOSReadRequest read = parseReadRequest(request);
 
@@ -97,7 +119,7 @@ int32_t IOS::dispatch(const IOSRequest &request) {
         auto it = fileDescriptors.find(request.fd);
 
         if (it == fileDescriptors.end())
-            return -1;
+            return IOS::error(IOSError::NotFound);
 
         IOSWriteRequest write = parseWriteRequest(request);
 
@@ -108,7 +130,7 @@ int32_t IOS::dispatch(const IOSRequest &request) {
         auto it = fileDescriptors.find(request.fd);
 
         if (it == fileDescriptors.end())
-            return -1;
+            return IOS::error(IOSError::NotFound);
 
         IOSSeekRequest seek = parseSeekRequest(request);
 
@@ -119,7 +141,7 @@ int32_t IOS::dispatch(const IOSRequest &request) {
         auto it = fileDescriptors.find(request.fd);
 
         if (it == fileDescriptors.end())
-            return -1;
+            return IOS::error(IOSError::NotFound);
 
         IOSIoctlRequest ioctl = parseIoctlRequest(request);
 
@@ -130,7 +152,7 @@ int32_t IOS::dispatch(const IOSRequest &request) {
         auto it = fileDescriptors.find(request.fd);
 
         if (it == fileDescriptors.end())
-            return -1;
+            return IOS::error(IOSError::NotFound);
 
         IOSIoctlvRequest ioctlv = parseIoctlvRequest(request);
 
@@ -253,9 +275,4 @@ int32_t IOS::allocateFileDescriptor(const std::string &path,
                                 });
 
     return fd;
-}
-
-void IOS::registerDevice(const std::string &path,
-                         std::shared_ptr<IOSDevice> device) {
-    devices[path] = device;
 }

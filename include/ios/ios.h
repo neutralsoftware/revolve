@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -90,6 +91,49 @@ struct IOSFileDescriptor {
     std::shared_ptr<IOSDevice> device;
 };
 
+enum class IOSError : int32_t {
+    Success = 0,
+
+    AccessDenied = -1,
+    Exists = -2,
+    Stall = -3,
+    Invalid = -4,
+    TooManyFDs = -5,
+    NotFound = -6,
+    QueueFull = -8,
+    Unknown = -9,
+    IO = -12,
+    NoMemory = -22,
+
+    FS_Invalid = -101,
+    FS_AccessDenied = -102,
+    FS_Corrupt = -103,
+    FS_Exists = -105,
+    FS_NotFound = -106,
+    FS_TooManyFiles = -107,
+    FS_FileTooBig = -108,
+    FS_FDExhausted = -109,
+    FS_NameTooLong = -110,
+    FS_FDAlreadyOpen = -111,
+    FS_IO = -114,
+    FS_NotEmpty = -115,
+    FS_DirDepth = -116,
+    FS_Busy = -118,
+
+    ES_ShortRead = -1009,
+    ES_IO = -1010,
+    ES_InvalidSignatureType = -1012,
+    ES_FDExhausted = -1016,
+    ES_Invalid = -1017,
+    ES_DeviceIDMismatch = -1020,
+    ES_HashMismatch = -1022,
+    ES_NoMemory = -1024,
+    ES_AccessDenied = -1026,
+    ES_UnknownIssuer = -1027,
+    ES_NoTicket = -1028,
+    ES_InvalidTicket = -1029,
+};
+
 class IOS {
   public:
     IOSRequest parseRequest(uint32_t address);
@@ -112,6 +156,10 @@ class IOS {
 
     std::string readGuestString(uint32_t addr, size_t maxLength = 256);
 
+    static inline int32_t error(IOSError error) {
+        return static_cast<int32_t>(error);
+    }
+
   private:
     int32_t dispatch(const IOSRequest &request);
 
@@ -121,6 +169,102 @@ class IOS {
     std::unordered_map<int32_t, IOSFileDescriptor> fileDescriptors;
     std::unordered_map<std::string, std::shared_ptr<IOSDevice>> devices;
     int32_t nextFileDescriptor = 0;
+};
+
+enum class STMIoctl : uint32_t {
+    EventHook = 0x1000,
+
+    HotReset = 0x2001,
+    HotResetForPD = 0x2002,
+    Shutdown = 0x2003,
+    Idle = 0x2004,
+    Wakeup = 0x2005,
+
+    GetIdleMode = 0x3001,
+    ReleaseEH = 0x3002,
+
+    ReadDDRReg = 0x4001,
+    ReadDDRReg2 = 0x4002,
+
+    VideoDimming = 0x5001,
+
+    LEDFlash = 0x6001,
+    LEDMode = 0x6002,
+
+    ReadVersion = 0x7001,
+
+    WriteDMCU = 0x8001,
+};
+
+class STMImmediateDevice : public IOSDevice {
+  public:
+    int32_t ioctl(const IOSIoctlRequest &request) override;
+};
+
+class STMEventHookDevice : public IOSDevice {
+  public:
+    int32_t ioctl(const IOSIoctlRequest &request) override;
+
+    void triggerReset();
+    void triggerPower();
+
+  private:
+    std::optional<uint32_t> pendingRequest;
+};
+
+enum class FSIOCtl : uint32_t {
+    Format = 1,
+    GetStats = 2,
+    CreateDirectory = 3,
+    ReadDirectory = 4, // ioctlv
+    SetAttribute = 5,
+    GetAttribute = 6,
+    Delete = 7,
+    Rename = 8,
+    CreateFile = 9,
+    SetFileVersionCtrl = 10,
+    GetFileStats = 11,
+    GetUsage = 12, // ioctlv
+    Shutdown = 13,
+};
+
+class FSDevice : public IOSDevice {
+  public:
+    int32_t open(const std::string &path, uint32_t mode) override;
+
+    int32_t close(int32_t fd) override;
+
+    int32_t read(uint32_t buffer, uint32_t size) override;
+
+    int32_t write(uint32_t buffer, uint32_t size) override;
+
+    int32_t seek(int32_t offset, uint32_t whence) override;
+
+    int32_t ioctl(const IOSIoctlRequest &request) override;
+
+    int32_t ioctlv(const IOSIoctlvRequest &request,
+                   const std::vector<IOSVector> &vectors) override;
+};
+
+class DIDevice : public IOSDevice {
+  public:
+    int32_t ioctl(const IOSIoctlRequest &request) override;
+
+    int32_t ioctlv(const IOSIoctlvRequest &request,
+                   const std::vector<IOSVector> &vectors) override;
+
+  private:
+    uint64_t currentPartition = 0;
+};
+
+class ESDevice : public IOSDevice {
+  public:
+    int32_t open(const std::string &path, uint32_t mode) override;
+
+    int32_t close(int32_t fd) override;
+
+    int32_t ioctlv(const IOSIoctlvRequest &request,
+                   const std::vector<IOSVector> &vectors) override;
 };
 
 #endif
