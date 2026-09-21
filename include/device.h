@@ -2,7 +2,9 @@
 #define REVOLVE_DEVICE
 
 #include "core/memory.h"
+#include "core/time.h"
 #include "cpu/broadway.h"
+#include "cpu/interface.h"
 #include <memory>
 #include <stdexcept>
 
@@ -18,9 +20,16 @@ class Device {
 
     static std::shared_ptr<Device> createDevice();
 
+    void step();
+    void start();
+
     Memory memory;
     MMIO mmioDispatcher;
     Broadway cpu;
+    Scheduler scheduler;
+
+    std::shared_ptr<ProcessorInterface> pi =
+        std::make_shared<ProcessorInterface>();
 };
 
 #endif
