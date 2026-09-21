@@ -48,7 +48,7 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 
 ## Starlet / IOS
 
-- [ ] Implement IPC for Starlet
+- [x] Implement IPC for Starlet
 - [ ] PPC -> Starlet handling
 - [ ] Starlet -> PPC handling and IPC request queues
 - [ ] Implement HLE IOS
