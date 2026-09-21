@@ -89,3 +89,5 @@ void IPC::updateInterrupts() {
 }
 
 bool IPC::ppcRequestPending() const { return x1; }
+
+uint32_t IPC::getPPCMessage() const { return ppcMessage; }

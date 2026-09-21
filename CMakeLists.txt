@@ -38,5 +38,6 @@ add_compile_definitions(
     TESTS_PATH="${CMAKE_SOURCE_DIR}/tests"
 )
 file(GLOB BROADWAY_SOURCES CONFIGURE_DEPENDS src/cpu/*.cpp)
-add_executable(revolve_test ${TEST_SOURCES} tests/broadway.cpp
-    ${BROADWAY_SOURCES} src/core/memory.cpp src/core/utils.cpp src/device.cpp)
+add_executable(revolve_test ${TEST_SOURCES} tests/broadway.cpp tests/ios.cpp
+    ${BROADWAY_SOURCES} src/core/memory.cpp src/core/pi.cpp src/core/utils.cpp
+    src/device.cpp src/ios/ios.cpp src/ios/ipc.cpp)
