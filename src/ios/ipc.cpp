@@ -10,18 +10,18 @@ uint32_t IPC::read(uint32_t offset, AccessSize size) {
         uint32_t value = 0;
 
         if (x1)
-            value |= 1 << 0;
-        if (x2)
-            value |= 1 << 1;
-        if (y1)
-            value |= 1 << 2;
+            value |= 1u << 0;
         if (y2)
-            value |= 1 << 3;
+            value |= 1u << 1;
+        if (y1)
+            value |= 1u << 2;
+        if (x2)
+            value |= 1u << 3;
 
         if (interruptY1)
-            value |= 1 << 4;
+            value |= 1u << 4;
         if (interruptY2)
-            value |= 1 << 5;
+            value |= 1u << 5;
 
         return value;
     }
@@ -43,21 +43,19 @@ void IPC::write(uint32_t offset, uint32_t value, AccessSize size) {
         break;
 
     case IPC_PPCCTRL:
-        if (value & (1 << 0))
-            x1 = true;
+        x1 = (value & (1u << 0)) != 0;
+        x2 = (value & (1u << 3)) != 0;
 
-        if (value & (1 << 3))
-            x2 = true;
-
-        if (value & (1 << 1))
+        if (value & (1u << 1))
             y2 = false;
 
-        if (value & (1 << 2))
+        if (value & (1u << 2))
             y1 = false;
 
-        interruptY1 = value & (1 << 4);
-        interruptY2 = value & (1 << 5);
+        interruptY1 = (value & (1u << 4)) != 0;
+        interruptY2 = (value & (1u << 5)) != 0;
 
+        updateInterrupts();
         break;
 
     case IPC_ARMMSG:
@@ -80,12 +78,14 @@ void IPC::replyFromStarlet(uint32_t requestAddress) {
 }
 
 void IPC::updateInterrupts() {
-    bool shouldInterrupt = y1 && interruptY1;
+    bool shouldInterrupt = (y1 && interruptY1) || (y2 && interruptY2);
 
-    auto hollywood = Device::globalDevice->controller;
+    auto &hollywood = Device::globalDevice->controller;
 
     if (shouldInterrupt)
         hollywood.raise(HollywoodIRQ::IPC);
     else
         hollywood.clear(HollywoodIRQ::IPC);
 }
+
+bool IPC::ppcRequestPending() const { return x1; }

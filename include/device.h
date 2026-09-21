@@ -5,6 +5,7 @@
 #include "core/time.h"
 #include "cpu/broadway.h"
 #include "cpu/interface.h"
+#include "ios/ios.h"
 #include "ios/ipc.h"
 #include <memory>
 #include <stdexcept>
@@ -61,11 +62,15 @@ class Device {
     void step();
     void start();
 
+    void processIPC();
+
     Memory memory;
     MMIO mmioDispatcher;
     Broadway cpu;
     Scheduler scheduler;
     HollywoodInterruptController controller;
+
+    IOS ios;
 
     std::shared_ptr<ProcessorInterface> pi =
         std::make_shared<ProcessorInterface>();

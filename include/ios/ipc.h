@@ -20,8 +20,14 @@ class IPC : public MMIODevice {
 
     void replyFromStarlet(uint32_t requestAddress);
 
-    bool pccRequestPending() const;
+    bool ppcRequestPending() const;
     uint32_t getPPCMessage() const;
+
+    inline void acknoledgeFromStarlet() {
+        x1 = false;
+        y2 = true;
+        updateInterrupts();
+    }
 
   private:
     uint32_t ppcMessage = 0; // Broadway -> Starlet message pointer

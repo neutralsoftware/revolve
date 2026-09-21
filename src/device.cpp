@@ -25,8 +25,22 @@ std::shared_ptr<Device> Device::createDevice() {
     return globalDevice;
 }
 
+void Device::processIPC() {
+    if (!ipc->ppcRequestPending()) {
+        return;
+    }
+
+    uint32_t requestAddress = ipc->getPPCMessage();
+
+    ipc->acknoledgeFromStarlet();
+
+    ios.submitRequest(requestAddress);
+}
+
 void Device::step() {
     cpu.setExternalInterrupt(pi->interruptPending());
+
+    processIPC();
 
     uint32_t cycles = cpu.executeInstruction();
 
