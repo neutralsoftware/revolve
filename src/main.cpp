@@ -2,7 +2,10 @@
 #include "core/utils.h"
 #include "debugger.h"
 #include "device.h"
+#include <algorithm>
+#include <cctype>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -20,6 +23,7 @@ int main(int argc, const char *argv[]) {
 
     if (arguments.empty()) {
         std::cerr << "Usage: revolve [-S] <parse|exec> <file>\n"
+                  << "       revolve disc <image.iso>\n"
                   << "       revolve -S <file>\n";
         return 1;
     }
@@ -29,13 +33,51 @@ int main(int argc, const char *argv[]) {
 
     Device::createDevice();
 
-    if (arguments[0] == "parse") {
+    auto loadExecutable = [](const std::string &filename)
+        -> std::optional<Executable> {
+        size_t separator = filename.find_last_of('.');
+        std::string extension =
+            separator == std::string::npos ? "" : filename.substr(separator + 1);
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](unsigned char character) {
+                           return std::tolower(character);
+                       });
+        if (extension != "iso")
+            return Executable::parseFromFile(filename);
+        if (!Device::globalDevice->disc->open(filename)) {
+            std::cerr << "Error: Failed to open Wii disc image." << std::endl;
+            return std::nullopt;
+        }
+        try {
+            return Device::globalDevice->disc->getExecutable();
+        } catch (const std::exception &error) {
+            std::cerr << "Error: " << error.what() << std::endl;
+            return std::nullopt;
+        }
+    };
+
+    if (arguments[0] == "disc") {
+        if (arguments.size() < 2) {
+            std::cerr << "Error: No disc image specified." << std::endl;
+            return 1;
+        }
+        if (!Device::globalDevice->disc->open(arguments[1])) {
+            std::cerr << "Error: Failed to open Wii disc image." << std::endl;
+            return 1;
+        }
+        try {
+            std::cout << Device::globalDevice->disc->log();
+        } catch (const std::exception &error) {
+            std::cerr << "Error reading disc: " << error.what() << std::endl;
+            return 1;
+        }
+    } else if (arguments[0] == "parse") {
         if (arguments.size() < 2) {
             std::cerr << "Error: No file specified for parsing." << std::endl;
             return 1;
         }
         const std::string &filename = arguments[1];
-        auto exec = Executable::parseFromFile(filename);
+        auto exec = loadExecutable(filename);
         if (exec) {
             Logger::logObject(*exec, LogLevel::Info);
         } else {
@@ -49,7 +91,7 @@ int main(int argc, const char *argv[]) {
             return 1;
         }
         const std::string &filename = arguments[1];
-        auto exec = Executable::parseFromFile(filename);
+        auto exec = loadExecutable(filename);
         if (!exec) {
             std::cerr << "Error: Failed to parse executable." << std::endl;
             return 1;

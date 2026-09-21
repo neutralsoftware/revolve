@@ -14,7 +14,9 @@ void IOS::init() {
                    std::make_shared<STMEventHookDevice>());
     registerDevice("/dev/es", std::make_shared<ESDevice>());
     registerDevice("/dev/fs", std::make_shared<FSDevice>());
-    registerDevice("/dev/di", std::make_shared<DIDevice>());
+    registerDevice("/dev/di",
+                   std::make_shared<DIDevice>(Device::globalDevice->memory,
+                                              Device::globalDevice->disc));
 }
 
 void IOS::registerDevice(const std::string &path,

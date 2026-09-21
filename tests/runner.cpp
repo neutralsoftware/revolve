@@ -8,6 +8,7 @@
 #include <vector>
 
 int runBroadwaySuite();
+int runDiscSuite();
 int runIOSSuite();
 
 std::string getTestBuildOutputPath(const std::string &fileName) {
@@ -145,6 +146,8 @@ int main(int argc, char *argv[]) {
 
     if (suite == "broadway")
         return runBroadwaySuite();
+    if (suite == "disc")
+        return runDiscSuite();
     if (suite == "ios")
         return runIOSSuite();
 

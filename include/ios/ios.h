@@ -1,12 +1,15 @@
 #ifndef REVOLVE_IOS
 #define REVOLVE_IOS
 
+#include "core/memory.h"
+#include "disc.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 enum class IOSCommand : uint32_t {
@@ -246,15 +249,56 @@ class FSDevice : public IOSDevice {
                    const std::vector<IOSVector> &vectors) override;
 };
 
+enum class DIIoctl : uint32_t {
+    Inquiry = 0x12,
+
+    ReadDiskID = 0x70,
+    Read = 0x71,
+
+    WaitForCoverClose = 0x79,
+    GetCoverRegister = 0x7A,
+
+    GetLength = 0x83,
+    GetCoverStatus = 0x88,
+
+    Reset = 0x8A,
+    OpenPartition = 0x8B, // IOCTLV
+    ClosePartition = 0x8C,
+    UnencryptedRead = 0x8D,
+
+    RequestError = 0xE0,
+};
+
+enum class DIResult : int32_t {
+    Success = 0x01,
+    DriveError = 0x02,
+    CoverClosed = 0x04,
+    ReadTimedOut = 0x10,
+    SecurityError = 0x20,
+    VerifyError = 0x40,
+    BadArgument = 0x80,
+};
+
 class DIDevice : public IOSDevice {
   public:
+    DIDevice(Memory &memory, std::shared_ptr<DiscImage> disc)
+        : memory(memory), disc(std::move(disc)) {}
     int32_t ioctl(const IOSIoctlRequest &request) override;
 
     int32_t ioctlv(const IOSIoctlvRequest &request,
                    const std::vector<IOSVector> &vectors) override;
 
   private:
-    uint64_t currentPartition = 0;
+    Memory &memory;
+    std::shared_ptr<DiscImage> disc;
+
+    std::optional<uint64_t> currentPartition;
+
+    bool discIDRead = false;
+
+    uint32_t lastLength = 0;
+
+    uint32_t lastDriveError = 0;
 };
 
 class ESDevice : public IOSDevice {

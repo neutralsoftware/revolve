@@ -5,6 +5,7 @@
 #include "core/time.h"
 #include "cpu/broadway.h"
 #include "cpu/interface.h"
+#include "disc.h"
 #include "ios/ios.h"
 #include "ios/ipc.h"
 #include <memory>
@@ -75,6 +76,7 @@ class Device {
     std::shared_ptr<ProcessorInterface> pi =
         std::make_shared<ProcessorInterface>();
     std::shared_ptr<IPC> ipc = std::make_shared<IPC>();
+    std::shared_ptr<DiscImage> disc = std::make_shared<DiscImage>();
 };
 
 #endif
