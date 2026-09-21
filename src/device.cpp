@@ -14,6 +14,8 @@ std::shared_ptr<Device> Device::globalDevice = nullptr;
 std::shared_ptr<Device> Device::createDevice() {
     globalDevice = std::make_shared<Device>();
 
+    globalDevice->controller.setPI(globalDevice->pi.get());
+
     globalDevice->mmioDispatcher.registerDevice(
         PI_MMIO_BASE, PI_MMIO_END - PI_MMIO_BASE + 1, globalDevice->pi.get());
     globalDevice->mmioDispatcher.registerDevice(

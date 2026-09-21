@@ -1,4 +1,5 @@
 #include "ios/ipc.h"
+#include "device.h"
 #include <cstdint>
 
 uint32_t IPC::read(uint32_t offset, AccessSize size) {
@@ -70,4 +71,21 @@ void IPC::write(uint32_t offset, uint32_t value, AccessSize size) {
                     "Unimplemented IPC write: 0x" + utils::toHexString(offset));
         return;
     }
+}
+
+void IPC::replyFromStarlet(uint32_t requestAddress) {
+    armMessage = requestAddress;
+    y1 = true;
+    updateInterrupts();
+}
+
+void IPC::updateInterrupts() {
+    bool shouldInterrupt = y1 && interruptY1;
+
+    auto hollywood = Device::globalDevice->controller;
+
+    if (shouldInterrupt)
+        hollywood.raise(HollywoodIRQ::IPC);
+    else
+        hollywood.clear(HollywoodIRQ::IPC);
 }

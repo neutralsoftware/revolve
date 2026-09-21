@@ -49,16 +49,16 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 ## Starlet / IOS
 
 - [x] Implement IPC for Starlet
-- [ ] PPC -> Starlet handling
-- [ ] Starlet -> PPC handling and IPC request queues
+- [x] PPC -> Starlet handling
+- [x] Starlet -> PPC handling and IPC request queues
 - [ ] Implement HLE IOS
   - [ ] `/dev/es`
   - [ ] `/dev/fs`
   - [ ] `/dev/di`
   - [ ] `/dev/stm`
   - [ ] `/dev/video`
-  - [ ] ioctl handling
-  - [ ] File descriptors
+  - [x] ioctl handling
+  - [x] File descriptors
   - [ ] Error codes
 
 ## Disc

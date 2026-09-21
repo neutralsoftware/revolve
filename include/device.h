@@ -15,6 +15,43 @@
     }                                                                          \
     auto device = Device::globalDevice
 
+enum class HollywoodIRQ : uint32_t {
+    IPC = 30,
+};
+
+class HollywoodInterruptController {
+  public:
+    inline void raise(HollywoodIRQ irq) {
+        flags |= 1u << static_cast<uint32_t>(irq);
+        updatePI();
+    }
+
+    inline void clear(HollywoodIRQ irq) {
+        flags &= ~(1u << static_cast<uint32_t>(irq));
+        updatePI();
+    }
+
+    inline void setMask(uint32_t value) {
+        mask = value;
+        updatePI();
+    }
+
+    inline void setPI(ProcessorInterface *piDevice) { pi = piDevice; }
+
+  private:
+    uint32_t flags = 0;
+    uint32_t mask = 0;
+
+    ProcessorInterface *pi = nullptr;
+
+    inline void updatePI() {
+        if (flags & mask)
+            pi->raiseInterrupt(PIInterrupt::Hollywood);
+        else
+            pi->clearInterrupt(PIInterrupt::Hollywood);
+    }
+};
+
 class Device {
   public:
     static std::shared_ptr<Device> globalDevice;
@@ -28,6 +65,7 @@ class Device {
     MMIO mmioDispatcher;
     Broadway cpu;
     Scheduler scheduler;
+    HollywoodInterruptController controller;
 
     std::shared_ptr<ProcessorInterface> pi =
         std::make_shared<ProcessorInterface>();

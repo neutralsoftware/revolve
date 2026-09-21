@@ -1,5 +1,6 @@
 #include "ios/ios.h"
 #include "core/memory.h"
+#include "device.h"
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -34,6 +35,8 @@ void IOS::submitRequest(uint32_t address) {
     int32_t result = dispatch(request);
 
     Bus::writePhysical32(address + 0x04, static_cast<uint32_t>(result));
+
+    Device::globalDevice->ipc->replyFromStarlet(address);
 }
 
 int32_t IOS::dispatch(const IOSRequest &request) {

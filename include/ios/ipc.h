@@ -18,6 +18,11 @@ class IPC : public MMIODevice {
     void write(uint32_t offset, uint32_t value, AccessSize size) override;
     inline std::string getName() override { return "IPC"; }
 
+    void replyFromStarlet(uint32_t requestAddress);
+
+    bool pccRequestPending() const;
+    uint32_t getPPCMessage() const;
+
   private:
     uint32_t ppcMessage = 0; // Broadway -> Starlet message pointer
     uint32_t armMessage = 0; // Starlet -> Broadway response pointer
@@ -29,6 +34,8 @@ class IPC : public MMIODevice {
 
     bool interruptY1 = false;
     bool interruptY2 = false;
+
+    void updateInterrupts();
 };
 
 #endif
