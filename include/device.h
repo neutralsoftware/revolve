@@ -5,6 +5,7 @@
 #include "core/time.h"
 #include "cpu/broadway.h"
 #include "cpu/interface.h"
+#include "ios/ipc.h"
 #include <memory>
 #include <stdexcept>
 
@@ -30,6 +31,7 @@ class Device {
 
     std::shared_ptr<ProcessorInterface> pi =
         std::make_shared<ProcessorInterface>();
+    std::shared_ptr<IPC> ipc = std::make_shared<IPC>();
 };
 
 #endif
