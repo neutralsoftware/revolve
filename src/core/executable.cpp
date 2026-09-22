@@ -15,6 +15,39 @@ static std::string hex(uint32_t value) {
     return ss.str();
 }
 
+static Executable parseDolphin(BigEndianStream stream) {
+    Executable executable;
+    executable.textSections.reserve(7);
+    executable.dataSections.reserve(11);
+
+    for (int i = 0; i < 7; i++) {
+        TextSection section;
+        section.startAddress = stream.readInt();
+        executable.textSections.push_back(section);
+    }
+    for (int i = 0; i < 11; i++) {
+        DataSection section;
+        section.startAddress = stream.readInt();
+        executable.dataSections.push_back(section);
+    }
+
+    for (int i = 0; i < 7; i++)
+        executable.textSections[i].loadAddress = stream.readInt();
+    for (int i = 0; i < 11; i++)
+        executable.dataSections[i].loadAddress = stream.readInt();
+
+    for (int i = 0; i < 7; i++)
+        executable.textSections[i].size = stream.readInt();
+    for (int i = 0; i < 11; i++)
+        executable.dataSections[i].size = stream.readInt();
+
+    executable.bssAddress = stream.readInt();
+    executable.bssSize = stream.readInt();
+    executable.entryPoint = stream.readInt();
+    executable.data = std::make_shared<BigEndianStream>(std::move(stream));
+    return executable;
+}
+
 std::string Executable::log() const {
     std::string logMessage = "Dolphin Executable:\n";
 
@@ -44,45 +77,11 @@ std::string Executable::log() const {
 }
 
 Executable Executable::parseFromDolphin(const std::string &filename) {
+    return parseDolphin(BigEndianStream(filename));
+}
 
-    Executable executable;
-    BigEndianStream stream(filename);
-    executable.textSections.reserve(7);
-    executable.dataSections.reserve(11);
-
-    // Start addresses
-    for (int i = 0; i < 7; i++) {
-        TextSection section;
-        section.startAddress = stream.readInt();
-        executable.textSections.push_back(section);
-    }
-    for (int i = 0; i < 11; i++) {
-        DataSection section;
-        section.startAddress = stream.readInt();
-        executable.dataSections.push_back(section);
-    }
-
-    // Loading Addresses
-    for (int i = 0; i < 7; i++) {
-        executable.textSections[i].loadAddress = stream.readInt();
-    }
-    for (int i = 0; i < 11; i++) {
-        executable.dataSections[i].loadAddress = stream.readInt();
-    }
-
-    // Sizes
-    for (int i = 0; i < 7; i++) {
-        executable.textSections[i].size = stream.readInt();
-    }
-    for (int i = 0; i < 11; i++) {
-        executable.dataSections[i].size = stream.readInt();
-    }
-    executable.bssAddress = stream.readInt();
-    executable.bssSize = stream.readInt();
-    executable.entryPoint = stream.readInt();
-    executable.data = std::make_shared<BigEndianStream>(std::move(stream));
-
-    return executable;
+Executable Executable::parseFromDolphin(std::vector<uint8_t> data) {
+    return parseDolphin(BigEndianStream(std::move(data)));
 }
 
 Executable Executable::parseFromElf(const std::string &filename) {

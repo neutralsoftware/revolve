@@ -30,6 +30,7 @@ struct Executable : public Loggable {
     uint32_t entryPoint = 0;
 
     static Executable parseFromDolphin(const std::string &filename);
+    static Executable parseFromDolphin(std::vector<uint8_t> data);
     static Executable parseFromElf(const std::string &filename);
     static std::optional<Executable> parseFromFile(const std::string &filename);
 

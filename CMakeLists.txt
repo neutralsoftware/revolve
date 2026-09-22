@@ -5,6 +5,9 @@ set(CMAKE_CXX_COMPILER "/usr/bin/clang++")
 project(Revolve LANGUAGES C CXX)
 
 find_package(Git REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(ZSTD REQUIRED IMPORTED_TARGET libzstd)
 
 execute_process(
     COMMAND ${GIT_EXECUTABLE} submodule sync --recursive
@@ -31,6 +34,7 @@ include_directories(extern include)
 
 file(GLOB_RECURSE REVOLVE_SOURCES CONFIGURE_DEPENDS src/*.cpp)
 add_executable(revolve ${REVOLVE_SOURCES})
+target_link_libraries(revolve PRIVATE OpenSSL::Crypto PkgConfig::ZSTD)
 
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS tests/runner.cpp)
 add_compile_definitions(
@@ -38,6 +42,8 @@ add_compile_definitions(
     TESTS_PATH="${CMAKE_SOURCE_DIR}/tests"
 )
 file(GLOB BROADWAY_SOURCES CONFIGURE_DEPENDS src/cpu/*.cpp)
-add_executable(revolve_test ${TEST_SOURCES} tests/broadway.cpp tests/ios.cpp
-    ${BROADWAY_SOURCES} src/core/memory.cpp src/core/pi.cpp src/core/utils.cpp
-    src/device.cpp src/ios/ios.cpp src/ios/ipc.cpp)
+file(GLOB_RECURSE IOS_SOURCES CONFIGURE_DEPENDS src/ios/*.cpp)
+add_executable(revolve_test ${TEST_SOURCES} tests/broadway.cpp tests/disc.cpp tests/ios.cpp
+    ${BROADWAY_SOURCES} src/core/memory.cpp src/core/pi.cpp src/core/mi.cpp src/core/utils.cpp
+    ${IOS_SOURCES} src/core/executable.cpp src/device.cpp src/disc.cpp)
+target_link_libraries(revolve_test PRIVATE OpenSSL::Crypto PkgConfig::ZSTD)

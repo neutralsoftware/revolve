@@ -46,6 +46,14 @@ class ProcessorInterface : public MMIODevice {
   private:
     uint32_t interruptMask = 0;
     uint32_t interruptCause = 0;
+    uint32_t fifoBase = 0;
+    uint32_t fifoEnd = 0;
+    uint32_t fifoWritePointer = 0;
+    uint32_t errorCause = 0;
+    uint32_t errorAddress = 0;
+    uint32_t resetCode = 0;
+    uint32_t unknown = 0x1FF;
+    uint32_t busStrength = 0x02492492;
 };
 
 #endif
