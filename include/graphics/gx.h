@@ -1,9 +1,13 @@
 #ifndef GX_H
 #define GX_H
 
+#include "SDL3/SDL_video.h"
 #include "core/memory.h"
+#include "opal/opal.h"
 #include <array>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 struct GXVec2 {
     float x = 0.0f;
@@ -28,6 +32,21 @@ struct GXColor {
     float g = 0.0f;
     float b = 0.0f;
     float a = 0.0f;
+};
+
+struct GXRenderVertex {
+    float x;
+    float y;
+    float z;
+    float w;
+
+    float r;
+    float g;
+    float b;
+    float a;
+
+    float u;
+    float v;
 };
 
 struct GXMatrix3x4 {
@@ -328,12 +347,46 @@ struct GXLine {
     GXVertex b;
 };
 
+class GXRenderer {
+  public:
+    void initialize();
+
+    void beginFrame();
+    void endFrame();
+
+    void drawTriangle(const GXRenderVertex &a, const GXRenderVertex &b,
+                      const GXRenderVertex &c);
+
+    SDL_Window *window = nullptr;
+
+  private:
+    void uploadVertices();
+
+    std::shared_ptr<opal::Device> device;
+
+    std::shared_ptr<opal::Pipeline> pipeline;
+    std::shared_ptr<opal::ShaderProgram> shaderProgram;
+
+    std::shared_ptr<opal::Buffer> vertexBuffer;
+    std::shared_ptr<opal::DrawingState> drawingState;
+
+    std::shared_ptr<opal::RenderPass> renderPass;
+    std::shared_ptr<opal::Framebuffer> framebuffer;
+
+    std::shared_ptr<opal::CommandBuffer> commandBuffer;
+
+    std::vector<GXRenderVertex> vertices;
+};
+
 class GX {
   public:
+    void initialize();
     void run();
     void processCommand();
 
     void initializeFifoReader();
+
+    std::shared_ptr<GXRenderer> renderer = std::make_shared<GXRenderer>();
 
   private:
     uint8_t read8();
@@ -403,6 +456,8 @@ class GX {
     GXVec3 clipToNDC(const GXVec4 &clip) const;
     GXVec3 viewportTransform(const GXVec3 &ndc) const;
     GXVec3 transformToScreen(const GXVertex &vertex) const;
+
+    GXRenderVertex transformToRenderVertex(const GXVertex &vertex) const;
 
     GXFifoReader reader{};
     GXState state{};

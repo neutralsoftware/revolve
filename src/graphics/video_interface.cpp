@@ -192,7 +192,12 @@ void VideoInterface::checkInterrupts() {
         Device::globalDevice->pi->clearInterrupt(PIInterrupt::VI);
 }
 
-void VideoInterface::onFrame() {}
+void VideoInterface::onFrame() {
+    auto &renderer = Device::globalDevice->gx.renderer;
+
+    renderer->endFrame();
+    renderer->beginFrame();
+}
 
 uint32_t VideoInterface::readRegister32(uint32_t offset) const {
     uint16_t hi = registers[offset / 2];

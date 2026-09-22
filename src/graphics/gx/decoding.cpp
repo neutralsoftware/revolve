@@ -555,17 +555,9 @@ void GX::readDirectNBT(uint8_t vat, GXVertex &vertex) {
 }
 
 void GX::emitTriangle(const GXVertex &a, const GXVertex &b, const GXVertex &c) {
-    GXVec3 sa = transformToScreen(a);
-    GXVec3 sb = transformToScreen(b);
-    GXVec3 sc = transformToScreen(c);
-
-    Logger::log("GX", LogLevel::Info,
-                "TRIANGLE: " + std::to_string(a.position.x) + "," +
-                    std::to_string(a.position.y) + " | " +
-                    std::to_string(b.position.x) + "," +
-                    std::to_string(b.position.y) + " | " +
-                    std::to_string(c.position.x) + "," +
-                    std::to_string(c.position.y));
+    renderer->drawTriangle(transformToRenderVertex(a),
+                           transformToRenderVertex(b),
+                           transformToRenderVertex(c));
 }
 
 void GX::emitLine(const GXVertex &a, const GXVertex &b) {
@@ -786,3 +778,27 @@ GXVec3 GX::transformToScreen(const GXVertex &vertex) const {
 
     return viewportTransform(ndc);
 }
+
+GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
+    GXVec4 view = transformPosition(vertex);
+    GXVec4 clip = projectPosition(view);
+
+    GXRenderVertex out{};
+
+    out.x = clip.x;
+    out.y = clip.y;
+    out.z = clip.z;
+    out.w = clip.w;
+
+    out.r = vertex.color0.r;
+    out.g = vertex.color0.g;
+    out.b = vertex.color0.b;
+    out.a = vertex.color0.a;
+
+    out.u = vertex.texCoords[0].x;
+    out.v = vertex.texCoords[0].y;
+
+    return out;
+}
+
+void GX::initialize() { renderer->initialize(); }

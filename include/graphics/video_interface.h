@@ -59,7 +59,7 @@ static constexpr uint64_t VI_CYCLES_PER_LINE =
 
 class VideoInterface : public MMIODevice {
   public:
-    VideoInterface();
+    VideoInterface() = default;
 
     uint32_t read(uint32_t offset, AccessSize size) override;
     void write(uint32_t offset, uint32_t value, AccessSize size) override;

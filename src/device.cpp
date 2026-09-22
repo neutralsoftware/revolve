@@ -1,5 +1,6 @@
 
 #include "device.h"
+#include "SDL3/SDL_events.h"
 #include "core/memory.h"
 #include "core/time.h"
 #include "core/utils.h"
@@ -35,7 +36,8 @@ std::shared_ptr<Device> Device::createDevice() {
     globalDevice->ios.init();
     globalDevice->vi->initialize();
 
-    globalDevice->gx.initializeFifoReader();
+    globalDevice->gx.initialize();
+    globalDevice->gx.renderer->beginFrame();
 
     return globalDevice;
 }
@@ -61,10 +63,23 @@ void Device::step() {
 
     cpu.advanceTime(cycles);
     scheduler.advance(cycles);
+
+    gx.run();
 }
 
 void Device::start() {
-    while (true) {
+    bool running = true;
+
+    auto window = gx.renderer->window;
+    while (running) {
+        SDL_Event event;
+
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_EVENT_QUIT) {
+                running = false;
+            }
+        }
+
         step();
     }
 }
