@@ -134,25 +134,19 @@ void GX::initializeFifoReader() {
 }
 
 void GX::processPrimitive(uint8_t command) {
-    const uint8_t vat = command & 0x07;
-    const uint8_t primitive = command & 0xF8;
+    uint8_t vat = command & 0x07;
+    uint8_t primitive = command & 0xF8;
 
-    const uint16_t vertexCount = read16();
+    uint16_t vertexCount = read16();
 
-    Logger::log("GX", LogLevel::Info,
-                "Primitive: 0x" + utils::toHexString(primitive) +
-                    " VAT=" + std::to_string(vat) +
-                    " vertices=" + std::to_string(vertexCount));
+    std::vector<GXVertex> vertices;
+    vertices.reserve(vertexCount);
 
     for (uint32_t i = 0; i < vertexCount; ++i) {
-        GXVertex vertex = readVertex(vat);
-
-        Logger::log("GX", LogLevel::Info,
-                    "Vertex " + std::to_string(i) + " position=(" +
-                        std::to_string(vertex.position.x) + ", " +
-                        std::to_string(vertex.position.y) + ", " +
-                        std::to_string(vertex.position.z) + ")");
+        vertices.push_back(readVertex(vat));
     }
+
+    assemblePrimitive(static_cast<GXPrimitive>(primitive), vertices);
 }
 
 float GX::readComponent(GXComponentFormat format, uint8_t fractionalBits) {
@@ -566,4 +560,75 @@ void GX::readDirectNBT(uint8_t vat, GXVertex &vertex) {
     vertex.normal = readVec();
     vertex.binormal = readVec();
     vertex.tangent = readVec();
+}
+
+void GX::emitTriangle(const GXVertex &a, const GXVertex &b, const GXVertex &c) {
+    Logger::log("GX", LogLevel::Info,
+                "TRIANGLE: " + std::to_string(a.position.x) + "," +
+                    std::to_string(a.position.y) + " | " +
+                    std::to_string(b.position.x) + "," +
+                    std::to_string(b.position.y) + " | " +
+                    std::to_string(c.position.x) + "," +
+                    std::to_string(c.position.y));
+}
+
+void GX::emitLine(const GXVertex &a, const GXVertex &b) {
+    Logger::log("GX", LogLevel::Info,
+                "LINE: " + std::to_string(a.position.x) + "," +
+                    std::to_string(a.position.y) + " | " +
+                    std::to_string(b.position.x) + "," +
+                    std::to_string(b.position.y));
+}
+
+void GX::emitPoint(const GXVertex &point) {
+    Logger::log("GX", LogLevel::Info,
+                "POINT: " + std::to_string(point.position.x) + "," +
+                    std::to_string(point.position.y));
+}
+
+void GX::assemblePrimitive(GXPrimitive primitive,
+                           const std::vector<GXVertex> &vertices) {
+    switch (primitive) {
+    case GXPrimitive::Triangles:
+        for (size_t i = 0; i + 2 < vertices.size(); i += 3) {
+            emitTriangle(vertices[i], vertices[i + 1], vertices[i + 2]);
+        }
+        break;
+    case GXPrimitive::TriangleStrip:
+        for (size_t i = 2; i < vertices.size(); ++i) {
+            if ((i & 1) == 0) {
+                emitTriangle(vertices[i - 2], vertices[i - 1], vertices[i]);
+            } else {
+                emitTriangle(vertices[i - 1], vertices[i - 2], vertices[i]);
+            }
+        }
+        break;
+    case GXPrimitive::TriangleFan:
+        for (size_t i = 2; i < vertices.size(); ++i) {
+            emitTriangle(vertices[0], vertices[i - 1], vertices[i]);
+        }
+        break;
+    case GXPrimitive::Quads:
+        for (size_t i = 0; i + 3 < vertices.size(); i += 4) {
+            emitTriangle(vertices[i], vertices[i + 1], vertices[i + 2]);
+
+            emitTriangle(vertices[i], vertices[i + 2], vertices[i + 3]);
+        }
+        break;
+    case GXPrimitive::Lines:
+        for (size_t i = 0; i + 1 < vertices.size(); i += 2) {
+            emitLine(vertices[i], vertices[i + 1]);
+        }
+        break;
+    case GXPrimitive::LineStrip:
+        for (size_t i = 1; i < vertices.size(); ++i) {
+            emitLine(vertices[i - 1], vertices[i]);
+        }
+        break;
+    case GXPrimitive::Points:
+        for (const GXVertex &vertex : vertices) {
+            emitPoint(vertex);
+        }
+        break;
+    }
 }

@@ -278,6 +278,17 @@ enum class GXPrimitive : uint8_t {
     Points = 0xB8
 };
 
+struct GXTriangle {
+    GXVertex a;
+    GXVertex b;
+    GXVertex c;
+};
+
+struct GXLine {
+    GXVertex a;
+    GXVertex b;
+};
+
 class GX {
   public:
     void run();
@@ -335,6 +346,13 @@ class GX {
     GXVec3 readIndexedNormal(uint8_t vat, uint32_t index);
     GXVec2 readIndexedTexCoord(uint8_t vat, uint32_t texIndex, uint32_t index);
     GXColor readIndexedColor(uint8_t vat, uint32_t colorIndex, uint32_t index);
+
+    void emitTriangle(const GXVertex &a, const GXVertex &b, const GXVertex &c);
+    void emitLine(const GXVertex &a, const GXVertex &b);
+    void emitPoint(const GXVertex &point);
+
+    void assemblePrimitive(GXPrimitive primitive,
+                           const std::vector<GXVertex> &vertices);
 
     GXFifoReader reader{};
     GXState state{};
