@@ -493,7 +493,7 @@ GXColor GX::readIndexedColor(uint8_t vat, uint32_t colorIndex, uint32_t index) {
         break;
 
     case GXColorFormat::RGB565: {
-        uint16_t raw = static_cast<uint16_t>(read8()) << 8 | read8();
+        uint16_t raw = static_cast<uint16_t>(readByte()) << 8 | readByte();
 
         uint32_t r = (raw >> 11) & 0x1F;
         uint32_t g = (raw >> 5) & 0x3F;
@@ -507,7 +507,7 @@ GXColor GX::readIndexedColor(uint8_t vat, uint32_t colorIndex, uint32_t index) {
     }
 
     case GXColorFormat::RGBA4: {
-        uint16_t raw = static_cast<uint16_t>(read8()) << 8 | read8();
+        uint16_t raw = static_cast<uint16_t>(readByte()) << 8 | readByte();
 
         result.r = ((raw >> 12) & 0xF) / 15.0f;
         result.g = ((raw >> 8) & 0xF) / 15.0f;
@@ -517,8 +517,8 @@ GXColor GX::readIndexedColor(uint8_t vat, uint32_t colorIndex, uint32_t index) {
     }
 
     case GXColorFormat::RGBA6: {
-        uint32_t raw = static_cast<uint32_t>(read8()) << 16 |
-                       static_cast<uint32_t>(read8()) << 8 | read8();
+        uint32_t raw = static_cast<uint32_t>(readByte()) << 16 |
+                       static_cast<uint32_t>(readByte()) << 8 | readByte();
 
         result.r = ((raw >> 18) & 0x3F) / 63.0f;
         result.g = ((raw >> 12) & 0x3F) / 63.0f;
@@ -555,6 +555,10 @@ void GX::readDirectNBT(uint8_t vat, GXVertex &vertex) {
 }
 
 void GX::emitTriangle(const GXVertex &a, const GXVertex &b, const GXVertex &c) {
+    GXVec3 sa = transformToScreen(a);
+    GXVec3 sb = transformToScreen(b);
+    GXVec3 sc = transformToScreen(c);
+
     Logger::log("GX", LogLevel::Info,
                 "TRIANGLE: " + std::to_string(a.position.x) + "," +
                     std::to_string(a.position.y) + " | " +
@@ -565,6 +569,9 @@ void GX::emitTriangle(const GXVertex &a, const GXVertex &b, const GXVertex &c) {
 }
 
 void GX::emitLine(const GXVertex &a, const GXVertex &b) {
+    GXVec3 sa = transformToScreen(a);
+    GXVec3 sb = transformToScreen(b);
+
     Logger::log("GX", LogLevel::Info,
                 "LINE: " + std::to_string(a.position.x) + "," +
                     std::to_string(a.position.y) + " | " +
@@ -573,6 +580,8 @@ void GX::emitLine(const GXVertex &a, const GXVertex &b) {
 }
 
 void GX::emitPoint(const GXVertex &point) {
+    GXVec3 sp = transformToScreen(point);
+
     Logger::log("GX", LogLevel::Info,
                 "POINT: " + std::to_string(point.position.x) + "," +
                     std::to_string(point.position.y));
@@ -647,6 +656,39 @@ void GX::writeXF(uint16_t address, uint32_t value) {
         return;
     }
 
+    if (address >= 0x101A && address <= 0x101F) {
+        float f;
+        std::memcpy(&f, &value, sizeof(f));
+
+        switch (address) {
+        case 0x101A:
+            state.xf.viewport.xScale = f;
+            break;
+
+        case 0x101B:
+            state.xf.viewport.yScale = f;
+            break;
+
+        case 0x101C:
+            state.xf.viewport.zRange = f;
+            break;
+
+        case 0x101D:
+            state.xf.viewport.xOrigin = f;
+            break;
+
+        case 0x101E:
+            state.xf.viewport.yOrigin = f;
+            break;
+
+        case 0x101F:
+            state.xf.viewport.farZ = f;
+            break;
+        }
+
+        return;
+    }
+
     if (address < state.xf.registers.size())
         state.xf.registers[address] = value;
 }
@@ -717,4 +759,30 @@ GXVec4 GX::projectPosition(const GXVec4 &v) const {
     }
 
     return out;
+}
+
+GXVec3 GX::clipToNDC(const GXVec4 &clip) const {
+    if (clip.w == 0.0f)
+        return {};
+
+    return {clip.x / clip.w, clip.y / clip.w, clip.z / clip.w};
+}
+
+GXVec3 GX::viewportTransform(const GXVec3 &ndc) const {
+    const auto &vp = state.xf.viewport;
+
+    GXVec3 result{};
+    result.x = ndc.x * vp.xScale + vp.xOrigin;
+    result.y = ndc.y * vp.yScale + vp.yOrigin;
+    result.z = ndc.z * vp.zRange + vp.farZ;
+
+    return result;
+}
+
+GXVec3 GX::transformToScreen(const GXVertex &vertex) const {
+    GXVec4 view = transformPosition(vertex);
+    GXVec4 clip = projectPosition(view);
+    GXVec3 ndc = clipToNDC(clip);
+
+    return viewportTransform(ndc);
 }

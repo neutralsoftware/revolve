@@ -55,6 +55,18 @@ struct GXVertex {
     std::array<GXVec2, 8> texCoords{};
 };
 
+struct GXViewport {
+    float xScale = 0.0f;
+    float yScale = 0.0f;
+
+    float zRange = 0.0f;
+
+    float xOrigin = 0.0f;
+    float yOrigin = 0.0f;
+
+    float farZ = 0.0f;
+};
+
 enum class GXArrayAttribute : uint8_t {
     Position = 9,
     Normal = 10,
@@ -282,6 +294,7 @@ struct GXXFState {
     std::array<float, 1024> matrixMemory{};
 
     GXProjection projection{};
+    GXViewport viewport{};
 };
 
 struct GXBPState {
@@ -387,6 +400,9 @@ class GX {
 
     GXVec4 transformPosition(const GXVertex &vertex) const;
     GXVec4 projectPosition(const GXVec4 &v) const;
+    GXVec3 clipToNDC(const GXVec4 &clip) const;
+    GXVec3 viewportTransform(const GXVec3 &ndc) const;
+    GXVec3 transformToScreen(const GXVertex &vertex) const;
 
     GXFifoReader reader{};
     GXState state{};
