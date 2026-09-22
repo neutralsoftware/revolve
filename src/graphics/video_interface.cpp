@@ -30,17 +30,49 @@ uint32_t VideoInterface::read(uint32_t offset, AccessSize size) {
 }
 
 void VideoInterface::write(uint32_t offset, uint32_t value, AccessSize size) {
+    const auto isInterruptHigh = [](uint32_t off) {
+        return off == static_cast<uint32_t>(VIRegister::Interupt0Hi) ||
+               off == static_cast<uint32_t>(VIRegister::Interupt1Hi) ||
+               off == static_cast<uint32_t>(VIRegister::Interupt2Hi) ||
+               off == static_cast<uint32_t>(VIRegister::Interupt3Hi);
+    };
+
     switch (size) {
-    case AccessSize::U16:
-        registers[offset / 2] = static_cast<uint16_t>(value);
-        return;
+    case AccessSize::U16: {
+        uint16_t newValue = static_cast<uint16_t>(value);
 
-    case AccessSize::U32:
-        registers[offset / 2] = static_cast<uint16_t>(value >> 16);
+        if (isInterruptHigh(offset)) {
+            constexpr uint16_t STATUS = 0x8000;
 
-        registers[offset / 2 + 1] = static_cast<uint16_t>(value);
+            uint16_t oldValue = registers[offset / 2];
 
+            if (newValue & STATUS)
+                newValue = (newValue & ~STATUS) | (oldValue & STATUS);
+            else
+                newValue &= ~STATUS;
+        }
+
+        registers[offset / 2] = newValue;
         break;
+    }
+
+    case AccessSize::U32: {
+        uint32_t newValue = value;
+
+        if (isInterruptHigh(offset)) {
+            constexpr uint32_t STATUS = 1u << 31;
+
+            uint32_t oldValue = readRegister32(offset);
+
+            if (newValue & STATUS)
+                newValue = (newValue & ~STATUS) | (oldValue & STATUS);
+            else
+                newValue &= ~STATUS;
+        }
+
+        writeRegister32(offset, newValue);
+        break;
+    }
 
     default:
         Logger::log("VI", LogLevel::Error, "Invalid access size");
@@ -48,6 +80,7 @@ void VideoInterface::write(uint32_t offset, uint32_t value, AccessSize size) {
     }
 
     decodeRegisterWrite(offset, value, size);
+    checkInterrupts();
 }
 
 void VideoInterface::decodeRegisterWrite(uint32_t offset, uint32_t value,
@@ -83,23 +116,12 @@ void VideoInterface::decodeRegisterWrite(uint32_t offset, uint32_t value,
         break;
     case VIRegister::Interupt0Hi:
     case VIRegister::Interupt0Lo:
-        state.displayInterrupts[0] =
-            readRegister32(static_cast<uint32_t>(VIRegister::Interupt0Hi));
-        break;
     case VIRegister::Interupt1Hi:
     case VIRegister::Interupt1Lo:
-        state.displayInterrupts[1] =
-            readRegister32(static_cast<uint32_t>(VIRegister::Interupt1Hi));
-        break;
     case VIRegister::Interupt2Hi:
     case VIRegister::Interupt2Lo:
-        state.displayInterrupts[2] =
-            readRegister32(static_cast<uint32_t>(VIRegister::Interupt2Hi));
-        break;
     case VIRegister::Interupt3Hi:
     case VIRegister::Interupt3Lo:
-        state.displayInterrupts[3] =
-            readRegister32(static_cast<uint32_t>(VIRegister::Interupt3Hi));
         break;
     default:
         Logger::log(
@@ -112,8 +134,8 @@ void VideoInterface::decodeRegisterWrite(uint32_t offset, uint32_t value,
 }
 
 void VideoInterface::initialize() {
-    Device::globalDevice->scheduler.schedule("VI Cycles", onScanLine,
-                                             VI_CYCLES_PER_LINE);
+    Device::globalDevice->scheduler.schedule(
+        "VI Cycles", [this]() { onScanLine(); }, VI_CYCLES_PER_LINE);
 }
 
 void VideoInterface::onScanLine() {
@@ -121,27 +143,68 @@ void VideoInterface::onScanLine() {
 
     if (state.currentVerticalPosition > VI_TOTAL_LINES) {
         state.currentVerticalPosition = 1;
+        onFrame();
     }
 
     checkInterrupts();
+
+    Device::globalDevice->scheduler.schedule(
+        "VI Cycles", [this]() { onScanLine(); }, VI_CYCLES_PER_LINE);
 }
 
+constexpr uint32_t VI_DI_STATUS = 1u << 31;
+constexpr uint32_t VI_DI_ENABLE = 1u << 28;
+
+constexpr uint32_t VI_DI_VCT_MASK = 0x03FF0000;
+constexpr uint32_t VI_DI_HCT_MASK = 0x000003FF;
+
+constexpr uint32_t VI_DI_VCT_SHIFT = 16;
+
 void VideoInterface::checkInterrupts() {
-    bool irq = false;
+    bool shouldRaise = false;
 
-    for (uint32_t reg : state.displayInterrupts) {
-        uint32_t targetVertical = reg >> 16;
-        bool enabled = (reg & 0x8000) != 0;
+    for (size_t i = 0; i < 4; ++i) {
+        uint32_t base = static_cast<uint32_t>(VIRegister::Interupt0Hi) +
+                        static_cast<uint32_t>(i) * 4;
 
-        if (enabled && state.currentVerticalPosition == targetVertical) {
-            irq = true;
-            break;
+        uint32_t reg = readRegister32(base);
+
+        const uint32_t targetVertical =
+            (reg & VI_DI_VCT_MASK) >> VI_DI_VCT_SHIFT;
+
+        const bool enabled = (reg & VI_DI_ENABLE) != 0;
+
+        const bool pending = (reg & VI_DI_STATUS) != 0;
+
+        if (!pending && state.currentVerticalPosition == targetVertical) {
+            reg |= VI_DI_STATUS;
+            writeRegister32(base, reg);
+        }
+
+        if ((reg & VI_DI_ENABLE) && (reg & VI_DI_STATUS)) {
+            shouldRaise = true;
         }
     }
 
-    if (irq)
+    if (shouldRaise)
         Device::globalDevice->pi->raiseInterrupt(PIInterrupt::VI);
-    else {
+    else
         Device::globalDevice->pi->clearInterrupt(PIInterrupt::VI);
-    }
+}
+
+void VideoInterface::onFrame() {}
+
+uint32_t VideoInterface::readRegister32(uint32_t offset) const {
+    uint16_t hi = registers[offset / 2];
+    uint16_t lo = registers[offset / 2 + 1];
+
+    return (static_cast<uint32_t>(hi) << 16) | static_cast<uint32_t>(lo);
+}
+
+void VideoInterface::writeRegister32(uint32_t offset, uint32_t value) {
+    uint16_t hi = static_cast<uint16_t>(value >> 16);
+    uint16_t lo = static_cast<uint16_t>(value & 0xFFFF);
+
+    registers[offset / 2] = hi;
+    registers[offset / 2 + 1] = lo;
 }

@@ -21,8 +21,6 @@ struct VIState {
 
     uint16_t currentVerticalPosition = 1;
     uint16_t currentHorizontalPosition = 1;
-
-    std::array<uint32_t, 4> displayInterrupts{};
 };
 
 enum class VIRegister : uint32_t {
@@ -71,12 +69,15 @@ class VideoInterface : public MMIODevice {
     void initialize();
     void onScanLine();
 
+    void onFrame();
+
   private:
     void decodeRegisterWrite(uint32_t offset, uint32_t value, AccessSize size);
 
     void checkInterrupts();
 
     uint32_t readRegister32(uint32_t offset) const;
+    void writeRegister32(uint32_t offset, uint32_t value);
 
     VIState state{};
     std::array<uint16_t, VI_SIZE / 2> registers{};

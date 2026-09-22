@@ -29,6 +29,7 @@ std::shared_ptr<Device> Device::createDevice() {
                                                 globalDevice->vi.get());
 
     globalDevice->ios.init();
+    globalDevice->vi->initialize();
 
     return globalDevice;
 }
