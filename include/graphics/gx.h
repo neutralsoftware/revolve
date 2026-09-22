@@ -1,6 +1,7 @@
 #ifndef GX_H
 #define GX_H
 
+#include "core/memory.h"
 #include <array>
 #include <cstdint>
 
@@ -27,13 +28,36 @@ struct GXVertex {
     std::array<uint8_t, 8> texMatrixIndices{};
 
     GXVec3 position{};
+
     GXVec3 normal{};
+    GXVec3 binormal{};
+    GXVec3 tangent{};
 
     GXColor color0{};
     GXColor color1{};
 
     std::array<GXVec2, 8> texCoords{};
 };
+
+enum class GXArrayAttribute : uint8_t {
+    Position = 9,
+    Normal = 10,
+    Color0 = 11,
+    Color1 = 12,
+
+    Tex0 = 13,
+    Tex1 = 14,
+    Tex2 = 15,
+    Tex3 = 16,
+    Tex4 = 17,
+    Tex5 = 18,
+    Tex6 = 19,
+    Tex7 = 20
+};
+
+static constexpr uint32_t arrayIndex(GXArrayAttribute attr) {
+    return static_cast<uint32_t>(attr) - 9;
+}
 
 struct GXFifoReader {
     uint32_t cursor = 0;
@@ -244,6 +268,16 @@ struct GXState {
     GXBPState bp{};
 };
 
+enum class GXPrimitive : uint8_t {
+    Quads = 0x80,
+    Triangles = 0x90,
+    TriangleStrip = 0x98,
+    TriangleFan = 0xA0,
+    Lines = 0xA8,
+    LineStrip = 0xB0,
+    Points = 0xB8
+};
+
 class GX {
   public:
     void run();
@@ -266,9 +300,41 @@ class GX {
 
     GXVec3 readDirectPosition(uint8_t vatIndex);
     GXVec3 readDirectNormal(uint8_t vat);
+    void readDirectNBT(uint8_t vat, GXVertex &vertex);
     GXColor readDirectColor(uint8_t vat, uint32_t colorIndex);
     GXVec2 readDirectTexCoord(uint8_t vat, uint32_t index);
     GXVertex readVertex(uint8_t vat);
+
+    uint32_t readAttributeIndex(GXVertexAttributeMode mode);
+    uint32_t getIndexedAddress(GXArrayAttribute attr, uint32_t index) const;
+
+    inline uint8_t readMemory8(uint32_t &address) {
+        return Bus::readPhysical8(address++);
+    }
+
+    inline uint16_t readMemory16(uint32_t &address) {
+        uint16_t hi = static_cast<uint16_t>(Bus::readPhysical8(address++)) << 8;
+
+        uint16_t lo = Bus::readPhysical8(address++);
+
+        return hi | lo;
+    }
+
+    inline uint32_t readMemory32(uint32_t &address) {
+        uint32_t hi = static_cast<uint32_t>(readMemory16(address)) << 16;
+
+        uint32_t lo = readMemory16(address);
+
+        return hi | lo;
+    }
+
+    float readMemoryComponent(uint32_t &address, GXComponentFormat format,
+                              uint8_t fractionalBits);
+
+    GXVec3 readIndexedPosition(uint8_t vat, uint32_t index);
+    GXVec3 readIndexedNormal(uint8_t vat, uint32_t index);
+    GXVec2 readIndexedTexCoord(uint8_t vat, uint32_t texIndex, uint32_t index);
+    GXColor readIndexedColor(uint8_t vat, uint32_t colorIndex, uint32_t index);
 
     GXFifoReader reader{};
     GXState state{};

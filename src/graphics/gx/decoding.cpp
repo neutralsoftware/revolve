@@ -290,39 +290,280 @@ GXVertex GX::readVertex(uint8_t vat) {
         break;
 
     case GXVertexAttributeMode::Index8:
-    case GXVertexAttributeMode::Index16:
-        Logger::log("GX", LogLevel::Warning,
-                    "Indexed position not implemented yet");
+    case GXVertexAttributeMode::Index16: {
+        uint32_t index = readAttributeIndex(vcd.position);
+
+        vertex.position = readIndexedPosition(vat, index);
         break;
+    }
     }
 
     switch (vcd.normal) {
     case GXVertexAttributeMode::None:
         break;
 
-    case GXVertexAttributeMode::Direct:
-        vertex.normal = readDirectNormal(vat);
-        break;
+    case GXVertexAttributeMode::Direct: {
+        const auto fmt = state.cp.getNormalFormat(vat);
 
-    case GXVertexAttributeMode::Index8:
-    case GXVertexAttributeMode::Index16:
-        Logger::log("GX", LogLevel::Warning,
-                    "Indexed normal not implemented yet");
+        if (fmt.vectors == 1) {
+            vertex.normal = readDirectNormal(vat);
+        } else {
+            readDirectNBT(vat, vertex);
+        }
+
         break;
     }
 
-    if (vcd.color0 == GXVertexAttributeMode::Direct)
-        vertex.color0 = readDirectColor(vat, 0);
+    case GXVertexAttributeMode::Index8:
+    case GXVertexAttributeMode::Index16: {
+        uint32_t index = readAttributeIndex(vcd.normal);
 
-    if (vcd.color1 == GXVertexAttributeMode::Direct)
-        vertex.color1 = readDirectColor(vat, 1);
+        vertex.normal = readIndexedNormal(vat, index);
+        break;
+    }
+    }
+
+    auto readColor = [&](GXVertexAttributeMode mode, uint32_t colorIndex,
+                         GXColor &destination) {
+        switch (mode) {
+        case GXVertexAttributeMode::None:
+            break;
+
+        case GXVertexAttributeMode::Direct:
+            destination = readDirectColor(vat, colorIndex);
+            break;
+
+        case GXVertexAttributeMode::Index8:
+        case GXVertexAttributeMode::Index16: {
+            uint32_t index = readAttributeIndex(mode);
+
+            destination = readIndexedColor(vat, colorIndex, index);
+            break;
+        }
+        }
+    };
+
+    readColor(vcd.color0, 0, vertex.color0);
+    readColor(vcd.color1, 1, vertex.color1);
 
     for (uint32_t i = 0; i < 8; ++i) {
-        if (vcd.texCoord[i] == GXVertexAttributeMode::Direct) {
+        switch (vcd.texCoord[i]) {
+        case GXVertexAttributeMode::None:
+            break;
 
+        case GXVertexAttributeMode::Direct:
             vertex.texCoords[i] = readDirectTexCoord(vat, i);
+            break;
+
+        case GXVertexAttributeMode::Index8:
+        case GXVertexAttributeMode::Index16: {
+            uint32_t index = readAttributeIndex(vcd.texCoord[i]);
+
+            vertex.texCoords[i] = readIndexedTexCoord(vat, i, index);
+            break;
+        }
         }
     }
 
     return vertex;
+}
+
+uint32_t GX::readAttributeIndex(GXVertexAttributeMode mode) {
+    switch (mode) {
+    case GXVertexAttributeMode::Index8:
+        return read8();
+
+    case GXVertexAttributeMode::Index16:
+        return read16();
+
+    default:
+        return 0;
+    }
+}
+
+uint32_t GX::getIndexedAddress(GXArrayAttribute attribute,
+                               uint32_t index) const {
+    const uint32_t slot = static_cast<uint32_t>(attribute) - 9;
+
+    const uint32_t base = state.cp.getArrayBase(slot);
+
+    const uint32_t stride = state.cp.getArrayStride(slot);
+
+    return base + index * stride;
+}
+
+float GX::readMemoryComponent(uint32_t &address, GXComponentFormat format,
+                              uint8_t fractionalBits) {
+    const float scale = static_cast<float>(1u << fractionalBits);
+
+    switch (format) {
+    case GXComponentFormat::U8:
+        return static_cast<float>(readMemory8(address)) / scale;
+
+    case GXComponentFormat::S8:
+        return static_cast<float>(static_cast<int8_t>(readMemory8(address))) /
+               scale;
+
+    case GXComponentFormat::U16:
+        return static_cast<float>(readMemory16(address)) / scale;
+
+    case GXComponentFormat::S16:
+        return static_cast<float>(static_cast<int16_t>(readMemory16(address))) /
+               scale;
+
+    case GXComponentFormat::F32: {
+        uint32_t raw = readMemory32(address);
+
+        float result;
+        std::memcpy(&result, &raw, sizeof(result));
+
+        return result;
+    }
+    }
+
+    return 0.0f;
+}
+
+GXVec3 GX::readIndexedPosition(uint8_t vat, uint32_t index) {
+    uint32_t address = getIndexedAddress(GXArrayAttribute::Position, index);
+
+    const GXPositionFormat fmt = state.cp.getPositionFormat(vat);
+
+    GXVec3 result{};
+    result.x = readMemoryComponent(address, fmt.format, fmt.fractionalBits);
+    result.y = readMemoryComponent(address, fmt.format, fmt.fractionalBits);
+
+    if (fmt.components == 3) {
+        result.z = readMemoryComponent(address, fmt.format, fmt.fractionalBits);
+    }
+
+    return result;
+}
+
+GXVec3 GX::readIndexedNormal(uint8_t vat, uint32_t index) {
+    uint32_t address = getIndexedAddress(GXArrayAttribute::Normal, index);
+
+    const GXNormalFormat fmt = state.cp.getNormalFormat(vat);
+
+    GXVec3 result{};
+    result.x = readMemoryComponent(address, fmt.format, 0);
+    result.y = readMemoryComponent(address, fmt.format, 0);
+    result.z = readMemoryComponent(address, fmt.format, 0);
+
+    return result;
+}
+
+GXVec2 GX::readIndexedTexCoord(uint8_t vat, uint32_t texIndex, uint32_t index) {
+    const auto attribute = static_cast<GXArrayAttribute>(
+        static_cast<uint8_t>(GXArrayAttribute::Tex0) + texIndex);
+
+    uint32_t address = getIndexedAddress(attribute, index);
+
+    const GXTexCoordFormat fmt = state.cp.getTexCoordFormat(vat, texIndex);
+
+    GXVec2 result{};
+    result.x = readMemoryComponent(address, fmt.format, fmt.fractionalBits);
+
+    if (fmt.components == 2) {
+        result.y = readMemoryComponent(address, fmt.format, fmt.fractionalBits);
+    }
+
+    return result;
+}
+
+GXColor GX::readIndexedColor(uint8_t vat, uint32_t colorIndex, uint32_t index) {
+    GXArrayAttribute attribute =
+        colorIndex == 0 ? GXArrayAttribute::Color0 : GXArrayAttribute::Color1;
+
+    uint32_t address = getIndexedAddress(attribute, index);
+
+    GXColorFormat format = state.cp.getColorFormat(vat, colorIndex).format;
+
+    GXColor result{};
+
+    auto readByte = [&]() { return Bus::readPhysical8(address++); };
+
+    switch (format) {
+    case GXColorFormat::RGB8:
+        result.r = readByte() / 255.0f;
+        result.g = readByte() / 255.0f;
+        result.b = readByte() / 255.0f;
+        result.a = 1.0f;
+        break;
+
+    case GXColorFormat::RGBX8:
+        result.r = readByte() / 255.0f;
+        result.g = readByte() / 255.0f;
+        result.b = readByte() / 255.0f;
+        readByte();
+        result.a = 1.0f;
+        break;
+
+    case GXColorFormat::RGBA8:
+        result.r = readByte() / 255.0f;
+        result.g = readByte() / 255.0f;
+        result.b = readByte() / 255.0f;
+        result.a = readByte() / 255.0f;
+        break;
+
+    case GXColorFormat::RGB565: {
+        uint16_t raw = static_cast<uint16_t>(read8()) << 8 | read8();
+
+        uint32_t r = (raw >> 11) & 0x1F;
+        uint32_t g = (raw >> 5) & 0x3F;
+        uint32_t b = raw & 0x1F;
+
+        result.r = r / 31.0f;
+        result.g = g / 63.0f;
+        result.b = b / 31.0f;
+        result.a = 1.0f;
+        break;
+    }
+
+    case GXColorFormat::RGBA4: {
+        uint16_t raw = static_cast<uint16_t>(read8()) << 8 | read8();
+
+        result.r = ((raw >> 12) & 0xF) / 15.0f;
+        result.g = ((raw >> 8) & 0xF) / 15.0f;
+        result.b = ((raw >> 4) & 0xF) / 15.0f;
+        result.a = (raw & 0xF) / 15.0f;
+        break;
+    }
+
+    case GXColorFormat::RGBA6: {
+        uint32_t raw = static_cast<uint32_t>(read8()) << 16 |
+                       static_cast<uint32_t>(read8()) << 8 | read8();
+
+        result.r = ((raw >> 18) & 0x3F) / 63.0f;
+        result.g = ((raw >> 12) & 0x3F) / 63.0f;
+        result.b = ((raw >> 6) & 0x3F) / 63.0f;
+        result.a = (raw & 0x3F) / 63.0f;
+        break;
+    }
+
+    default:
+        Logger::log("GX", LogLevel::Warning,
+                    "Indexed packed color not implemented yet");
+        break;
+    }
+
+    return result;
+}
+
+void GX::readDirectNBT(uint8_t vat, GXVertex &vertex) {
+    const auto fmt = state.cp.getNormalFormat(vat);
+
+    auto readVec = [&]() {
+        GXVec3 result{};
+
+        result.x = readComponent(fmt.format, 0);
+        result.y = readComponent(fmt.format, 0);
+        result.z = readComponent(fmt.format, 0);
+
+        return result;
+    };
+
+    vertex.normal = readVec();
+    vertex.binormal = readVec();
+    vertex.tangent = readVec();
 }
