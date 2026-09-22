@@ -14,6 +14,11 @@ void GXCommandProcessorState::write(uint8_t reg, uint32_t value) {
         return;
     }
 
+    if (reg == 0x30) {
+        positionMatrixIndex = value;
+        return;
+    }
+
     if (reg >= 0x70 && reg <= 0x77) {
         vat[reg - 0x70].a = value;
         return;

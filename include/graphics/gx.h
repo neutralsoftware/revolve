@@ -16,11 +16,27 @@ struct GXVec3 {
     float z = 0.0f;
 };
 
+struct GXVec4 {
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    float w = 1;
+};
+
 struct GXColor {
     float r = 0.0f;
     float g = 0.0f;
     float b = 0.0f;
     float a = 0.0f;
+};
+
+struct GXMatrix3x4 {
+    float m[3][4]{};
+};
+
+struct GXProjection {
+    float values[6]{};
+    uint32_t mode = 0;
 };
 
 struct GXVertex {
@@ -240,6 +256,10 @@ class GXCommandProcessorState {
 
     uint32_t getVertexSize(uint8_t vatIndex) const;
 
+    inline uint32_t getPositionMatrixIndex() const {
+        return positionMatrixIndex;
+    }
+
   private:
     void decodeVCDLo(uint32_t value);
     void decodeVCDHi(uint32_t value);
@@ -252,10 +272,16 @@ class GXCommandProcessorState {
 
     std::array<uint32_t, 16> arrayBases{};
     std::array<uint32_t, 16> arrayStrides{};
+
+    uint32_t positionMatrixIndex = 0;
 };
 
 struct GXXFState {
     std::array<uint32_t, 0x2000> registers{};
+
+    std::array<float, 1024> matrixMemory{};
+
+    GXProjection projection{};
 };
 
 struct GXBPState {
@@ -353,6 +379,14 @@ class GX {
 
     void assemblePrimitive(GXPrimitive primitive,
                            const std::vector<GXVertex> &vertices);
+
+    void writeXF(uint16_t address, uint32_t value);
+
+    GXMatrix3x4 getPositionMatrix(uint32_t matrixIndex) const;
+    uint32_t getVertexPositionMatrixIndex(const GXVertex &vertex) const;
+
+    GXVec4 transformPosition(const GXVertex &vertex) const;
+    GXVec4 projectPosition(const GXVec4 &v) const;
 
     GXFifoReader reader{};
     GXState state{};

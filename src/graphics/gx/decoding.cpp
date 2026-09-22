@@ -107,15 +107,7 @@ void GX::processXFLoad() {
     for (uint32_t i = 0; i < count; i++) {
         uint32_t value = read32();
 
-        uint32_t target = static_cast<uint32_t>(address) + i;
-
-        if (target < state.xf.registers.size())
-            state.xf.registers[target] = value;
-        else {
-            Logger::log("GX", LogLevel::Warning,
-                        "XF address out of range: " +
-                            utils::toHexString(target));
-        }
+        writeXF(static_cast<uint16_t>(address + i), value);
     }
 }
 
@@ -631,4 +623,98 @@ void GX::assemblePrimitive(GXPrimitive primitive,
         }
         break;
     }
+}
+
+void GX::writeXF(uint16_t address, uint32_t value) {
+    if (address < state.xf.matrixMemory.size()) {
+        float f;
+        std::memcpy(&f, &value, sizeof(f));
+
+        state.xf.matrixMemory[address] = f;
+        return;
+    }
+
+    if (address >= 0x1020 && address <= 0x1025) {
+        float f;
+        std::memcpy(&f, &value, sizeof(f));
+
+        state.xf.projection.values[address - 0x1020] = f;
+        return;
+    }
+
+    if (address == 0x1026) {
+        state.xf.projection.mode = value;
+        return;
+    }
+
+    if (address < state.xf.registers.size())
+        state.xf.registers[address] = value;
+}
+
+GXMatrix3x4 GX::getPositionMatrix(uint32_t matrixIndex) const {
+    GXMatrix3x4 result{};
+
+    const uint32_t base = matrixIndex;
+
+    for (uint32_t row = 0; row < 3; ++row) {
+        for (uint32_t col = 0; col < 4; ++col) {
+            result.m[row][col] = state.xf.matrixMemory[base + row * 4 + col];
+        }
+    }
+
+    return result;
+}
+
+uint32_t GX::getVertexPositionMatrixIndex(const GXVertex &vertex) const {
+
+    if (state.cp.getVCD().positionMatrixIndex)
+        return vertex.positionMatrixIndex;
+
+    return state.cp.getPositionMatrixIndex();
+}
+
+GXVec4 GX::transformPosition(const GXVertex &vertex) const {
+
+    uint32_t matrixIndex = getVertexPositionMatrixIndex(vertex);
+
+    GXMatrix3x4 matrix = getPositionMatrix(matrixIndex);
+
+    const GXVec3 &p = vertex.position;
+
+    GXVec4 out{};
+
+    out.x = matrix.m[0][0] * p.x + matrix.m[0][1] * p.y + matrix.m[0][2] * p.z +
+            matrix.m[0][3];
+
+    out.y = matrix.m[1][0] * p.x + matrix.m[1][1] * p.y + matrix.m[1][2] * p.z +
+            matrix.m[1][3];
+
+    out.z = matrix.m[2][0] * p.x + matrix.m[2][1] * p.y + matrix.m[2][2] * p.z +
+            matrix.m[2][3];
+
+    out.w = 1.0f;
+
+    return out;
+}
+
+GXVec4 GX::projectPosition(const GXVec4 &v) const {
+    const auto &p = state.xf.projection.values;
+
+    GXVec4 out{};
+
+    if (state.xf.projection.mode == 0) {
+        // Perspective
+        out.x = p[0] * v.x + p[1] * v.z;
+        out.y = p[2] * v.y + p[3] * v.z;
+        out.z = p[4] * v.z + p[5];
+        out.w = -v.z;
+    } else {
+        // Orthographic
+        out.x = p[0] * v.x + p[1];
+        out.y = p[2] * v.y + p[3];
+        out.z = p[4] * v.z + p[5];
+        out.w = 1.0f;
+    }
+
+    return out;
 }
