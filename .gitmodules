@@ -1,0 +1,3 @@
+[submodule "external/opal"]
+	path = external/opal
+	url = https://github.com/neutralsoftware/opal.git

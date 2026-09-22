@@ -34,7 +34,11 @@ include_directories(extern include)
 
 file(GLOB_RECURSE REVOLVE_SOURCES CONFIGURE_DEPENDS src/*.cpp)
 add_executable(revolve ${REVOLVE_SOURCES})
-target_link_libraries(revolve PRIVATE OpenSSL::Crypto PkgConfig::ZSTD)
+
+set(OPAL_BACKEND AUTO CACHE STRING "AUTO")
+add_subdirectory(external/opal)
+
+target_link_libraries(revolve PRIVATE OpenSSL::Crypto PkgConfig::ZSTD Opal::Opal)
 
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS tests/runner.cpp)
 add_compile_definitions(
