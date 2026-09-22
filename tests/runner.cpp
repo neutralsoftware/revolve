@@ -9,6 +9,7 @@
 
 int runBroadwaySuite();
 int runDiscSuite();
+int runGraphicsSuite();
 int runIOSSuite();
 
 std::string getTestBuildOutputPath(const std::string &fileName) {
@@ -148,6 +149,8 @@ int main(int argc, char *argv[]) {
         return runBroadwaySuite();
     if (suite == "disc")
         return runDiscSuite();
+    if (suite == "graphics")
+        return runGraphicsSuite();
     if (suite == "ios")
         return runIOSSuite();
 

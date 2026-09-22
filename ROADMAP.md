@@ -63,11 +63,11 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 
 ## Disc
 
-- [ ] Implement disc image reading
-- [ ] Implement disc image encryption/decryption
-- [ ] Parse FST
-- [ ] Read files by path
-- [ ] Load executables from disc images
+- [x] Implement disc image reading
+- [x] Implement disc image encryption/decryption
+- [x] Parse FST
+- [x] Read files by path
+- [x] Load executables from disc images
 
 ## GX / Hollywood Graphics
 
