@@ -9,6 +9,7 @@
 #include "disc.h"
 #include "graphics/cp.h"
 #include "graphics/video_interface.h"
+#include "graphics/wgpipe.h"
 #include "ios/ios.h"
 #include "ios/ipc.h"
 #include <memory>
@@ -83,6 +84,8 @@ class Device {
     std::shared_ptr<DiscImage> disc = std::make_shared<DiscImage>();
     std::shared_ptr<VideoInterface> vi = std::make_shared<VideoInterface>();
     std::shared_ptr<CommandProcessor> cp = std::make_shared<CommandProcessor>();
+    std::shared_ptr<WriteGatherPipe> wgpipe =
+        std::make_shared<WriteGatherPipe>();
 };
 
 #endif

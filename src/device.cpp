@@ -29,6 +29,8 @@ std::shared_ptr<Device> Device::createDevice() {
                                                 globalDevice->vi.get());
     globalDevice->mmioDispatcher.registerDevice(CP_BASE, CP_SIZE,
                                                 globalDevice->cp.get());
+    globalDevice->mmioDispatcher.registerDevice(WGPIPE_BASE, WGPIPE_SIZE,
+                                                globalDevice->wgpipe.get());
 
     globalDevice->ios.init();
     globalDevice->vi->initialize();

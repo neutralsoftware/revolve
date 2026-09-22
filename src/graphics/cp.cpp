@@ -275,3 +275,19 @@ void CommandProcessor::updateInterrupt() {
         Device::globalDevice->pi->clearInterrupt(PIInterrupt::CP);
     }
 }
+
+void CommandProcessor::onGatherPipeBurst() {
+    if (!state.fifoLinkEnable) {
+        return;
+    }
+
+    if (state.fifo.writePointer == state.fifo.end) {
+        state.fifo.writePointer = state.fifo.base;
+    } else {
+        state.fifo.writePointer += 32;
+    }
+
+    state.fifo.readWriteDistance += 32;
+
+    updateStatus();
+}

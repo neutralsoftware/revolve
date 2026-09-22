@@ -93,6 +93,24 @@ void Bus::writePhysical32(uint32_t addr, uint32_t value) {
     }
 }
 
+void Bus::writePhysical8(uint32_t addr, uint8_t value) {
+    ResolvedAddress resolved = resolveAddress(addr);
+    Memory &mem = Device::globalDevice->memory;
+    switch (resolved.region) {
+    case MemoryRegion::MEM1:
+        mem.write8(resolved.offset, value, 1);
+        break;
+    case MemoryRegion::MEM2:
+        mem.write8(resolved.offset, value, 2);
+        break;
+    case MemoryRegion::MMIO:
+        Device::globalDevice->mmioDispatcher.write8(resolved.offset, value);
+        break;
+    default:
+        break;
+    }
+}
+
 uint8_t Bus::read8(uint32_t addr) {
     uint32_t physical =
         Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Read);
