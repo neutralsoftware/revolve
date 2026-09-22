@@ -168,16 +168,48 @@ GXCommandProcessorState::getTexCoordFormat(uint8_t vatIndex,
 
     const GXVAT &v = vat[vatIndex];
 
+    auto decode = [&](uint32_t word, uint32_t elementsShift,
+                      uint32_t formatShift, uint32_t fracShift) {
+        result.components = ((word >> elementsShift) & 0x1) ? 2 : 1;
+
+        result.format =
+            static_cast<GXComponentFormat>((word >> formatShift) & 0x7);
+
+        result.fractionalBits =
+            static_cast<uint8_t>((word >> fracShift) & 0x1F);
+    };
+
     switch (texIndex) {
     case 0:
-        result.components = ((v.a >> 21) & 0x1) ? 2 : 1;
-        result.format = static_cast<GXComponentFormat>((v.a >> 22) & 0x7);
-        result.fractionalBits = static_cast<uint8_t>((v.a >> 25) & 0x1F);
+        decode(v.a, 21, 22, 25);
         break;
 
-    default:
-        // TexCoord 1-7 are stored in the B and C registers, with 2 bits per
-        // texcoord
+    case 1:
+        decode(v.b, 0, 1, 4);
+        break;
+
+    case 2:
+        decode(v.b, 9, 10, 13);
+        break;
+
+    case 3:
+        decode(v.b, 18, 19, 22);
+        break;
+
+    case 4:
+        decode(v.b, 27, 28, 31);
+        break;
+
+    case 5:
+        decode(v.c, 5, 6, 9);
+        break;
+
+    case 6:
+        decode(v.c, 14, 15, 18);
+        break;
+
+    case 7:
+        decode(v.c, 23, 24, 27);
         break;
     }
 
