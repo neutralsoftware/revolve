@@ -94,9 +94,11 @@ class CommandProcessor : public MMIODevice {
             (target & 0xFFFF0000) | static_cast<uint32_t>(value & FIFO_LO_MASK);
     }
 
-    const CPFifo &getFifo() const { return state.fifo; }
+    CPFifo &getFifo() { return state.fifo; }
 
     void onGatherPipeBurst();
+
+    void onFifoBlockConsumed();
 
   private:
     uint16_t read16(uint32_t offset) const;

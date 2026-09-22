@@ -291,3 +291,17 @@ void CommandProcessor::onGatherPipeBurst() {
 
     updateStatus();
 }
+
+void CommandProcessor::onFifoBlockConsumed() {
+    if (state.fifo.readPointer == state.fifo.end)
+        state.fifo.readPointer = state.fifo.base;
+    else
+        state.fifo.readPointer += 32;
+
+    if (state.fifo.readWriteDistance >= 32)
+        state.fifo.readWriteDistance -= 32;
+    else
+        state.fifo.readWriteDistance = 0;
+
+    updateStatus();
+}
