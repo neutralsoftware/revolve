@@ -17,8 +17,128 @@ enum class GXCommand : uint8_t {
     BPLoad = 0x61
 };
 
-struct GXCPState {
+enum class GXCPRegister : uint8_t {
+    MatrixIndexA = 0x30,
+    MatrixIndexB = 0x40,
+
+    VCDLo = 0x50,
+    VCDHi = 0x60,
+
+    VAT_A0 = 0x70,
+    VAT_B0 = 0x80,
+    VAT_C0 = 0x90,
+
+    ArrayBase0 = 0xA0,
+    ArrayStride0 = 0xB0,
+};
+
+enum class GXVertexAttributeMode : uint8_t {
+    None = 0,
+    Direct = 1,
+    Index8 = 2,
+    Index16 = 3
+};
+
+struct GXVertexDescriptor {
+    bool positionMatrixIndex = false;
+
+    std::array<bool, 8> texMatrixIndex{};
+
+    GXVertexAttributeMode position = GXVertexAttributeMode::None;
+    GXVertexAttributeMode normal = GXVertexAttributeMode::None;
+
+    GXVertexAttributeMode color0 = GXVertexAttributeMode::None;
+    GXVertexAttributeMode color1 = GXVertexAttributeMode::None;
+
+    std::array<GXVertexAttributeMode, 8> texCoord{};
+};
+
+struct GXVAT {
+    uint32_t a = 0;
+    uint32_t b = 0;
+    uint32_t c = 0;
+};
+
+enum class GXComponentFormat : uint8_t {
+    U8 = 0,
+    S8 = 1,
+    U16 = 2,
+    S16 = 3,
+    F32 = 4
+};
+
+struct GXPositionFormat {
+    uint32_t components = 3;
+    GXComponentFormat format = GXComponentFormat::F32;
+    uint8_t fractionalBits = 0;
+};
+
+class GXCommandProcessorState {
+  public:
+    void write(uint8_t reg, uint32_t value);
+
+    inline const GXVertexDescriptor &getVCD() const { return vcd; }
+
+    inline const GXVAT &getVAT(uint8_t index) const { return vat[index]; }
+    inline uint32_t getArrayBase(uint8_t index) const {
+        return arrayBases[index];
+    }
+
+    inline uint32_t getArrayStride(uint8_t index) const {
+        return arrayStrides[index];
+    }
+
+    inline static GXVertexAttributeMode decodeMode(uint32_t value) {
+        return static_cast<GXVertexAttributeMode>(value & 0x3);
+    }
+
+    inline static uint32_t getAttributeIndexSize(GXVertexAttributeMode mode) {
+        switch (mode) {
+        case GXVertexAttributeMode::None:
+            return 0;
+        case GXVertexAttributeMode::Direct:
+            return 0;
+        case GXVertexAttributeMode::Index8:
+            return 1;
+        case GXVertexAttributeMode::Index16:
+            return 2;
+        default:
+            return 0;
+        }
+    }
+
+    inline static uint32_t componentSize(GXComponentFormat format) {
+        switch (format) {
+        case GXComponentFormat::U8:
+            return 1;
+        case GXComponentFormat::S8:
+            return 1;
+        case GXComponentFormat::U16:
+            return 2;
+        case GXComponentFormat::S16:
+            return 2;
+        case GXComponentFormat::F32:
+            return 4;
+        default:
+            return 0;
+        }
+    }
+
+    GXPositionFormat getPositionFormat(uint8_t vatIndex) const;
+    uint32_t getDirectPositionSize(uint8_t vatIndex) const;
+
+  private:
+    void decodeVCDLo(uint32_t value);
+    void decodeVCDHi(uint32_t value);
+
     std::array<uint32_t, 256> registers{};
+
+    GXVertexDescriptor vcd{};
+
+    std::array<GXVAT, 8> vat{};
+
+    std::array<uint32_t, 16> arrayBases{};
+    std::array<uint32_t, 16> arrayStrides{};
 };
 
 struct GXXFState {
@@ -30,7 +150,7 @@ struct GXBPState {
 };
 
 struct GXState {
-    GXCPState cp{};
+    GXCommandProcessorState cp{};
     GXXFState xf{};
     GXBPState bp{};
 };

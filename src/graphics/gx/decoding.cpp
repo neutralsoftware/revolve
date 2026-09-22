@@ -58,13 +58,21 @@ void GX::processCommand() {
         processBPLoad();
         break;
     }
+
+    if (command & 0x80) {
+        processPrimitive(command);
+        return;
+    }
+
+    Logger::log("GX", LogLevel::Warning,
+                "Unknown GX command: 0x" + utils::toHexString(command));
 }
 
 void GX::processCPLoad() {
     uint8_t reg = read8();
     uint32_t value = read32();
 
-    state.cp.registers[reg] = value;
+    state.cp.write(reg, value);
 
     Logger::log("GX", LogLevel::Info,
                 "CPLoad: Register 0x" + utils::toHexString(reg) + " = 0x" +
@@ -131,8 +139,35 @@ void GX::processPrimitive(uint8_t command) {
 
     uint16_t vertexCount = read16();
 
+    const auto &vcd = state.cp.getVCD();
+
     Logger::log("GX", LogLevel::Info,
                 "Primitive: 0x" + utils::toHexString(primitive) + " VAT: 0x" +
                     utils::toHexString(vat) +
                     " Vertex Count: " + std::to_string(vertexCount));
+
+    uint32_t vertexSize = 0;
+
+    if (vcd.positionMatrixIndex)
+        vertexSize += 1;
+
+    switch (vcd.position) {
+    case GXVertexAttributeMode::None:
+        break;
+
+    case GXVertexAttributeMode::Index8:
+        vertexSize += 1;
+        break;
+
+    case GXVertexAttributeMode::Index16:
+        vertexSize += 2;
+        break;
+
+    case GXVertexAttributeMode::Direct:
+        vertexSize += state.cp.getDirectPositionSize(vat);
+        break;
+    }
+
+    Logger::log("GX", LogLevel::Info,
+                "Partial vertex size: " + std::to_string(vertexSize));
 }
