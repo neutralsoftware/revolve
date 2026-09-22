@@ -134,16 +134,195 @@ void GX::initializeFifoReader() {
 }
 
 void GX::processPrimitive(uint8_t command) {
-    uint8_t vat = command & 0x07;
-    uint8_t primitive = command & 0xF8;
+    const uint8_t vat = command & 0x07;
+    const uint8_t primitive = command & 0xF8;
 
-    uint16_t vertexCount = read16();
-
-    uint32_t vertexSize = state.cp.getVertexSize(vat);
+    const uint16_t vertexCount = read16();
 
     Logger::log("GX", LogLevel::Info,
                 "Primitive: 0x" + utils::toHexString(primitive) +
-                    " VAT: " + std::to_string(vat) +
-                    " Vertex Count: " + std::to_string(vertexCount) +
-                    " Partial Vertex Size: " + std::to_string(vertexSize));
+                    " VAT=" + std::to_string(vat) +
+                    " vertices=" + std::to_string(vertexCount));
+
+    for (uint32_t i = 0; i < vertexCount; ++i) {
+        GXVertex vertex = readVertex(vat);
+
+        Logger::log("GX", LogLevel::Info,
+                    "Vertex " + std::to_string(i) + " position=(" +
+                        std::to_string(vertex.position.x) + ", " +
+                        std::to_string(vertex.position.y) + ", " +
+                        std::to_string(vertex.position.z) + ")");
+    }
+}
+
+float GX::readComponent(GXComponentFormat format, uint8_t fractionalBits) {
+    const float scale = static_cast<float>(1u << fractionalBits);
+
+    switch (format) {
+    case GXComponentFormat::U8:
+        return static_cast<float>(read8()) / scale;
+
+    case GXComponentFormat::S8:
+        return static_cast<float>(static_cast<int8_t>(read8())) / scale;
+
+    case GXComponentFormat::U16:
+        return static_cast<float>(read16()) / scale;
+
+    case GXComponentFormat::S16:
+        return static_cast<float>(static_cast<int16_t>(read16())) / scale;
+
+    case GXComponentFormat::F32: {
+        uint32_t raw = read32();
+
+        float result;
+        std::memcpy(&result, &raw, sizeof(result));
+
+        return result;
+    }
+    }
+
+    Logger::log("GX", LogLevel::Warning,
+                "Unknown component format: " +
+                    std::to_string(static_cast<uint32_t>(format)));
+
+    return 0.0f;
+}
+
+GXVec3 GX::readDirectPosition(uint8_t vat) {
+    const GXPositionFormat fmt = state.cp.getPositionFormat(vat);
+
+    GXVec3 result{};
+
+    result.x = readComponent(fmt.format, fmt.fractionalBits);
+
+    result.y = readComponent(fmt.format, fmt.fractionalBits);
+
+    if (fmt.components == 3) {
+        result.z = readComponent(fmt.format, fmt.fractionalBits);
+    }
+
+    return result;
+}
+
+GXVec3 GX::readDirectNormal(uint8_t vat) {
+    const GXNormalFormat fmt = state.cp.getNormalFormat(vat);
+
+    GXVec3 result{};
+
+    result.x = readComponent(fmt.format, 0);
+    result.y = readComponent(fmt.format, 0);
+    result.z = readComponent(fmt.format, 0);
+
+    return result;
+}
+
+GXColor GX::readDirectColor(uint8_t vat, uint32_t colorIndex) {
+    GXColor result{};
+
+    GXColorFormat format = state.cp.getColorFormat(vat, colorIndex).format;
+
+    switch (format) {
+    case GXColorFormat::RGB8:
+        result.r = read8() / 255.0f;
+        result.g = read8() / 255.0f;
+        result.b = read8() / 255.0f;
+        result.a = 1.0f;
+        break;
+
+    case GXColorFormat::RGBX8:
+        result.r = read8() / 255.0f;
+        result.g = read8() / 255.0f;
+        result.b = read8() / 255.0f;
+        read8(); // X
+        result.a = 1.0f;
+        break;
+
+    case GXColorFormat::RGBA8:
+        result.r = read8() / 255.0f;
+        result.g = read8() / 255.0f;
+        result.b = read8() / 255.0f;
+        result.a = read8() / 255.0f;
+        break;
+
+    default:
+        Logger::log("GX", LogLevel::Warning, "Color format not decoded yet");
+
+        break;
+    }
+
+    return result;
+}
+
+GXVec2 GX::readDirectTexCoord(uint8_t vat, uint32_t index) {
+    const GXTexCoordFormat fmt = state.cp.getTexCoordFormat(vat, index);
+
+    GXVec2 result{};
+
+    result.x = readComponent(fmt.format, fmt.fractionalBits);
+
+    if (fmt.components == 2) {
+        result.y = readComponent(fmt.format, fmt.fractionalBits);
+    }
+
+    return result;
+}
+
+GXVertex GX::readVertex(uint8_t vat) {
+    GXVertex vertex{};
+
+    const auto &vcd = state.cp.getVCD();
+
+    if (vcd.positionMatrixIndex) {
+        vertex.positionMatrixIndex = read8();
+    }
+
+    for (uint32_t i = 0; i < 8; ++i) {
+        if (vcd.texMatrixIndex[i]) {
+            vertex.texMatrixIndices[i] = read8();
+        }
+    }
+    switch (vcd.position) {
+    case GXVertexAttributeMode::None:
+        break;
+
+    case GXVertexAttributeMode::Direct:
+        vertex.position = readDirectPosition(vat);
+        break;
+
+    case GXVertexAttributeMode::Index8:
+    case GXVertexAttributeMode::Index16:
+        Logger::log("GX", LogLevel::Warning,
+                    "Indexed position not implemented yet");
+        break;
+    }
+
+    switch (vcd.normal) {
+    case GXVertexAttributeMode::None:
+        break;
+
+    case GXVertexAttributeMode::Direct:
+        vertex.normal = readDirectNormal(vat);
+        break;
+
+    case GXVertexAttributeMode::Index8:
+    case GXVertexAttributeMode::Index16:
+        Logger::log("GX", LogLevel::Warning,
+                    "Indexed normal not implemented yet");
+        break;
+    }
+
+    if (vcd.color0 == GXVertexAttributeMode::Direct)
+        vertex.color0 = readDirectColor(vat, 0);
+
+    if (vcd.color1 == GXVertexAttributeMode::Direct)
+        vertex.color1 = readDirectColor(vat, 1);
+
+    for (uint32_t i = 0; i < 8; ++i) {
+        if (vcd.texCoord[i] == GXVertexAttributeMode::Direct) {
+
+            vertex.texCoords[i] = readDirectTexCoord(vat, i);
+        }
+    }
+
+    return vertex;
 }

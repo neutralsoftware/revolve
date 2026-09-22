@@ -4,6 +4,37 @@
 #include <array>
 #include <cstdint>
 
+struct GXVec2 {
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
+struct GXVec3 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+struct GXColor {
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    float a = 0.0f;
+};
+
+struct GXVertex {
+    uint8_t positionMatrixIndex = 0;
+    std::array<uint8_t, 8> texMatrixIndices{};
+
+    GXVec3 position{};
+    GXVec3 normal{};
+
+    GXColor color0{};
+    GXColor color1{};
+
+    std::array<GXVec2, 8> texCoords{};
+};
+
 struct GXFifoReader {
     uint32_t cursor = 0;
     uint32_t bytesIntoBlock = 0;
@@ -230,6 +261,14 @@ class GX {
     void processBPLoad();
 
     void processPrimitive(uint8_t command);
+
+    float readComponent(GXComponentFormat format, uint8_t fractionalBits);
+
+    GXVec3 readDirectPosition(uint8_t vatIndex);
+    GXVec3 readDirectNormal(uint8_t vat);
+    GXColor readDirectColor(uint8_t vat, uint32_t colorIndex);
+    GXVec2 readDirectTexCoord(uint8_t vat, uint32_t index);
+    GXVertex readVertex(uint8_t vat);
 
     GXFifoReader reader{};
     GXState state{};
