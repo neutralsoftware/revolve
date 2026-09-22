@@ -11,9 +11,9 @@ CP_LOAD 0x60, 0
 .if CASE == 1
     CP_LOAD 0x70, 0x00014009
 .elseif CASE == 2
-    CP_LOAD 0x70, 0x00014071
+    CP_LOAD 0x70, 0x00004071
 .elseif CASE == 3
-    CP_LOAD 0x70, 0x00014073
+    CP_LOAD 0x70, 0x00004073
 .elseif CASE == 4
     CP_LOAD 0x70, 0x000140F5
 .elseif CASE == 5

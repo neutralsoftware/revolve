@@ -2,6 +2,7 @@
 #include "core/utils.h"
 #include "device.h"
 #include "graphics/gx.h"
+#include <cmath>
 #include <cstdint>
 
 uint8_t GX::read8() {
@@ -88,9 +89,7 @@ void GX::processBPLoad() {
 
     state.bp.registers[reg] = value;
 
-    Logger::log("GX", LogLevel::Info,
-                "BPLoad: Register 0x" + utils::toHexString(reg) + " = 0x" +
-                    utils::toHexString(value));
+    writeBP(reg, value);
 }
 
 void GX::processXFLoad() {
@@ -121,8 +120,6 @@ void GX::run() {
     while (reader.availableBytes > 0) {
         processCommand();
     }
-
-    renderer->flush();
 }
 
 void GX::initializeFifoReader() {
@@ -226,6 +223,15 @@ GXColor GX::readDirectColor(uint8_t vat, uint32_t colorIndex) {
     GXColorFormat format = state.cp.getColorFormat(vat, colorIndex).format;
 
     switch (format) {
+    case GXColorFormat::RGB565: {
+        uint16_t raw = read16();
+        result.r = static_cast<float>((raw >> 11) & 0x1F) / 31.0f;
+        result.g = static_cast<float>((raw >> 5) & 0x3F) / 63.0f;
+        result.b = static_cast<float>(raw & 0x1F) / 31.0f;
+        result.a = 1.0f;
+        break;
+    }
+
     case GXColorFormat::RGB8:
         result.r = read8() / 255.0f;
         result.g = read8() / 255.0f;
@@ -247,6 +253,26 @@ GXColor GX::readDirectColor(uint8_t vat, uint32_t colorIndex) {
         result.b = read8() / 255.0f;
         result.a = read8() / 255.0f;
         break;
+
+    case GXColorFormat::RGBA4: {
+        uint16_t raw = read16();
+        result.r = static_cast<float>((raw >> 12) & 0xF) / 15.0f;
+        result.g = static_cast<float>((raw >> 8) & 0xF) / 15.0f;
+        result.b = static_cast<float>((raw >> 4) & 0xF) / 15.0f;
+        result.a = static_cast<float>(raw & 0xF) / 15.0f;
+        break;
+    }
+
+    case GXColorFormat::RGBA6: {
+        uint32_t raw = static_cast<uint32_t>(read8()) << 16;
+        raw |= static_cast<uint32_t>(read8()) << 8;
+        raw |= read8();
+        result.r = static_cast<float>((raw >> 18) & 0x3F) / 63.0f;
+        result.g = static_cast<float>((raw >> 12) & 0x3F) / 63.0f;
+        result.b = static_cast<float>((raw >> 6) & 0x3F) / 63.0f;
+        result.a = static_cast<float>(raw & 0x3F) / 63.0f;
+        break;
+    }
 
     default:
         Logger::log("GX", LogLevel::Warning, "Color format not decoded yet");
@@ -579,22 +605,61 @@ void GX::emitTriangle(const GXVertex &a, const GXVertex &b, const GXVertex &c) {
 }
 
 void GX::emitLine(const GXVertex &a, const GXVertex &b) {
-    GXVec3 sa = transformToScreen(a);
-    GXVec3 sb = transformToScreen(b);
+    GXRenderVertex ra = transformToRenderVertex(a);
+    GXRenderVertex rb = transformToRenderVertex(b);
+    if (ra.w == 0.0f || rb.w == 0.0f)
+        return;
 
-    Logger::log("GX", LogLevel::Info,
-                "LINE: " + std::to_string(a.position.x) + "," +
-                    std::to_string(a.position.y) + " | " +
-                    std::to_string(b.position.x) + "," +
-                    std::to_string(b.position.y));
+    const float ax = ra.x / ra.w;
+    const float ay = ra.y / ra.w;
+    const float bx = rb.x / rb.w;
+    const float by = rb.y / rb.w;
+    const float dx = bx - ax;
+    const float dy = by - ay;
+    const float length = std::sqrt(dx * dx + dy * dy);
+    if (length == 0.0f) {
+        emitPoint(a);
+        return;
+    }
+
+    const float nx = -dy / length * 0.008f;
+    const float ny = dx / length * 0.008f;
+    GXRenderVertex a0 = ra;
+    GXRenderVertex a1 = ra;
+    GXRenderVertex b0 = rb;
+    GXRenderVertex b1 = rb;
+    a0.x += nx * ra.w;
+    a0.y += ny * ra.w;
+    a1.x -= nx * ra.w;
+    a1.y -= ny * ra.w;
+    b0.x += nx * rb.w;
+    b0.y += ny * rb.w;
+    b1.x -= nx * rb.w;
+    b1.y -= ny * rb.w;
+    renderer->drawTriangle(a0, a1, b1);
+    renderer->drawTriangle(a0, b1, b0);
 }
 
 void GX::emitPoint(const GXVertex &point) {
-    GXVec3 sp = transformToScreen(point);
+    GXRenderVertex center = transformToRenderVertex(point);
+    if (center.w == 0.0f)
+        return;
 
-    Logger::log("GX", LogLevel::Info,
-                "POINT: " + std::to_string(point.position.x) + "," +
-                    std::to_string(point.position.y));
+    constexpr float halfSize = 0.015f;
+    GXRenderVertex bottomLeft = center;
+    GXRenderVertex bottomRight = center;
+    GXRenderVertex topLeft = center;
+    GXRenderVertex topRight = center;
+    bottomLeft.x -= halfSize * center.w;
+    bottomLeft.y -= halfSize * center.w;
+    bottomRight.x += halfSize * center.w;
+    bottomRight.y -= halfSize * center.w;
+    topLeft.x -= halfSize * center.w;
+    topLeft.y += halfSize * center.w;
+    topRight.x += halfSize * center.w;
+    topRight.y += halfSize * center.w;
+    renderer->drawTriangle(bottomLeft, bottomRight, topRight);
+    renderer->drawTriangle(bottomLeft, topRight, topLeft);
 }
 
 void GX::assemblePrimitive(GXPrimitive primitive,
@@ -820,3 +885,75 @@ GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
 }
 
 void GX::initialize() { renderer->initialize(); }
+
+void GX::writeBP(uint8_t reg, uint32_t value) {
+    switch (reg) {
+    case 0x49:
+        state.bp.copy.sourceX = value & 0x3FF;
+        state.bp.copy.sourceY = (value >> 10) & 0x3FF;
+        break;
+    case 0x4A:
+        state.bp.copy.sourceWidth = (value & 0x3FF) + 1;
+        state.bp.copy.sourceHeight = ((value >> 10) & 0x3FF) + 1;
+        break;
+    case 0x4B:
+        state.bp.copy.xfbAddress = (value & 0x00FFFFFF) << 5;
+        break;
+    case 0x4D:
+        state.bp.copy.xfbStride = value & 0x3FF;
+        break;
+    case 0x4F: {
+        uint8_t a = static_cast<uint8_t>(value & 0xFF);
+
+        uint8_t r = static_cast<uint8_t>((value >> 8) & 0xFF);
+
+        state.bp.copy.clearColor.a = a / 255.0f;
+
+        state.bp.copy.clearColor.r = r / 255.0f;
+
+        break;
+    }
+
+    case 0x50: {
+        uint8_t g = static_cast<uint8_t>((value >> 8) & 0xFF);
+
+        uint8_t b = static_cast<uint8_t>(value & 0xFF);
+
+        state.bp.copy.clearColor.g = g / 255.0f;
+
+        state.bp.copy.clearColor.b = b / 255.0f;
+
+        break;
+    }
+
+    case 0x51:
+        state.bp.copy.clearDepth = value & 0xFFFFFF;
+        break;
+
+    case 0x52:
+        state.bp.copy.clearAfterCopy = (value & BP_COPY_CLEAR_MASK) != 0;
+        state.bp.copy.copyToXfb = (value & BP_COPY_TO_XFB_MASK) != 0;
+
+        executeEfbCopy();
+
+        break;
+    }
+}
+
+void GX::executeEfbCopy() {
+    renderer->flushEFB();
+
+    if (!state.bp.copy.copyToXfb) {
+        Logger::log("GX", LogLevel::Warning,
+                    "Texture EFB copies not implemented yet");
+        return;
+    }
+
+    renderer->copyEFBToXFB(state.bp.copy);
+
+    if (state.bp.copy.clearAfterCopy) {
+        renderer->clearEFB(state.bp.copy.clearColor, state.bp.copy.clearDepth);
+    }
+
+    renderer->presentXFB();
+}

@@ -194,6 +194,7 @@ void VideoInterface::checkInterrupts() {
 
 void VideoInterface::onFrame() {
     auto &renderer = Device::globalDevice->gx.renderer;
+    renderer->presentXFB();
 }
 
 uint32_t VideoInterface::readRegister32(uint32_t offset) const {

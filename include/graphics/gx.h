@@ -316,8 +316,30 @@ struct GXXFState {
     GXViewport viewport{};
 };
 
+struct GXBPCopyState {
+    uint16_t sourceX = 0;
+    uint16_t sourceY = 0;
+
+    uint16_t sourceWidth = 0;
+    uint16_t sourceHeight = 0;
+
+    uint32_t xfbAddress = 0;
+    uint16_t xfbStride = 0;
+
+    GXColor clearColor{};
+    uint32_t clearDepth = 0xFFFFFF;
+
+    bool clearAfterCopy = false;
+    bool copyToXfb = false;
+};
+
+static constexpr uint32_t BP_COPY_CLEAR_MASK = 1u << 11;
+
+static constexpr uint32_t BP_COPY_TO_XFB_MASK = 1u << 14;
+
 struct GXBPState {
     std::array<uint32_t, 256> registers{};
+    GXBPCopyState copy{};
 };
 
 struct GXState {
@@ -350,6 +372,20 @@ struct GXLine {
 static constexpr uint32_t EFB_WIDTH = 640;
 static constexpr uint32_t EFB_HEIGHT = 528;
 
+struct GXXFB {
+    std::shared_ptr<opal::Texture> texture;
+    std::shared_ptr<opal::Framebuffer> framebuffer;
+    std::shared_ptr<opal::RenderPass> renderPass;
+
+    uint32_t address = 0;
+    uint32_t stride = 0;
+
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    bool valid = false;
+};
+
 class GXRenderer {
   public:
     void initialize();
@@ -357,28 +393,41 @@ class GXRenderer {
     void drawTriangle(const GXRenderVertex &a, const GXRenderVertex &b,
                       const GXRenderVertex &c);
 
+    void flushEFB();
+
+    void copyEFBToXFB(const GXBPCopyState &copy);
+
+    void clearEFB(const GXColor &color, uint32_t depth);
+
+    void presentXFB();
+
     SDL_Window *window = nullptr;
 
-    void flush();
-
   private:
-    void uploadVertices();
+    void createEFB();
+    void createPresentPipeline();
+
+    void ensureXFB(uint32_t width, uint32_t height);
 
     std::shared_ptr<opal::Device> device;
 
-    std::shared_ptr<opal::Pipeline> pipeline;
-    std::shared_ptr<opal::ShaderProgram> shaderProgram;
+    std::shared_ptr<opal::Framebuffer> displayFramebuffer;
+    std::shared_ptr<opal::RenderPass> displayRenderPass;
 
-    std::shared_ptr<opal::Buffer> vertexBuffer;
-    std::shared_ptr<opal::DrawingState> drawingState;
+    std::shared_ptr<opal::Pipeline> gxPipeline;
+    std::shared_ptr<opal::ShaderProgram> gxShaderProgram;
 
-    // EFB
     std::shared_ptr<opal::Texture> efbColor;
-    std::shared_ptr<opal::DepthStencilBuffer> efbDepth;
+    std::shared_ptr<opal::Texture> efbDepth;
     std::shared_ptr<opal::Framebuffer> efbFramebuffer;
     std::shared_ptr<opal::RenderPass> efbRenderPass;
 
-    std::shared_ptr<opal::CommandBuffer> commandBuffer;
+    GXXFB xfb{};
+
+    std::shared_ptr<opal::Pipeline> presentPipeline;
+
+    std::shared_ptr<opal::Buffer> fullscreenBuffer;
+    std::shared_ptr<opal::DrawingState> fullscreenDrawingState;
 
     std::vector<GXRenderVertex> vertices;
 };
@@ -464,6 +513,9 @@ class GX {
     GXVec3 transformToScreen(const GXVertex &vertex) const;
 
     GXRenderVertex transformToRenderVertex(const GXVertex &vertex) const;
+
+    void writeBP(uint8_t reg, uint32_t value);
+    void executeEfbCopy();
 
     GXFifoReader reader{};
     GXState state{};

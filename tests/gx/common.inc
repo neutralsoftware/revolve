@@ -46,6 +46,16 @@ gx_stream:
 .endm
 
 .macro GX_END
+    .byte 0x61
+    .long 0x49000000
+    .byte 0x61
+    .long 0x4A083E7F
+    .byte 0x61
+    .long 0x4B000800
+    .byte 0x61
+    .long 0x4D000280
+    .byte 0x61
+    .long 0x52004800
     .balign 32, 0
 gx_stream_end:
 .endm
