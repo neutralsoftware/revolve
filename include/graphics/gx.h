@@ -347,6 +347,9 @@ struct GXLine {
     GXVertex b;
 };
 
+static constexpr uint32_t EFB_WIDTH = 640;
+static constexpr uint32_t EFB_HEIGHT = 528;
+
 class GXRenderer {
   public:
     void initialize();
@@ -356,9 +359,7 @@ class GXRenderer {
 
     SDL_Window *window = nullptr;
 
-    void finishGXBatch();
-
-    void present();
+    void flush();
 
   private:
     void uploadVertices();
@@ -371,13 +372,15 @@ class GXRenderer {
     std::shared_ptr<opal::Buffer> vertexBuffer;
     std::shared_ptr<opal::DrawingState> drawingState;
 
-    std::shared_ptr<opal::RenderPass> renderPass;
-    std::shared_ptr<opal::Framebuffer> framebuffer;
+    // EFB
+    std::shared_ptr<opal::Texture> efbColor;
+    std::shared_ptr<opal::DepthStencilBuffer> efbDepth;
+    std::shared_ptr<opal::Framebuffer> efbFramebuffer;
+    std::shared_ptr<opal::RenderPass> efbRenderPass;
 
     std::shared_ptr<opal::CommandBuffer> commandBuffer;
 
-    std::vector<GXRenderVertex> pendingVertices;
-    std::vector<GXRenderVertex> displayVertices;
+    std::vector<GXRenderVertex> vertices;
 };
 
 class GX {

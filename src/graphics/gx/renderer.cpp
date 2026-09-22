@@ -8,9 +8,9 @@
 
 void GXRenderer::drawTriangle(const GXRenderVertex &a, const GXRenderVertex &b,
                               const GXRenderVertex &c) {
-    pendingVertices.push_back(a);
-    pendingVertices.push_back(b);
-    pendingVertices.push_back(c);
+    vertices.push_back(a);
+    vertices.push_back(b);
+    vertices.push_back(c);
 }
 
 void GXRenderer::initialize() {
@@ -25,10 +25,21 @@ void GXRenderer::initialize() {
     window = context->makeWindow(1280, 720, "Revolve");
     device = opal::Device::acquire(context);
 
-    framebuffer = device->getDefaultFramebuffer();
+    efbColor = opal::Texture::create(opal::TextureType::Texture2D,
+                                     opal::TextureFormat::Rgba8, EFB_WIDTH,
+                                     EFB_HEIGHT);
+    efbDepth = opal::DepthStencilBuffer::create(
+        EFB_WIDTH, EFB_HEIGHT, opal::TextureFormat::Depth24Stencil8);
+    efbFramebuffer = opal::Framebuffer::create(EFB_WIDTH, EFB_HEIGHT);
 
-    renderPass = opal::RenderPass::create();
-    renderPass->setFramebuffer(framebuffer);
+    opal::Attachment colorAttachment{};
+    colorAttachment.texture = efbColor;
+    colorAttachment.type = opal::Attachment::Type::Color;
+    efbFramebuffer->addAttachment(colorAttachment);
+    efbFramebuffer->attachDepthStencilBuffer(efbDepth);
+
+    efbRenderPass = opal::RenderPass::create();
+    efbRenderPass->setFramebuffer(efbFramebuffer);
 
     auto globalShader =
         opal::Shader::createFromSource(SHADER, opal::ShaderType::Vertex);
@@ -90,43 +101,32 @@ void GXRenderer::initialize() {
     pipeline->build();
 }
 
-void GXRenderer::finishGXBatch() {
-    if (pendingVertices.empty())
-        return;
-
-    displayVertices = pendingVertices;
-    pendingVertices.clear();
-}
-
 void GXRenderer::uploadVertices() {
-    if (displayVertices.empty())
+    if (vertices.empty())
         return;
 
-    const size_t size = displayVertices.size() * sizeof(GXRenderVertex);
+    const size_t size = vertices.size() * sizeof(GXRenderVertex);
 
-    vertexBuffer = opal::Buffer::create(opal::BufferUsage::VertexBuffer, size,
-                                        displayVertices.data(),
-                                        opal::MemoryUsageType::CPUToGPU);
+    vertexBuffer =
+        opal::Buffer::create(opal::BufferUsage::VertexBuffer, size,
+                             vertices.data(), opal::MemoryUsageType::CPUToGPU);
 
     drawingState = opal::DrawingState::create(vertexBuffer);
 }
 
-void GXRenderer::present() {
-    if (displayVertices.empty())
-        return;
-
+void GXRenderer::flush() {
     uploadVertices();
 
     auto commandBuffer = device->acquireCommandBuffer();
-
     commandBuffer->start();
-    commandBuffer->beginPass(renderPass);
-    commandBuffer->clear(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+    commandBuffer->beginPass(efbRenderPass);
     commandBuffer->bindPipeline(pipeline);
     commandBuffer->bindDrawingState(drawingState);
-    commandBuffer->draw(static_cast<uint32_t>(displayVertices.size()));
+    commandBuffer->draw(static_cast<uint32_t>(vertices.size()));
     commandBuffer->endPass();
     commandBuffer->commit();
 
     device->submitCommandBuffer(commandBuffer);
+
+    vertices.clear();
 }

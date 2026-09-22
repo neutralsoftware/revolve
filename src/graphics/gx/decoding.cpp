@@ -122,7 +122,7 @@ void GX::run() {
         processCommand();
     }
 
-    renderer->finishGXBatch();
+    renderer->flush();
 }
 
 void GX::initializeFifoReader() {
