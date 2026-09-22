@@ -73,6 +73,31 @@ struct GXPositionFormat {
     uint8_t fractionalBits = 0;
 };
 
+struct GXNormalFormat {
+    uint32_t vectors = 1;
+    GXComponentFormat format = GXComponentFormat::F32;
+    bool index3 = false;
+};
+
+enum class GXColorFormat : uint8_t {
+    RGB565 = 0,
+    RGB8 = 1,
+    RGBX8 = 2,
+    RGBA4 = 3,
+    RGBA6 = 4,
+    RGBA8 = 5
+};
+
+struct GXColorAttributeFormat {
+    GXColorFormat format = GXColorFormat::RGBA8;
+};
+
+struct GXTexCoordFormat {
+    uint32_t components = 2;
+    GXComponentFormat format = GXComponentFormat::F32;
+    uint8_t fractionalBits = 0;
+};
+
 class GXCommandProcessorState {
   public:
     void write(uint8_t reg, uint32_t value);
@@ -92,12 +117,13 @@ class GXCommandProcessorState {
         return static_cast<GXVertexAttributeMode>(value & 0x3);
     }
 
-    inline static uint32_t getAttributeIndexSize(GXVertexAttributeMode mode) {
+    inline static uint32_t getAttributeIndexSize(GXVertexAttributeMode mode,
+                                                 uint32_t directSize) {
         switch (mode) {
         case GXVertexAttributeMode::None:
             return 0;
         case GXVertexAttributeMode::Direct:
-            return 0;
+            return directSize;
         case GXVertexAttributeMode::Index8:
             return 1;
         case GXVertexAttributeMode::Index16:
@@ -124,8 +150,40 @@ class GXCommandProcessorState {
         }
     }
 
+    inline static uint32_t colorSize(GXColorFormat format) {
+        switch (format) {
+        case GXColorFormat::RGB565:
+            return 2;
+        case GXColorFormat::RGB8:
+            return 3;
+        case GXColorFormat::RGBX8:
+            return 4;
+        case GXColorFormat::RGBA4:
+            return 2;
+        case GXColorFormat::RGBA6:
+            return 3;
+        case GXColorFormat::RGBA8:
+            return 4;
+        default:
+            return 0;
+        }
+    }
+
     GXPositionFormat getPositionFormat(uint8_t vatIndex) const;
     uint32_t getDirectPositionSize(uint8_t vatIndex) const;
+
+    GXNormalFormat getNormalFormat(uint8_t vatIndex) const;
+    uint32_t getDirectNormalSize(uint8_t vatIndex) const;
+
+    GXColorAttributeFormat getColorFormat(uint8_t vatIndex,
+                                          uint32_t colorIndex) const;
+    uint32_t getDirectColorSize(uint8_t vatIndex, uint32_t colorIndex) const;
+
+    GXTexCoordFormat getTexCoordFormat(uint8_t vatIndex,
+                                       uint32_t texIndex) const;
+    uint32_t getDirectTexCoordSize(uint8_t vatIndex, uint32_t texIndex) const;
+
+    uint32_t getVertexSize(uint8_t vatIndex) const;
 
   private:
     void decodeVCDLo(uint32_t value);

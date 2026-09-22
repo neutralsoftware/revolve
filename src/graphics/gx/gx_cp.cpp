@@ -82,3 +82,113 @@ GXCommandProcessorState::getDirectPositionSize(uint8_t vatIndex) const {
 
     return format.components * componentSize(format.format);
 }
+
+uint32_t GXCommandProcessorState::getVertexSize(uint8_t vatIndex) const {
+    uint32_t size = 0;
+
+    if (vcd.positionMatrixIndex)
+        size += 1;
+
+    for (bool enabled : vcd.texMatrixIndex) {
+        if (enabled)
+            size += 1;
+    }
+
+    size +=
+        getAttributeIndexSize(vcd.position, getDirectPositionSize(vatIndex));
+
+    size += getAttributeIndexSize(vcd.normal, getDirectNormalSize(vatIndex));
+
+    size += getAttributeIndexSize(vcd.color0, getDirectColorSize(vatIndex, 0));
+
+    size += getAttributeIndexSize(vcd.color1, getDirectColorSize(vatIndex, 1));
+
+    for (uint32_t i = 0; i < 8; i++) {
+        size += getAttributeIndexSize(vcd.texCoord[i],
+                                      getDirectTexCoordSize(vatIndex, i));
+    }
+
+    return size;
+}
+
+GXNormalFormat
+GXCommandProcessorState::getNormalFormat(uint8_t vatIndex) const {
+    GXNormalFormat result{};
+
+    if (vatIndex >= vat.size())
+        return result;
+
+    const uint32_t a = vat[vatIndex].a;
+
+    result.vectors = ((a >> 9) & 0x1) ? 3 : 1;
+    result.format = static_cast<GXComponentFormat>((a >> 10) & 0x7);
+    result.index3 = ((a >> 31) & 0x1) != 0;
+
+    return result;
+}
+
+uint32_t GXCommandProcessorState::getDirectNormalSize(uint8_t vatIndex) const {
+    auto fmt = getNormalFormat(vatIndex);
+
+    return fmt.vectors * 3 * componentSize(fmt.format);
+}
+
+GXColorAttributeFormat
+GXCommandProcessorState::getColorFormat(uint8_t vatIndex,
+                                        uint32_t colorIndex) const {
+    GXColorAttributeFormat result{};
+
+    if (vatIndex >= vat.size() || colorIndex > 1)
+        return result;
+
+    const uint32_t a = vat[vatIndex].a;
+
+    if (colorIndex == 0) {
+        result.format = static_cast<GXColorFormat>((a >> 14) & 0x7);
+    } else {
+        result.format = static_cast<GXColorFormat>((a >> 18) & 0x7);
+    }
+
+    return result;
+}
+
+uint32_t
+GXCommandProcessorState::getDirectColorSize(uint8_t vatIndex,
+                                            uint32_t colorIndex) const {
+    return colorSize(getColorFormat(vatIndex, colorIndex).format);
+}
+
+GXTexCoordFormat
+GXCommandProcessorState::getTexCoordFormat(uint8_t vatIndex,
+                                           uint32_t texIndex) const {
+    GXTexCoordFormat result{};
+
+    if (vatIndex >= vat.size() || texIndex >= 8)
+        return result;
+
+    const GXVAT &v = vat[vatIndex];
+
+    switch (texIndex) {
+    case 0:
+        result.components = ((v.a >> 21) & 0x1) ? 2 : 1;
+        result.format = static_cast<GXComponentFormat>((v.a >> 22) & 0x7);
+        result.fractionalBits = static_cast<uint8_t>((v.a >> 25) & 0x1F);
+        break;
+
+    default:
+        // TexCoord 1-7 are stored in the B and C registers, with 2 bits per
+        // texcoord
+        break;
+    }
+
+    return result;
+}
+
+uint32_t
+GXCommandProcessorState::getDirectTexCoordSize(uint8_t vatIndex,
+                                               uint32_t texIndex) const {
+
+    auto fmt = getTexCoordFormat(vatIndex, texIndex);
+
+    return fmt.components * componentSize(fmt.format);
+}

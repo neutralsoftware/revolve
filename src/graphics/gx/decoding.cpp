@@ -47,16 +47,16 @@ void GX::processCommand() {
     uint8_t command = read8();
     switch (static_cast<GXCommand>(command)) {
     case GXCommand::NOP:
-        break;
+        return;
     case GXCommand::CPLoad:
         processCPLoad();
-        break;
+        return;
     case GXCommand::XFLoad:
         processXFLoad();
-        break;
+        return;
     case GXCommand::BPLoad:
         processBPLoad();
-        break;
+        return;
     }
 
     if (command & 0x80) {
@@ -139,35 +139,11 @@ void GX::processPrimitive(uint8_t command) {
 
     uint16_t vertexCount = read16();
 
-    const auto &vcd = state.cp.getVCD();
+    uint32_t vertexSize = state.cp.getVertexSize(vat);
 
     Logger::log("GX", LogLevel::Info,
-                "Primitive: 0x" + utils::toHexString(primitive) + " VAT: 0x" +
-                    utils::toHexString(vat) +
-                    " Vertex Count: " + std::to_string(vertexCount));
-
-    uint32_t vertexSize = 0;
-
-    if (vcd.positionMatrixIndex)
-        vertexSize += 1;
-
-    switch (vcd.position) {
-    case GXVertexAttributeMode::None:
-        break;
-
-    case GXVertexAttributeMode::Index8:
-        vertexSize += 1;
-        break;
-
-    case GXVertexAttributeMode::Index16:
-        vertexSize += 2;
-        break;
-
-    case GXVertexAttributeMode::Direct:
-        vertexSize += state.cp.getDirectPositionSize(vat);
-        break;
-    }
-
-    Logger::log("GX", LogLevel::Info,
-                "Partial vertex size: " + std::to_string(vertexSize));
+                "Primitive: 0x" + utils::toHexString(primitive) +
+                    " VAT: " + std::to_string(vat) +
+                    " Vertex Count: " + std::to_string(vertexCount) +
+                    " Partial Vertex Size: " + std::to_string(vertexSize));
 }
