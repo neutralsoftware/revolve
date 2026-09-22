@@ -8,6 +8,7 @@
 #include "cpu/memory_interface.h"
 #include "disc.h"
 #include "graphics/cp.h"
+#include "graphics/gx.h"
 #include "graphics/video_interface.h"
 #include "graphics/wgpipe.h"
 #include "ios/ios.h"
@@ -74,6 +75,7 @@ class Device {
     Broadway cpu;
     Scheduler scheduler;
     HollywoodInterruptController controller;
+    GX gx;
 
     IOS ios;
 

@@ -35,6 +35,8 @@ std::shared_ptr<Device> Device::createDevice() {
     globalDevice->ios.init();
     globalDevice->vi->initialize();
 
+    globalDevice->gx.initializeFifoReader();
+
     return globalDevice;
 }
 
