@@ -1,5 +1,7 @@
 #include "graphics/cp.h"
 #include "core/utils.h"
+#include "cpu/interface.h"
+#include "device.h"
 
 uint32_t CommandProcessor::read(uint32_t offset, AccessSize size) {
     if (size != AccessSize::U16) {
@@ -74,22 +76,52 @@ uint16_t CommandProcessor::read16(uint32_t offset) const {
         return state.token;
 
     case CPRegister::FifoStartHi:
-        return state.fifoStart >> 16;
+        return state.fifo.base >> 16;
 
     case CPRegister::FifoStartLo:
-        return state.fifoStart & 0xFFFF;
+        return state.fifo.base & 0xFFFF;
 
     case CPRegister::FifoEndHi:
-        return state.fifoEnd >> 16;
+        return state.fifo.end >> 16;
 
     case CPRegister::FifoEndLo:
-        return state.fifoEnd & 0xFFFF;
+        return state.fifo.end & 0xFFFF;
 
     case CPRegister::FifoWritePointerHi:
-        return state.fifoWritePointer >> 16;
+        return state.fifo.writePointer >> 16;
 
     case CPRegister::FifoWritePointerLo:
-        return state.fifoWritePointer & 0xFFFF;
+        return state.fifo.writePointer & 0xFFFF;
+
+    case CPRegister::FifoHighWatermarkHi:
+        return state.fifo.highWatermark >> 16;
+
+    case CPRegister::FifoHighWatermarkLo:
+        return state.fifo.highWatermark & 0xFFFF;
+
+    case CPRegister::FifoLowWatermarkHi:
+        return state.fifo.lowWatermark >> 16;
+
+    case CPRegister::FifoLowWatermarkLo:
+        return state.fifo.lowWatermark & 0xFFFF;
+
+    case CPRegister::FifoReadWriteDistanceHi:
+        return state.fifo.readWriteDistance >> 16;
+
+    case CPRegister::FifoReadWriteDistanceLo:
+        return state.fifo.readWriteDistance & 0xFFFF;
+
+    case CPRegister::FifoReadPointerHi:
+        return state.fifo.readPointer >> 16;
+
+    case CPRegister::FifoReadPointerLo:
+        return state.fifo.readPointer & 0xFFFF;
+
+    case CPRegister::FifoBreakpointHi:
+        return state.fifo.breakpoint >> 16;
+
+    case CPRegister::FifoBreakpointLo:
+        return state.fifo.breakpoint & 0xFFFF;
 
     default:
         Logger::log("CP", LogLevel::Warning,
@@ -102,17 +134,19 @@ uint16_t CommandProcessor::read16(uint32_t offset) const {
 void CommandProcessor::write16(uint32_t offset, uint16_t value) {
     switch (static_cast<CPRegister>(offset)) {
     case CPRegister::Control:
-        state.breakpointEnable = value & (1 << 5);
+        state.breakpointEnable = (value & (1 << 5)) != 0;
 
-        state.fifoLinkEnable = value & (1 << 4);
+        state.fifoLinkEnable = (value & (1 << 4)) != 0;
 
-        state.underflowInterruptEnable = value & (1 << 3);
+        state.underflowInterruptEnable = (value & (1 << 3)) != 0;
 
-        state.overflowInterruptEnable = value & (1 << 2);
+        state.overflowInterruptEnable = (value & (1 << 2)) != 0;
 
-        state.cpInterruptEnable = value & (1 << 1);
+        state.cpInterruptEnable = (value & (1 << 1)) != 0;
 
-        state.fifoReadEnable = value & (1 << 0);
+        state.fifoReadEnable = (value & (1 << 0)) != 0;
+
+        updateInterrupt();
 
         return;
 
@@ -123,38 +157,121 @@ void CommandProcessor::write16(uint32_t offset, uint16_t value) {
         if (value & (1 << 0))
             state.overflow = false;
 
+        updateInterrupt();
+
         return;
 
     case CPRegister::FifoStartHi:
-        state.fifoStart = (state.fifoStart & 0x0000FFFF) |
-                          (static_cast<uint32_t>(value) << 16);
+        writeHigh(state.fifo.base, value);
         return;
 
     case CPRegister::FifoStartLo:
-        state.fifoStart = (state.fifoStart & 0xFFFF0000) | value;
+        writeLow(state.fifo.base, value);
         return;
 
     case CPRegister::FifoEndHi:
-        state.fifoEnd =
-            (state.fifoEnd & 0x0000FFFF) | (static_cast<uint32_t>(value) << 16);
+        writeHigh(state.fifo.end, value);
         return;
 
     case CPRegister::FifoEndLo:
-        state.fifoEnd = (state.fifoEnd & 0xFFFF0000) | value;
+        writeLow(state.fifo.end, value);
+        return;
+
+    case CPRegister::FifoHighWatermarkHi:
+        writeHigh(state.fifo.highWatermark, value);
+        updateStatus();
+        return;
+
+    case CPRegister::FifoHighWatermarkLo:
+        writeLow(state.fifo.highWatermark, value);
+        updateStatus();
+        return;
+
+    case CPRegister::FifoLowWatermarkHi:
+        writeHigh(state.fifo.lowWatermark, value);
+        updateStatus();
+        return;
+
+    case CPRegister::FifoLowWatermarkLo:
+        writeLow(state.fifo.lowWatermark, value);
+        updateStatus();
+        return;
+
+    case CPRegister::FifoReadWriteDistanceHi:
+        writeHigh(state.fifo.readWriteDistance, value);
+        updateStatus();
+        return;
+
+    case CPRegister::FifoReadWriteDistanceLo:
+        writeLow(state.fifo.readWriteDistance, value);
+        updateStatus();
         return;
 
     case CPRegister::FifoWritePointerHi:
-        state.fifoWritePointer = (state.fifoWritePointer & 0x0000FFFF) |
-                                 (static_cast<uint32_t>(value) << 16);
+        writeHigh(state.fifo.writePointer, value);
         return;
 
     case CPRegister::FifoWritePointerLo:
-        state.fifoWritePointer = (state.fifoWritePointer & 0xFFFF0000) | value;
+        writeLow(state.fifo.writePointer, value);
+        return;
+
+    case CPRegister::FifoReadPointerHi:
+        writeHigh(state.fifo.readPointer, value);
+        return;
+
+    case CPRegister::FifoReadPointerLo:
+        writeLow(state.fifo.readPointer, value);
+        return;
+
+    case CPRegister::FifoBreakpointHi:
+        writeHigh(state.fifo.breakpoint, value);
+        return;
+
+    case CPRegister::FifoBreakpointLo:
+        writeLow(state.fifo.breakpoint, value);
         return;
 
     default:
         Logger::log("CP", LogLevel::Warning,
                     "Unknown register write: " + utils::toHexString(offset));
         return;
+    }
+}
+
+uint32_t CommandProcessor::calculateFifoDistance() const {
+    const auto &fifo = state.fifo;
+
+    if (fifo.writePointer >= fifo.readPointer) {
+        return fifo.writePointer - fifo.readPointer;
+    }
+
+    return (fifo.end - fifo.readPointer) + (fifo.writePointer - fifo.base) + 32;
+}
+
+void CommandProcessor::updateStatus() {
+    state.overflow = state.fifo.readWriteDistance > state.fifo.highWatermark;
+    state.underflow = state.fifo.readWriteDistance < state.fifo.lowWatermark;
+    state.readIdle = state.fifo.readWriteDistance == 0;
+    state.commandIdle =
+        state.fifo.readWriteDistance == 0 || !state.fifoReadEnable;
+
+    updateInterrupt();
+}
+
+void CommandProcessor::updateInterrupt() {
+    bool breakpointInterrupt = state.bpInterrupt && state.cpInterruptEnable;
+
+    bool overflowInterrupt = state.overflow && state.overflowInterruptEnable;
+
+    bool underflowInterrupt = state.underflow && state.underflowInterruptEnable;
+
+    bool interrupt =
+        state.fifoReadEnable &&
+        (breakpointInterrupt || overflowInterrupt || underflowInterrupt);
+
+    if (interrupt) {
+        Device::globalDevice->pi->raiseInterrupt(PIInterrupt::CP);
+    } else {
+        Device::globalDevice->pi->clearInterrupt(PIInterrupt::CP);
     }
 }
