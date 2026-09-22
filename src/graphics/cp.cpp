@@ -133,7 +133,9 @@ uint16_t CommandProcessor::read16(uint32_t offset) const {
 
 void CommandProcessor::write16(uint32_t offset, uint16_t value) {
     switch (static_cast<CPRegister>(offset)) {
-    case CPRegister::Control:
+    case CPRegister::Control: {
+        bool wasFifoReadEnabled = state.fifoReadEnable;
+
         state.breakpointEnable = (value & (1 << 5)) != 0;
 
         state.fifoLinkEnable = (value & (1 << 4)) != 0;
@@ -146,9 +148,13 @@ void CommandProcessor::write16(uint32_t offset, uint16_t value) {
 
         state.fifoReadEnable = (value & (1 << 0)) != 0;
 
+        if (!wasFifoReadEnabled && state.fifoReadEnable)
+            Device::globalDevice->gx.initializeFifoReader();
+
         updateInterrupt();
 
         return;
+    }
 
     case CPRegister::Clear:
         if (value & (1 << 1))
@@ -288,6 +294,9 @@ void CommandProcessor::onGatherPipeBurst() {
     }
 
     state.fifo.readWriteDistance += 32;
+
+    if (state.fifoReadEnable)
+        Device::globalDevice->gx.onFifoBytesAvailable(32);
 
     updateStatus();
 }

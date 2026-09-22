@@ -95,6 +95,7 @@ class CommandProcessor : public MMIODevice {
     }
 
     CPFifo &getFifo() { return state.fifo; }
+    bool isFifoReadEnabled() const { return state.fifoReadEnable; }
 
     void onGatherPipeBurst();
 

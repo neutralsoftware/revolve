@@ -112,9 +112,17 @@ void GX::processXFLoad() {
 }
 
 void GX::run() {
+    if (!Device::globalDevice->cp->isFifoReadEnabled())
+        return;
+
+    if (reader.availableBytes == 0)
+        return;
+
     while (reader.availableBytes > 0) {
         processCommand();
     }
+
+    renderer->finishGXBatch();
 }
 
 void GX::initializeFifoReader() {
@@ -123,6 +131,16 @@ void GX::initializeFifoReader() {
     reader.cursor = fifo.readPointer;
     reader.bytesIntoBlock = 0;
     reader.availableBytes = fifo.readWriteDistance;
+}
+
+void GX::onFifoBytesAvailable(uint32_t bytes) {
+    if (reader.availableBytes == 0) {
+        const auto &fifo = Device::globalDevice->cp->getFifo();
+        reader.cursor = fifo.readPointer;
+        reader.bytesIntoBlock = 0;
+    }
+
+    reader.availableBytes += bytes;
 }
 
 void GX::processPrimitive(uint8_t command) {

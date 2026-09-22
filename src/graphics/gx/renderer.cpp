@@ -8,9 +8,9 @@
 
 void GXRenderer::drawTriangle(const GXRenderVertex &a, const GXRenderVertex &b,
                               const GXRenderVertex &c) {
-    vertices.push_back(a);
-    vertices.push_back(b);
-    vertices.push_back(c);
+    pendingVertices.push_back(a);
+    pendingVertices.push_back(b);
+    pendingVertices.push_back(c);
 }
 
 void GXRenderer::initialize() {
@@ -90,44 +90,43 @@ void GXRenderer::initialize() {
     pipeline->build();
 }
 
-void GXRenderer::beginFrame() {
-    vertices.clear();
+void GXRenderer::finishGXBatch() {
+    if (pendingVertices.empty())
+        return;
 
-    commandBuffer = device->acquireCommandBuffer();
-
-    commandBuffer->start();
-    commandBuffer->beginPass(renderPass);
-
-    commandBuffer->clear(0.1f, 0.1f, 0.1f, 1.0f, 1.0f);
-};
+    displayVertices = pendingVertices;
+    pendingVertices.clear();
+}
 
 void GXRenderer::uploadVertices() {
-    if (vertices.empty()) {
+    if (displayVertices.empty())
         return;
-    }
 
-    const size_t size = vertices.size() * sizeof(GXRenderVertex);
+    const size_t size = displayVertices.size() * sizeof(GXRenderVertex);
 
-    vertexBuffer =
-        opal::Buffer::create(opal::BufferUsage::VertexBuffer, size,
-                             vertices.data(), opal::MemoryUsageType::CPUToGPU);
+    vertexBuffer = opal::Buffer::create(opal::BufferUsage::VertexBuffer, size,
+                                        displayVertices.data(),
+                                        opal::MemoryUsageType::CPUToGPU);
 
     drawingState = opal::DrawingState::create(vertexBuffer);
 }
 
-void GXRenderer::endFrame() {
-    if (!vertices.empty()) {
-        uploadVertices();
+void GXRenderer::present() {
+    if (displayVertices.empty())
+        return;
 
-        commandBuffer->bindPipeline(pipeline);
-        commandBuffer->bindDrawingState(drawingState);
+    uploadVertices();
 
-        commandBuffer->draw(static_cast<uint32_t>(vertices.size()));
-    }
+    auto commandBuffer = device->acquireCommandBuffer();
 
+    commandBuffer->start();
+    commandBuffer->beginPass(renderPass);
+    commandBuffer->clear(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+    commandBuffer->bindPipeline(pipeline);
+    commandBuffer->bindDrawingState(drawingState);
+    commandBuffer->draw(static_cast<uint32_t>(displayVertices.size()));
     commandBuffer->endPass();
     commandBuffer->commit();
 
     device->submitCommandBuffer(commandBuffer);
-    commandBuffer.reset();
 }

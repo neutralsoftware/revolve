@@ -351,13 +351,14 @@ class GXRenderer {
   public:
     void initialize();
 
-    void beginFrame();
-    void endFrame();
-
     void drawTriangle(const GXRenderVertex &a, const GXRenderVertex &b,
                       const GXRenderVertex &c);
 
     SDL_Window *window = nullptr;
+
+    void finishGXBatch();
+
+    void present();
 
   private:
     void uploadVertices();
@@ -375,7 +376,8 @@ class GXRenderer {
 
     std::shared_ptr<opal::CommandBuffer> commandBuffer;
 
-    std::vector<GXRenderVertex> vertices;
+    std::vector<GXRenderVertex> pendingVertices;
+    std::vector<GXRenderVertex> displayVertices;
 };
 
 class GX {
@@ -385,6 +387,7 @@ class GX {
     void processCommand();
 
     void initializeFifoReader();
+    void onFifoBytesAvailable(uint32_t bytes);
 
     std::shared_ptr<GXRenderer> renderer = std::make_shared<GXRenderer>();
 

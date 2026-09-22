@@ -37,7 +37,6 @@ std::shared_ptr<Device> Device::createDevice() {
     globalDevice->vi->initialize();
 
     globalDevice->gx.initialize();
-    globalDevice->gx.renderer->beginFrame();
 
     return globalDevice;
 }
@@ -90,9 +89,6 @@ void Scheduler::advance(tick ticks) {
     while (!eventQueue.empty() && eventQueue.top().time <= currentTime) {
         Event event = eventQueue.top();
         eventQueue.pop();
-        Logger::log("Scheduler", LogLevel::Info,
-                    "Executed event: " + event.name + " at time " +
-                        std::to_string(event.time));
         event.callback();
     }
 }
