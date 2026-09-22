@@ -47,7 +47,8 @@ add_compile_definitions(
 )
 file(GLOB BROADWAY_SOURCES CONFIGURE_DEPENDS src/cpu/*.cpp)
 file(GLOB_RECURSE IOS_SOURCES CONFIGURE_DEPENDS src/ios/*.cpp)
+file(GLOB_RECURSE GRAPHICS_SOURCES CONFIGURE_DEPENDS src/graphics/*.cpp)
 add_executable(revolve_test ${TEST_SOURCES} tests/broadway.cpp tests/disc.cpp tests/ios.cpp
     ${BROADWAY_SOURCES} src/core/memory.cpp src/core/pi.cpp src/core/mi.cpp src/core/utils.cpp
-    ${IOS_SOURCES} src/core/executable.cpp src/device.cpp src/disc.cpp)
+    ${IOS_SOURCES} src/core/executable.cpp src/device.cpp src/disc.cpp ${GRAPHICS_SOURCES})
 target_link_libraries(revolve_test PRIVATE OpenSSL::Crypto PkgConfig::ZSTD)

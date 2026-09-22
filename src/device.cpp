@@ -6,6 +6,7 @@
 #include "cpu/broadway.h"
 #include "cpu/interface.h"
 #include "cpu/memory_interface.h"
+#include "graphics/video_interface.h"
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -24,6 +25,8 @@ std::shared_ptr<Device> Device::createDevice() {
     globalDevice->mmioDispatcher.registerDevice(
         IPC_MMIO_BASE, IPC_MMIO_END - IPC_MMIO_BASE + 1,
         globalDevice->ipc.get());
+    globalDevice->mmioDispatcher.registerDevice(VI_BASE, VI_SIZE,
+                                                globalDevice->vi.get());
 
     globalDevice->ios.init();
 
