@@ -7,6 +7,7 @@
 #include "cpu/interface.h"
 #include "cpu/memory_interface.h"
 #include "disc.h"
+#include "graphics/cp.h"
 #include "graphics/video_interface.h"
 #include "ios/ios.h"
 #include "ios/ipc.h"
@@ -81,6 +82,7 @@ class Device {
     std::shared_ptr<IPC> ipc = std::make_shared<IPC>();
     std::shared_ptr<DiscImage> disc = std::make_shared<DiscImage>();
     std::shared_ptr<VideoInterface> vi = std::make_shared<VideoInterface>();
+    std::shared_ptr<CommandProcessor> cp = std::make_shared<CommandProcessor>();
 };
 
 #endif
