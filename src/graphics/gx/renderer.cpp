@@ -74,8 +74,8 @@ void GXRenderer::initialize() {
         GX_FRAGMENT_SHADER, opal::ShaderType::Fragment);
     auto gxVertexShader =
         gxVertexSource->forFunction(vertexEntry, opal::ShaderType::Vertex);
-    auto gxFragmentShader =
-        gxFragmentSource->forFunction(fragmentEntry, opal::ShaderType::Fragment);
+    auto gxFragmentShader = gxFragmentSource->forFunction(
+        fragmentEntry, opal::ShaderType::Fragment);
     gxVertexShader->compile();
     gxFragmentShader->compile();
 
@@ -389,4 +389,35 @@ void GXRenderer::rebuildGXPipeline() {
 
 void GXRenderer::setAlphaTestState(const GXAlphaTestState &state) {
     currentAlphaTest = state;
+}
+
+void GXRenderer::setTexture(uint32_t unit, const GXDecodedTexture &texture,
+                            const GXTextureState &state) {
+    if (unit >= 8) {
+        return;
+    }
+
+    if (texture.rgba.empty() || texture.width == 0 || texture.height == 0) {
+        boundTextures[unit] = nullptr;
+        textureValid[unit] = false;
+        return;
+    }
+
+    if (boundTextures[unit] && boundTextures[unit]->width == texture.width &&
+        boundTextures[unit]->height == texture.height) {
+        boundTextures[unit]->updateData(texture.rgba.data(), texture.width,
+                                        texture.height,
+                                        opal::TextureDataFormat::Rgba);
+    } else {
+        boundTextures[unit] = opal::Texture::create(
+            opal::TextureType::Texture2D, opal::TextureFormat::Rgba8,
+            texture.width, texture.height, opal::TextureDataFormat::Rgba,
+            texture.rgba.data());
+    }
+
+    auto &tex = boundTextures[unit];
+
+    tex->setParameters(decodeWrapMode(state.wrapS), decodeWrapMode(state.wrapT),
+                       decodeMinFilter(state.minFilter),
+                       decodeMagFilter(state.magFilter));
 }

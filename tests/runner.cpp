@@ -11,6 +11,7 @@ int runBroadwaySuite();
 int runDiscSuite();
 int runGXSuite();
 int runIOSSuite();
+int runTEVSuite();
 
 std::string getTestBuildOutputPath(const std::string &fileName) {
     return std::string(TESTS_PATH) + "/build/" + fileName;
@@ -153,6 +154,8 @@ int main(int argc, char *argv[]) {
         return runGXSuite();
     if (suite == "ios")
         return runIOSSuite();
+    if (suite == "tev")
+        return runTEVSuite();
 
     std::string cleanCommand = "mkdir -p " + std::string(TESTS_PATH) + "/build";
     runCommand(cleanCommand);

@@ -86,6 +86,55 @@ struct GXViewport {
     float farZ = 0.0f;
 };
 
+enum class GXTLUTFormat : uint8_t { IA8 = 0x0, RGB565 = 0x1, RGB5A3 = 0x2 };
+
+struct GXTLUTState {
+    uint32_t address = 0;
+    GXTLUTFormat format = GXTLUTFormat::IA8;
+};
+
+enum class GXTextureFormat : uint8_t {
+    I4 = 0x0,
+    I8 = 0x1,
+    IA4 = 0x2,
+    IA8 = 0x3,
+    RGB565 = 0x4,
+    RGB5A3 = 0x5,
+    RGBA8 = 0x6,
+    C4 = 0x8,
+    C8 = 0x9,
+    C14X2 = 0xA,
+    CMPR = 0xE
+};
+
+struct GXTextureState {
+    uint32_t address = 0;
+
+    uint16_t width = 1;
+    uint16_t height = 1;
+
+    GXTextureFormat format = GXTextureFormat::RGBA8;
+
+    uint8_t wrapS = 0;
+    uint8_t wrapT = 0;
+
+    uint8_t minFilter = 0;
+    uint8_t magFilter = 0;
+
+    float lodBias = 0.0f;
+
+    bool valid = false;
+
+    GXTLUTState tlut{};
+};
+
+struct GXDecodedTexture {
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    std::vector<uint8_t> rgba;
+};
+
 enum class GXArrayAttribute : uint8_t {
     Position = 9,
     Normal = 10,
@@ -394,6 +443,8 @@ struct GXBPState {
     GXScissorState scissor{};
 
     GXAlphaTestState alphaTest{};
+
+    std::array<GXTextureState, 8> textures{};
 };
 
 struct GXState {
@@ -461,6 +512,9 @@ class GXRenderer {
 
     SDL_Window *window = nullptr;
 
+    void setTexture(uint32_t unit, const GXDecodedTexture &texture,
+                    const GXTextureState &state);
+
   private:
     void rebuildGXPipeline();
 
@@ -499,6 +553,43 @@ class GXRenderer {
     opal::VertexBinding gxBinding{};
 
     GXAlphaTestState currentAlphaTest{};
+
+    std::array<std::shared_ptr<opal::Texture>, 8> boundTextures{};
+    std::array<bool, 8> textureValid{};
+
+    inline opal::TextureWrapMode decodeWrapMode(uint8_t mode) const {
+        switch (mode) {
+        case 0:
+            return opal::TextureWrapMode::ClampToEdge;
+        case 1:
+            return opal::TextureWrapMode::Repeat;
+        case 2:
+            return opal::TextureWrapMode::MirroredRepeat;
+        default:
+            return opal::TextureWrapMode::ClampToEdge;
+        }
+    }
+
+    inline opal::TextureFilterMode decodeMagFilter(uint8_t mode) const {
+        return mode == 0 ? opal::TextureFilterMode::Nearest
+                         : opal::TextureFilterMode::Linear;
+    }
+
+    inline opal::TextureFilterMode decodeMinFilter(uint8_t mode) const {
+        switch (mode) {
+        case 0:
+            return opal::TextureFilterMode::Nearest;
+        case 1:
+            return opal::TextureFilterMode::Linear;
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+            return opal::TextureFilterMode::LinearMipmapLinear;
+        default:
+            return opal::TextureFilterMode::Linear;
+        }
+    }
 };
 
 class GX {
@@ -511,6 +602,22 @@ class GX {
     void onFifoBytesAvailable(uint32_t bytes);
 
     std::shared_ptr<GXRenderer> renderer = std::make_shared<GXRenderer>();
+
+    static inline uint8_t expand3(uint8_t v) {
+        return static_cast<uint8_t>((v << 5) | (v << 2) | (v >> 1));
+    }
+
+    static inline uint8_t expand4(uint8_t v) {
+        return static_cast<uint8_t>((v << 4) | v);
+    }
+
+    static inline uint8_t expand5(uint8_t v) {
+        return static_cast<uint8_t>((v << 3) | (v >> 2));
+    }
+
+    static inline uint8_t expand6(uint8_t v) {
+        return static_cast<uint8_t>((v << 2) | (v >> 4));
+    }
 
   private:
     uint8_t read8();
@@ -555,6 +662,28 @@ class GX {
         return hi | lo;
     }
 
+    static inline void writePixel(GXDecodedTexture &result, uint32_t x,
+                                  uint32_t y, uint8_t r, uint8_t g, uint8_t b,
+                                  uint8_t a) {
+        if (x >= result.width || y >= result.height)
+            return;
+
+        const size_t dst = (static_cast<size_t>(y) * result.width + x) * 4;
+
+        result.rgba[dst + 0] = r;
+        result.rgba[dst + 1] = g;
+        result.rgba[dst + 2] = b;
+        result.rgba[dst + 3] = a;
+    }
+
+    static inline void writeGXColor(GXDecodedTexture &result, uint32_t x,
+                                    uint32_t y, const GXColor &color) {
+        writePixel(result, x, y, static_cast<uint8_t>(color.r * 255.0f),
+                   static_cast<uint8_t>(color.g * 255.0f),
+                   static_cast<uint8_t>(color.b * 255.0f),
+                   static_cast<uint8_t>(color.a * 255.0f));
+    }
+
     float readMemoryComponent(uint32_t &address, GXComponentFormat format,
                               uint8_t fractionalBits);
 
@@ -591,6 +720,39 @@ class GX {
     opal::BlendFunc decodeGXSrcBlendFactor(uint32_t factor) const;
     opal::BlendFunc decodeGXDstBlendFactor(uint32_t factor) const;
     opal::CompareOp decodeGXCompare(uint32_t value) const;
+
+    GXDecodedTexture decodeTexture(const GXTextureState &state) const;
+
+    GXDecodedTexture decodeTextureI4(uint32_t address, uint16_t width,
+                                     uint16_t height) const;
+    GXDecodedTexture decodeTextureI8(uint32_t address, uint16_t width,
+                                     uint16_t height) const;
+    GXDecodedTexture decodeTextureIA4(uint32_t address, uint16_t width,
+                                      uint16_t height) const;
+    GXDecodedTexture decodeTextureIA8(uint32_t address, uint16_t width,
+                                      uint16_t height) const;
+    GXDecodedTexture decodeTextureRGB565(uint32_t address, uint16_t width,
+                                         uint16_t height) const;
+    GXDecodedTexture decodeTextureRGB5A3(uint32_t address, uint16_t width,
+                                         uint16_t height) const;
+    GXDecodedTexture decodeTextureRGBA8(uint32_t address, uint16_t width,
+                                        uint16_t height) const;
+    GXDecodedTexture decodeTextureC4(uint32_t address, uint16_t width,
+                                     uint16_t height,
+                                     const GXTLUTState &tlut) const;
+    GXDecodedTexture decodeTextureC8(uint32_t address, uint16_t width,
+                                     uint16_t height,
+                                     const GXTLUTState &tlut) const;
+    GXDecodedTexture decodeTextureC14X2(uint32_t address, uint16_t width,
+                                        uint16_t height,
+                                        const GXTLUTState &tlut) const;
+    GXDecodedTexture decodeTextureCMPR(uint32_t address, uint16_t width,
+                                       uint16_t height) const;
+
+    void decodeCMPRSubBlock(GXDecodedTexture &result, uint32_t &address,
+                            uint32_t originX, uint32_t originY) const;
+
+    GXColor decodeTLUTEntry(uint32_t address, GXTLUTFormat format) const;
 
     GXFifoReader reader{};
     GXState state{};

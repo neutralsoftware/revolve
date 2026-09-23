@@ -143,7 +143,7 @@ file(GLOB BROADWAY_SOURCES CONFIGURE_DEPENDS src/cpu/*.cpp)
 file(GLOB_RECURSE IOS_SOURCES CONFIGURE_DEPENDS src/ios/*.cpp)
 file(GLOB_RECURSE GRAPHICS_SOURCES CONFIGURE_DEPENDS src/graphics/*.cpp)
 add_executable(revolve_test ${TEST_SOURCES} tests/broadway.cpp tests/disc.cpp
-    tests/graphics.cpp tests/ios.cpp ${BROADWAY_SOURCES} src/core/memory.cpp
+    tests/graphics.cpp tests/ios.cpp tests/tev.cpp ${BROADWAY_SOURCES} src/core/memory.cpp
     src/core/pi.cpp src/core/mi.cpp src/core/utils.cpp ${IOS_SOURCES}
     src/core/executable.cpp src/device.cpp src/disc.cpp ${GRAPHICS_SOURCES})
 add_dependencies(revolve_test revolve_shader_header)
