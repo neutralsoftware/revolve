@@ -126,6 +126,9 @@ struct GXTextureState {
     bool valid = false;
 
     GXTLUTState tlut{};
+
+    uint32_t image1 = 0;
+    uint32_t image2 = 0;
 };
 
 struct GXDecodedTexture {
@@ -491,6 +494,18 @@ struct GXXFB {
     bool valid = false;
 };
 
+namespace gx {
+static inline int textureUnitFromBP(uint8_t reg, uint8_t base0, uint8_t base4) {
+    if (reg >= base0 && reg < base0 + 4)
+        return reg - base0;
+
+    if (reg >= base4 && reg < base4 + 4)
+        return 4 + (reg - base4);
+
+    return -1;
+}
+} // namespace gx
+
 class GXRenderer {
   public:
     void initialize();
@@ -753,6 +768,15 @@ class GX {
                             uint32_t originX, uint32_t originY) const;
 
     GXColor decodeTLUTEntry(uint32_t address, GXTLUTFormat format) const;
+
+    void decodeTextureMode0(uint32_t unit, uint32_t value);
+    void decodeTextureImage0(uint32_t unit, uint32_t value);
+    void decodeTextureImage3(uint32_t unit, uint32_t value);
+    void decodeTextureImage1(uint32_t unit, uint32_t value);
+    void decodeTextureImage2(uint32_t unit, uint32_t value);
+    void decodeTextureTLUT(uint32_t unit, uint32_t value);
+
+    void updateTextureUnit(uint32_t unit);
 
     GXFifoReader reader{};
     GXState state{};

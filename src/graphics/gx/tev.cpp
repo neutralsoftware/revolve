@@ -3,6 +3,7 @@
 #include "graphics/gx.h"
 #include <AvailabilityMacros.h>
 #include <cstdint>
+#include <sys/wait.h>
 
 GXDecodedTexture GX::decodeTexture(const GXTextureState &state) const {
     switch (state.format) {
@@ -450,4 +451,69 @@ GXDecodedTexture GX::decodeTextureCMPR(uint32_t address, uint16_t width,
     }
 
     return result;
+}
+
+void GX::decodeTextureMode0(uint32_t unit, uint32_t value) {
+    auto &tex = state.bp.textures[unit];
+
+    tex.wrapS = static_cast<uint8_t>(value & 0x3u);
+    tex.wrapT = static_cast<uint8_t>((value >> 2) & 0x3u);
+
+    tex.magFilter = static_cast<uint8_t>((value >> 4) & 0x1u);
+    tex.minFilter = static_cast<uint8_t>((value >> 5) & 0x7u);
+
+    int8_t rawBias = static_cast<int8_t>((value >> 9) & 0xFF);
+
+    tex.lodBias = static_cast<float>(rawBias) / 32.0f;
+}
+
+void GX::decodeTextureImage0(uint32_t unit, uint32_t value) {
+    auto &tex = state.bp.textures[unit];
+
+    tex.width = static_cast<uint16_t>((value & 0x3FF) + 1);
+    tex.height = static_cast<uint16_t>(((value >> 10) & 0x3FF) + 1);
+    tex.format = static_cast<GXTextureFormat>((value >> 20) & 0xF);
+}
+
+void GX::decodeTextureImage3(uint32_t unit, uint32_t value) {
+    auto &tex = state.bp.textures[unit];
+
+    tex.address = (value & 0x00FFFFFF) << 5;
+    tex.valid = true;
+}
+
+void GX::decodeTextureImage1(uint32_t unit, uint32_t value) {
+    auto &tex = state.bp.textures[unit];
+
+    tex.image1 = (value & 0x00FFFFFF) << 5;
+}
+
+void GX::decodeTextureImage2(uint32_t unit, uint32_t value) {
+    auto &tex = state.bp.textures[unit];
+
+    tex.image2 = (value & 0x00FFFFFF) << 5;
+}
+
+void GX::decodeTextureTLUT(uint32_t unit, uint32_t value) {
+    auto &tlut = state.bp.textures[unit].tlut;
+
+    tlut.address = (value & 0x3FF) << 9;
+    tlut.format = static_cast<GXTLUTFormat>((value >> 10) & 0x3);
+}
+
+void GX::updateTextureUnit(uint32_t unit) {
+    if (unit >= 8)
+        return;
+
+    const auto &tex = state.bp.textures[unit];
+    if (!tex.valid)
+        return;
+    if (tex.width == 0 || tex.height == 0)
+        return;
+
+    GXDecodedTexture decoded = decodeTexture(tex);
+    if (decoded.rgba.empty())
+        return;
+
+    renderer->setTexture(unit, decoded, tex);
 }

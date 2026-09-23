@@ -230,6 +230,19 @@ void GXRenderer::flushEFB() {
                              static_cast<int>(currentAlphaTest.comp1));
     gxPipeline->setUniform1i("alphaLogic",
                              static_cast<int>(currentAlphaTest.logic));
+    gxPipeline->setUniform1i("activeTexture", 0);
+
+    static constexpr const char *textureNames[8] = {
+        "tex0", "tex1", "tex2", "tex3", "tex4", "tex5", "tex6", "tex7"};
+
+    for (uint32_t i = 0; i < 8; ++i) {
+        if (!textureValid[i])
+            continue;
+        if (!boundTextures[i])
+            continue;
+
+        gxPipeline->bindTexture(textureNames[i], boundTextures[i], i);
+    }
 
     commandBuffer->draw(static_cast<uint32_t>(vertices.size()));
     commandBuffer->resetScissor();
@@ -416,6 +429,7 @@ void GXRenderer::setTexture(uint32_t unit, const GXDecodedTexture &texture,
     }
 
     auto &tex = boundTextures[unit];
+    textureValid[unit] = true;
 
     tex->setParameters(decodeWrapMode(state.wrapS), decodeWrapMode(state.wrapT),
                        decodeMinFilter(state.minFilter),

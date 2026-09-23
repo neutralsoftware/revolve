@@ -887,6 +887,49 @@ GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
 void GX::initialize() { renderer->initialize(); }
 
 void GX::writeBP(uint8_t reg, uint32_t value) {
+    if (int unit = gx::textureUnitFromBP(reg, 0x80, 0xA0); unit >= 0) {
+        renderer->flushEFB();
+        decodeTextureMode0(static_cast<uint32_t>(unit), value);
+        updateTextureUnit(unit);
+        return;
+    }
+
+    // TEX MODE 1 / LOD
+    if (int unit = gx::textureUnitFromBP(reg, 0x84, 0xA4); unit >= 0) {
+        return;
+    }
+
+    if (int unit = gx::textureUnitFromBP(reg, 0x88, 0xA8); unit >= 0) {
+        renderer->flushEFB();
+        decodeTextureImage0(static_cast<uint32_t>(unit), value);
+        updateTextureUnit(unit);
+        return;
+    }
+
+    if (int unit = gx::textureUnitFromBP(reg, 0x8C, 0xAC); unit >= 0) {
+        decodeTextureImage1(unit, value);
+        return;
+    }
+
+    if (int unit = gx::textureUnitFromBP(reg, 0x90, 0xB0); unit >= 0) {
+        decodeTextureImage2(unit, value);
+        return;
+    }
+
+    if (int unit = gx::textureUnitFromBP(reg, 0x94, 0xB4); unit >= 0) {
+        renderer->flushEFB();
+        decodeTextureImage3(static_cast<uint32_t>(unit), value);
+        updateTextureUnit(unit);
+        return;
+    }
+
+    if (int unit = gx::textureUnitFromBP(reg, 0x98, 0xB8); unit >= 0) {
+        renderer->flushEFB();
+        decodeTextureTLUT(static_cast<uint32_t>(unit), value);
+        updateTextureUnit(unit);
+        return;
+    }
+
     switch (reg) {
     case 0x00: {
         renderer->flushEFB();
