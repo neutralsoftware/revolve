@@ -1,4 +1,5 @@
 #include "SDL3/SDL_video.h"
+#include "device.h"
 #include "graphics/gx.h"
 #include "graphics/shader.h"
 #include "opal/opal.h"
@@ -230,7 +231,10 @@ void GXRenderer::flushEFB() {
                              static_cast<int>(currentAlphaTest.comp1));
     gxPipeline->setUniform1i("alphaLogic",
                              static_cast<int>(currentAlphaTest.logic));
-    gxPipeline->setUniform1i("activeTexture", 0);
+    const auto &order = Device::globalDevice->gx.state.bp.tevOrders[0];
+    gxPipeline->setUniform1i("activeTexture", order.texMap);
+    gxPipeline->setUniform1i("activeTexCoord", order.texCoord);
+    gxPipeline->setUniform1i("textureEnabled", order.textureEnabled ? 1 : 0);
 
     static constexpr const char *textureNames[8] = {
         "tex0", "tex1", "tex2", "tex3", "tex4", "tex5", "tex6", "tex7"};

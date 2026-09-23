@@ -138,6 +138,14 @@ struct GXDecodedTexture {
     std::vector<uint8_t> rgba;
 };
 
+struct GXTevOrder {
+    uint8_t texCoord = 0;
+    uint8_t texMap = 0;
+    uint8_t colorChannel = 0;
+
+    bool textureEnabled = false;
+};
+
 enum class GXArrayAttribute : uint8_t {
     Position = 9,
     Normal = 10,
@@ -448,6 +456,7 @@ struct GXBPState {
     GXAlphaTestState alphaTest{};
 
     std::array<GXTextureState, 8> textures{};
+    std::array<GXTevOrder, 16> tevOrders{};
 };
 
 struct GXState {
@@ -778,8 +787,13 @@ class GX {
 
     void updateTextureUnit(uint32_t unit);
 
+    void decodeTevOrder(uint8_t reg, uint32_t value);
+    void decodeTevOrderStage(uint32_t stage, uint32_t raw);
+
     GXFifoReader reader{};
     GXState state{};
+
+    friend class GXRenderer;
 };
 
 #endif

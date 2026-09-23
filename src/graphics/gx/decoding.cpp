@@ -975,6 +975,17 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
 
         break;
     }
+    case 0x28:
+    case 0x29:
+    case 0x2A:
+    case 0x2B:
+    case 0x2C:
+    case 0x2D:
+    case 0x2E:
+    case 0x2F:
+        renderer->flushEFB();
+        decodeTevOrder(reg, value);
+        break;
     case 0x40: {
         renderer->flushEFB();
 

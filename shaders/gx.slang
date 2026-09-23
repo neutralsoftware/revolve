@@ -18,7 +18,9 @@ struct Uniforms {
     int alphaComp1;
     int alphaLogic;
 
+    int textureEnabled;
     int activeTexture;
+    int activeTexCoord;
 };
 
 [[vk::binding(0, 1)]]
@@ -148,8 +150,11 @@ float4 sampleGXTexture(int index, float2 uv) {
 [shader("fragment")]
 float4 fragmentMain(VertexOut input) : SV_TARGET {
     float4 color = input.color;
-    float4 texColor = sampleGXTexture(uniforms.activeTexture, input.uv);
-    color = texColor;
+
+    if (uniforms.textureEnabled != 0) {
+        float4 texColor = sampleGXTexture(uniforms.activeTexture, input.uv);
+        color = texColor;
+    }
 
     if (!alphaTest(color.a)) {
         discard;

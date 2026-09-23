@@ -98,7 +98,9 @@ struct Uniforms_std140
     int alphaComp0;
     int alphaComp1;
     int alphaLogic;
+    int textureEnabled;
     int activeTexture;
+    int activeTexCoord;
 };
 
 struct main0_out
@@ -108,139 +110,149 @@ struct main0_out
 
 struct main0_in
 {
+    float4 input_color [[user(locn0)]];
     float2 input_uv [[user(locn1)]];
 };
 
 fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uniforms [[buffer(0)]], texture2d<float> tex0 [[texture(0)]], texture2d<float> tex1 [[texture(1)]], texture2d<float> tex2 [[texture(2)]], texture2d<float> tex3 [[texture(3)]], texture2d<float> tex4 [[texture(4)]], texture2d<float> tex5 [[texture(5)]], texture2d<float> tex6 [[texture(6)]], texture2d<float> tex7 [[texture(7)]], sampler samp0 [[sampler(0)]], sampler samp1 [[sampler(1)]], sampler samp2 [[sampler(2)]], sampler samp3 [[sampler(3)]], sampler samp4 [[sampler(4)]], sampler samp5 [[sampler(5)]], sampler samp6 [[sampler(6)]], sampler samp7 [[sampler(7)]])
 {
-    bool _365 = false;
-    bool _340 = false;
-    bool _302 = false;
-    bool _243 = false;
+    bool _381 = false;
+    bool _356 = false;
+    bool _318 = false;
+    bool _259 = false;
     main0_out out = {};
-    _243 = false;
-    float4 _244;
-    do
+    float4 color;
+    if (uniforms.textureEnabled != 0)
     {
-        switch (uniforms.activeTexture)
+        _259 = false;
+        float4 _260;
+        do
         {
-            case 0:
+            switch (uniforms.activeTexture)
             {
-                _243 = true;
-                _244 = tex0.sample(samp0, in.input_uv);
+                case 0:
+                {
+                    _259 = true;
+                    _260 = tex0.sample(samp0, in.input_uv);
+                    break;
+                }
+                case 1:
+                {
+                    _259 = true;
+                    _260 = tex1.sample(samp1, in.input_uv);
+                    break;
+                }
+                case 2:
+                {
+                    _259 = true;
+                    _260 = tex2.sample(samp2, in.input_uv);
+                    break;
+                }
+                case 3:
+                {
+                    _259 = true;
+                    _260 = tex3.sample(samp3, in.input_uv);
+                    break;
+                }
+                case 4:
+                {
+                    _259 = true;
+                    _260 = tex4.sample(samp4, in.input_uv);
+                    break;
+                }
+                case 5:
+                {
+                    _259 = true;
+                    _260 = tex5.sample(samp5, in.input_uv);
+                    break;
+                }
+                case 6:
+                {
+                    _259 = true;
+                    _260 = tex6.sample(samp6, in.input_uv);
+                    break;
+                }
+                case 7:
+                {
+                    _259 = true;
+                    _260 = tex7.sample(samp7, in.input_uv);
+                    break;
+                }
+                default:
+                {
+                    break;
+                }
+            }
+            if (_259)
+            {
                 break;
             }
-            case 1:
-            {
-                _243 = true;
-                _244 = tex1.sample(samp1, in.input_uv);
-                break;
-            }
-            case 2:
-            {
-                _243 = true;
-                _244 = tex2.sample(samp2, in.input_uv);
-                break;
-            }
-            case 3:
-            {
-                _243 = true;
-                _244 = tex3.sample(samp3, in.input_uv);
-                break;
-            }
-            case 4:
-            {
-                _243 = true;
-                _244 = tex4.sample(samp4, in.input_uv);
-                break;
-            }
-            case 5:
-            {
-                _243 = true;
-                _244 = tex5.sample(samp5, in.input_uv);
-                break;
-            }
-            case 6:
-            {
-                _243 = true;
-                _244 = tex6.sample(samp6, in.input_uv);
-                break;
-            }
-            case 7:
-            {
-                _243 = true;
-                _244 = tex7.sample(samp7, in.input_uv);
-                break;
-            }
-            default:
-            {
-                break;
-            }
-        }
-        if (_243)
-        {
+            _259 = true;
+            _260 = float4(1.0);
             break;
-        }
-        _243 = true;
-        _244 = float4(1.0);
-        break;
-    } while(false);
-    _302 = false;
-    bool _303;
+        } while(false);
+        color = _260;
+    }
+    else
+    {
+        color = in.input_color;
+    }
+    _318 = false;
+    bool _319;
     do
     {
-        _340 = false;
-        bool _341;
+        _356 = false;
+        bool _357;
         do
         {
             switch (uniforms.alphaComp0)
             {
                 case 0:
                 {
-                    _340 = true;
-                    _341 = false;
+                    _356 = true;
+                    _357 = false;
                     break;
                 }
                 case 1:
                 {
-                    _340 = true;
-                    _341 = _244.w < uniforms.alphaRef0;
+                    _356 = true;
+                    _357 = color.w < uniforms.alphaRef0;
                     break;
                 }
                 case 2:
                 {
-                    _340 = true;
-                    _341 = _244.w == uniforms.alphaRef0;
+                    _356 = true;
+                    _357 = color.w == uniforms.alphaRef0;
                     break;
                 }
                 case 3:
                 {
-                    _340 = true;
-                    _341 = _244.w <= uniforms.alphaRef0;
+                    _356 = true;
+                    _357 = color.w <= uniforms.alphaRef0;
                     break;
                 }
                 case 4:
                 {
-                    _340 = true;
-                    _341 = _244.w > uniforms.alphaRef0;
+                    _356 = true;
+                    _357 = color.w > uniforms.alphaRef0;
                     break;
                 }
                 case 5:
                 {
-                    _340 = true;
-                    _341 = _244.w != uniforms.alphaRef0;
+                    _356 = true;
+                    _357 = color.w != uniforms.alphaRef0;
                     break;
                 }
                 case 6:
                 {
-                    _340 = true;
-                    _341 = _244.w >= uniforms.alphaRef0;
+                    _356 = true;
+                    _357 = color.w >= uniforms.alphaRef0;
                     break;
                 }
                 case 7:
                 {
-                    _340 = true;
-                    _341 = true;
+                    _356 = true;
+                    _357 = true;
                     break;
                 }
                 default:
@@ -248,66 +260,66 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_340)
+            if (_356)
             {
                 break;
             }
-            _340 = true;
-            _341 = true;
+            _356 = true;
+            _357 = true;
             break;
         } while(false);
-        _365 = false;
-        bool _366;
+        _381 = false;
+        bool _382;
         do
         {
             switch (uniforms.alphaComp1)
             {
                 case 0:
                 {
-                    _365 = true;
-                    _366 = false;
+                    _381 = true;
+                    _382 = false;
                     break;
                 }
                 case 1:
                 {
-                    _365 = true;
-                    _366 = _244.w < uniforms.alphaRef1;
+                    _381 = true;
+                    _382 = color.w < uniforms.alphaRef1;
                     break;
                 }
                 case 2:
                 {
-                    _365 = true;
-                    _366 = _244.w == uniforms.alphaRef1;
+                    _381 = true;
+                    _382 = color.w == uniforms.alphaRef1;
                     break;
                 }
                 case 3:
                 {
-                    _365 = true;
-                    _366 = _244.w <= uniforms.alphaRef1;
+                    _381 = true;
+                    _382 = color.w <= uniforms.alphaRef1;
                     break;
                 }
                 case 4:
                 {
-                    _365 = true;
-                    _366 = _244.w > uniforms.alphaRef1;
+                    _381 = true;
+                    _382 = color.w > uniforms.alphaRef1;
                     break;
                 }
                 case 5:
                 {
-                    _365 = true;
-                    _366 = _244.w != uniforms.alphaRef1;
+                    _381 = true;
+                    _382 = color.w != uniforms.alphaRef1;
                     break;
                 }
                 case 6:
                 {
-                    _365 = true;
-                    _366 = _244.w >= uniforms.alphaRef1;
+                    _381 = true;
+                    _382 = color.w >= uniforms.alphaRef1;
                     break;
                 }
                 case 7:
                 {
-                    _365 = true;
-                    _366 = true;
+                    _381 = true;
+                    _382 = true;
                     break;
                 }
                 default:
@@ -315,55 +327,55 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_365)
+            if (_381)
             {
                 break;
             }
-            _365 = true;
-            _366 = true;
+            _381 = true;
+            _382 = true;
             break;
         } while(false);
-        bool _304;
+        bool _320;
         switch (uniforms.alphaLogic)
         {
             case 0:
             {
-                if (_341)
+                if (_357)
                 {
-                    _304 = _366;
+                    _320 = _382;
                 }
                 else
                 {
-                    _304 = false;
+                    _320 = false;
                 }
-                _302 = true;
-                _303 = _304;
+                _318 = true;
+                _319 = _320;
                 break;
             }
             case 1:
             {
-                if (_341)
+                if (_357)
                 {
-                    _304 = true;
+                    _320 = true;
                 }
                 else
                 {
-                    _304 = _366;
+                    _320 = _382;
                 }
-                _302 = true;
-                _303 = _304;
+                _318 = true;
+                _319 = _320;
                 break;
             }
             case 2:
             {
-                _302 = true;
-                _303 = _341 != _366;
+                _318 = true;
+                _319 = _357 != _382;
                 break;
             }
             case 3:
             {
-                _302 = true;
-                _303 = _341 == _366;
+                _318 = true;
+                _319 = _357 == _382;
                 break;
             }
             default:
@@ -371,19 +383,19 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                 break;
             }
         }
-        if (_302)
+        if (_318)
         {
             break;
         }
-        _302 = true;
-        _303 = true;
+        _318 = true;
+        _319 = true;
         break;
     } while(false);
-    if (!_303)
+    if (!_319)
     {
         discard_fragment();
     }
-    out.entryPointParam_fragmentMain = _244;
+    out.entryPointParam_fragmentMain = color;
     return out;
 }
 

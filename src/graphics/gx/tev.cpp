@@ -517,3 +517,24 @@ void GX::updateTextureUnit(uint32_t unit) {
 
     renderer->setTexture(unit, decoded, tex);
 }
+
+void GX::decodeTevOrder(uint8_t reg, uint32_t value) {
+    const uint32_t pair = reg - 0x28;
+
+    const uint32_t stage0 = pair * 2;
+    const uint32_t stage1 = stage0 + 1;
+
+    decodeTevOrderStage(stage0, value & 0xFFF);
+    decodeTevOrderStage(stage1, (value >> 12) & 0xFFF);
+}
+
+void GX::decodeTevOrderStage(uint32_t stage, uint32_t raw) {
+    if (stage >= 16)
+        return;
+
+    auto &order = state.bp.tevOrders[stage];
+    order.texMap = static_cast<uint8_t>(raw & 0x7);
+    order.texCoord = static_cast<uint8_t>((raw >> 3) & 0x7);
+    order.textureEnabled = (raw & (1u << 6)) != 0;
+    order.colorChannel = static_cast<uint8_t>((raw >> 7) & 0x7);
+}
