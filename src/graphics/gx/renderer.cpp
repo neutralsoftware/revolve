@@ -45,6 +45,14 @@ void GXRenderer::drawTriangle(const GXRenderVertex &a, const GXRenderVertex &b,
 }
 
 void GXRenderer::initialize() {
+#ifdef METAL
+    constexpr const char *vertexEntry = "main0";
+    constexpr const char *fragmentEntry = "main0";
+#else
+    constexpr const char *vertexEntry = "vertexMain";
+    constexpr const char *fragmentEntry = "fragmentMain";
+#endif
+
     opal::ContextConfiguration config{
         .applicationName = "Revolve",
         .applicationVersion = {1, 0, 0},
@@ -60,12 +68,14 @@ void GXRenderer::initialize() {
 
     createEFB();
 
-    auto gxShader = opal::Shader::createFromSource(MINIMAL_SHADER,
-                                                   opal::ShaderType::Vertex);
+    auto gxVertexSource = opal::Shader::createFromSource(
+        GX_VERTEX_SHADER, opal::ShaderType::Vertex);
+    auto gxFragmentSource = opal::Shader::createFromSource(
+        GX_FRAGMENT_SHADER, opal::ShaderType::Fragment);
     auto gxVertexShader =
-        gxShader->forFunction("vertexMain", opal::ShaderType::Vertex);
+        gxVertexSource->forFunction(vertexEntry, opal::ShaderType::Vertex);
     auto gxFragmentShader =
-        gxShader->forFunction("fragmentMain", opal::ShaderType::Fragment);
+        gxFragmentSource->forFunction(fragmentEntry, opal::ShaderType::Fragment);
     gxVertexShader->compile();
     gxFragmentShader->compile();
 
@@ -129,12 +139,22 @@ void GXRenderer::createEFB() {
 }
 
 void GXRenderer::createPresentPipeline() {
-    auto shader = opal::Shader::createFromSource(FULLSCREEN_SHADER,
-                                                 opal::ShaderType::Vertex);
+#ifdef METAL
+    constexpr const char *vertexEntry = "main0";
+    constexpr const char *fragmentEntry = "main0";
+#else
+    constexpr const char *vertexEntry = "vertexMain";
+    constexpr const char *fragmentEntry = "fragmentMain";
+#endif
+
+    auto vertexSource = opal::Shader::createFromSource(
+        FULLSCREEN_VERTEX_SHADER, opal::ShaderType::Vertex);
+    auto fragmentSource = opal::Shader::createFromSource(
+        FULLSCREEN_FRAGMENT_SHADER, opal::ShaderType::Fragment);
     auto vertexShader =
-        shader->forFunction("vertexMain", opal::ShaderType::Vertex);
+        vertexSource->forFunction(vertexEntry, opal::ShaderType::Vertex);
     auto fragmentShader =
-        shader->forFunction("fragmentMain", opal::ShaderType::Fragment);
+        fragmentSource->forFunction(fragmentEntry, opal::ShaderType::Fragment);
     vertexShader->compile();
     fragmentShader->compile();
 
@@ -201,6 +221,16 @@ void GXRenderer::flushEFB() {
         currentRasterState.scissorWidth, currentRasterState.scissorHeight);
     commandBuffer->bindPipeline(gxPipeline);
     commandBuffer->bindDrawingState(drawingState);
+
+    gxPipeline->setUniform1f("alphaRef0", currentAlphaTest.ref0 / 255.0f);
+    gxPipeline->setUniform1f("alphaRef1", currentAlphaTest.ref1 / 255.0f);
+    gxPipeline->setUniform1i("alphaComp0",
+                             static_cast<int>(currentAlphaTest.comp0));
+    gxPipeline->setUniform1i("alphaComp1",
+                             static_cast<int>(currentAlphaTest.comp1));
+    gxPipeline->setUniform1i("alphaLogic",
+                             static_cast<int>(currentAlphaTest.logic));
+
     commandBuffer->draw(static_cast<uint32_t>(vertices.size()));
     commandBuffer->resetScissor();
     commandBuffer->endPass();
@@ -339,10 +369,24 @@ void GXRenderer::rebuildGXPipeline() {
     gxPipeline->setDepthCompareOp(currentRasterState.depthCompare);
     gxPipeline->enableDepthWrite(currentRasterState.depthWrite);
     gxPipeline->enableBlending(currentRasterState.blendEnabled);
+    gxPipeline->setBlendFunc(currentRasterState.srcBlend,
+                             currentRasterState.dstBlend);
+    gxPipeline->setBlendEquation(currentRasterState.subtractBlend
+                                     ? opal::BlendEquation::Subtract
+                                     : opal::BlendEquation::Add);
+
+    gxPipeline->setColorWriteMask(
+        currentRasterState.colorWrite, currentRasterState.colorWrite,
+        currentRasterState.colorWrite, currentRasterState.alphaWrite);
+
     gxPipeline->setVertexAttributes(gxAttributes, gxBinding);
     gxPipeline->setFrontFace(currentRasterState.frontFace);
 
     gxPipeline->build();
 
     rasterStateDirty = false;
+}
+
+void GXRenderer::setAlphaTestState(const GXAlphaTestState &state) {
+    currentAlphaTest = state;
 }

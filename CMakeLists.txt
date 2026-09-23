@@ -52,6 +52,7 @@ file(WRITE "${OUTPUT_FILE}" "${SHADER_HEADER}")
 ]=])
 
 find_program(REVOLVE_SLANGC NAMES slangc)
+find_program(REVOLVE_SPIRV_CROSS NAMES spirv-cross)
 string(TOUPPER "${OPAL_BACKEND}" REVOLVE_OPAL_BACKEND)
 
 file(GLOB_RECURSE REVOLVE_SHADER_SOURCES CONFIGURE_DEPENDS
@@ -70,31 +71,51 @@ foreach(REVOLVE_SHADER_SOURCE IN LISTS REVOLVE_SHADER_SOURCES)
     string(REGEX REPLACE "[^A-Za-z0-9]" "_" REVOLVE_SHADER_NAME
         ${REVOLVE_SHADER_NAME})
     string(TOUPPER ${REVOLVE_SHADER_NAME} REVOLVE_SHADER_SYMBOL)
-    set(REVOLVE_SHADER_SYMBOL "${REVOLVE_SHADER_SYMBOL}_SHADER")
-
     if((REVOLVE_OPAL_BACKEND STREQUAL "METAL" OR
         (REVOLVE_OPAL_BACKEND STREQUAL "AUTO" AND APPLE)) AND REVOLVE_SLANGC)
-        set(REVOLVE_SHADER_INPUT
-            ${CMAKE_BINARY_DIR}/generated/graphics/${REVOLVE_SHADER_NAME}.metal)
+        if(NOT REVOLVE_SPIRV_CROSS)
+            message(FATAL_ERROR "spirv-cross is required for Metal shader generation")
+        endif()
+
+        set(REVOLVE_VERTEX_SPIRV
+            ${CMAKE_BINARY_DIR}/generated/graphics/${REVOLVE_SHADER_NAME}.vert.spv)
+        set(REVOLVE_FRAGMENT_SPIRV
+            ${CMAKE_BINARY_DIR}/generated/graphics/${REVOLVE_SHADER_NAME}.frag.spv)
+        set(REVOLVE_VERTEX_INPUT
+            ${CMAKE_BINARY_DIR}/generated/graphics/${REVOLVE_SHADER_NAME}.vert.metal)
+        set(REVOLVE_FRAGMENT_INPUT
+            ${CMAKE_BINARY_DIR}/generated/graphics/${REVOLVE_SHADER_NAME}.frag.metal)
         add_custom_command(
-            OUTPUT ${REVOLVE_SHADER_INPUT}
+            OUTPUT ${REVOLVE_VERTEX_INPUT} ${REVOLVE_FRAGMENT_INPUT}
             COMMAND ${CMAKE_COMMAND} -E make_directory
                 ${CMAKE_BINARY_DIR}/generated/graphics
-            COMMAND ${REVOLVE_SLANGC} -target metal
-                -entry vertexMain -stage vertex
-                -entry fragmentMain -stage fragment
-                -o ${REVOLVE_SHADER_INPUT} ${REVOLVE_SHADER_SOURCE}
+            COMMAND ${REVOLVE_SLANGC} ${REVOLVE_SHADER_SOURCE}
+                -entry vertexMain -stage vertex -target spirv
+                -profile spirv_1_3 -preserve-params -o ${REVOLVE_VERTEX_SPIRV}
+            COMMAND ${REVOLVE_SPIRV_CROSS} ${REVOLVE_VERTEX_SPIRV}
+                --msl --msl-version 230000 --output ${REVOLVE_VERTEX_INPUT}
+            COMMAND ${REVOLVE_SLANGC} ${REVOLVE_SHADER_SOURCE}
+                -entry fragmentMain -stage fragment -target spirv
+                -profile spirv_1_3 -preserve-params -o ${REVOLVE_FRAGMENT_SPIRV}
+            COMMAND ${REVOLVE_SPIRV_CROSS} ${REVOLVE_FRAGMENT_SPIRV}
+                --msl --msl-version 230000 --output ${REVOLVE_FRAGMENT_INPUT}
             DEPENDS ${REVOLVE_SHADER_SOURCE}
             VERBATIM
         )
     else()
-        set(REVOLVE_SHADER_INPUT ${REVOLVE_SHADER_SOURCE})
+        set(REVOLVE_VERTEX_INPUT ${REVOLVE_SHADER_SOURCE})
+        set(REVOLVE_FRAGMENT_INPUT ${REVOLVE_SHADER_SOURCE})
     endif()
 
-    list(APPEND REVOLVE_SHADER_INPUTS ${REVOLVE_SHADER_INPUT})
+    list(APPEND REVOLVE_SHADER_INPUTS
+        ${REVOLVE_VERTEX_INPUT} ${REVOLVE_FRAGMENT_INPUT})
     list(APPEND REVOLVE_SHADER_EMBED_ARGUMENTS
-        -DINPUT_FILE_${REVOLVE_SHADER_INDEX}=${REVOLVE_SHADER_INPUT}
-        -DSYMBOL_${REVOLVE_SHADER_INDEX}=${REVOLVE_SHADER_SYMBOL})
+        -DINPUT_FILE_${REVOLVE_SHADER_INDEX}=${REVOLVE_VERTEX_INPUT}
+        -DSYMBOL_${REVOLVE_SHADER_INDEX}=${REVOLVE_SHADER_SYMBOL}_VERTEX_SHADER)
+    math(EXPR REVOLVE_SHADER_INDEX "${REVOLVE_SHADER_INDEX} + 1")
+    list(APPEND REVOLVE_SHADER_EMBED_ARGUMENTS
+        -DINPUT_FILE_${REVOLVE_SHADER_INDEX}=${REVOLVE_FRAGMENT_INPUT}
+        -DSYMBOL_${REVOLVE_SHADER_INDEX}=${REVOLVE_SHADER_SYMBOL}_FRAGMENT_SHADER)
     math(EXPR REVOLVE_SHADER_INDEX "${REVOLVE_SHADER_INDEX} + 1")
 endforeach()
 

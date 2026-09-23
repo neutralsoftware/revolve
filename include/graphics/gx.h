@@ -337,6 +337,18 @@ static constexpr uint32_t BP_COPY_CLEAR_MASK = 1u << 11;
 
 static constexpr uint32_t BP_COPY_TO_XFB_MASK = 1u << 14;
 
+enum class GXAlphaLogic : uint8_t { And = 0, Or = 1, Xor = 2, Xnor = 3 };
+
+struct GXAlphaTestState {
+    uint8_t ref0 = 0;
+    uint8_t ref1 = 0;
+
+    opal::CompareOp comp0 = opal::CompareOp::Always;
+    opal::CompareOp comp1 = opal::CompareOp::Always;
+
+    GXAlphaLogic logic = GXAlphaLogic::And;
+};
+
 struct GXRasterState {
     bool depthTest = false;
     bool depthWrite = false;
@@ -345,6 +357,16 @@ struct GXRasterState {
     opal::CullMode cullMode = opal::CullMode::None;
 
     bool blendEnabled = false;
+    bool subtractBlend = false;
+
+    opal::BlendFunc srcBlend = opal::BlendFunc::One;
+    opal::BlendFunc dstBlend = opal::BlendFunc::Zero;
+
+    bool colorWrite = true;
+    bool alphaWrite = true;
+
+    bool logicOpEnabled = false;
+    uint8_t logicOp = 0;
 
     opal::FrontFace frontFace = opal::FrontFace::Clockwise;
 
@@ -370,6 +392,8 @@ struct GXBPState {
     GXBPCopyState copy{};
     GXRasterState raster{};
     GXScissorState scissor{};
+
+    GXAlphaTestState alphaTest{};
 };
 
 struct GXState {
@@ -433,6 +457,8 @@ class GXRenderer {
 
     void setRasterState(const GXRasterState &state);
 
+    void setAlphaTestState(const GXAlphaTestState &state);
+
     SDL_Window *window = nullptr;
 
   private:
@@ -471,6 +497,8 @@ class GXRenderer {
     std::vector<opal::VertexAttribute> gxAttributes;
 
     opal::VertexBinding gxBinding{};
+
+    GXAlphaTestState currentAlphaTest{};
 };
 
 class GX {
@@ -559,6 +587,10 @@ class GX {
     void executeEfbCopy();
 
     void updateScissorState();
+
+    opal::BlendFunc decodeGXSrcBlendFactor(uint32_t factor) const;
+    opal::BlendFunc decodeGXDstBlendFactor(uint32_t factor) const;
+    opal::CompareOp decodeGXCompare(uint32_t value) const;
 
     GXFifoReader reader{};
     GXState state{};

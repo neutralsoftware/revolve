@@ -979,6 +979,27 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
 
         break;
     }
+    case 0x41: {
+        renderer->flushEFB();
+
+        auto &r = state.bp.raster;
+        r.blendEnabled = (value & (1u << 0)) != 0;
+        r.logicOpEnabled = (value & (1u << 1)) != 0;
+        r.colorWrite = (value & (1u << 3)) != 0;
+        r.alphaWrite = (value & (1u << 4)) != 0;
+
+        uint32_t dstFactor = (value >> 5) & 0x7;
+
+        uint32_t srcFactor = (value >> 8) & 0x7;
+
+        r.subtractBlend = (value & (1u << 11)) != 0;
+        r.logicOp = static_cast<uint8_t>((value >> 12) & 0xF);
+        r.srcBlend = decodeGXSrcBlendFactor(srcFactor);
+        r.dstBlend = decodeGXDstBlendFactor(dstFactor);
+
+        renderer->setRasterState(r);
+        break;
+    }
     case 0x49:
         state.bp.copy.sourceX = value & 0x3FF;
         state.bp.copy.sourceY = (value >> 10) & 0x3FF;
@@ -1039,6 +1060,20 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
 
         break;
     }
+    case 0xF3: {
+        renderer->flushEFB();
+
+        auto &a = state.bp.alphaTest;
+        a.ref0 = static_cast<uint8_t>(value & 0xFF);
+        a.ref1 = static_cast<uint8_t>((value >> 8) & 0xFF);
+        a.comp0 = decodeGXCompare((value >> 16) & 0x7);
+        a.comp1 = decodeGXCompare((value >> 19) & 0x7);
+        a.logic = static_cast<GXAlphaLogic>((value >> 22) & 0x3);
+
+        renderer->setAlphaTestState(a);
+
+        break;
+    }
     }
 }
 
@@ -1085,4 +1120,73 @@ void GX::updateScissorState() {
     state.bp.raster.scissorHeight = static_cast<uint16_t>(std::max(0, y1 - y0));
 
     renderer->setRasterState(state.bp.raster);
+}
+
+opal::BlendFunc GX::decodeGXSrcBlendFactor(uint32_t factor) const {
+    switch (factor) {
+    case 0:
+        return opal::BlendFunc::Zero;
+    case 1:
+        return opal::BlendFunc::One;
+    case 2:
+        return opal::BlendFunc::DstColor;
+    case 3:
+        return opal::BlendFunc::OneMinusDstColor;
+    case 4:
+        return opal::BlendFunc::SrcAlpha;
+    case 5:
+        return opal::BlendFunc::OneMinusSrcAlpha;
+    case 6:
+        return opal::BlendFunc::DstAlpha;
+    case 7:
+        return opal::BlendFunc::OneMinusDstAlpha;
+    }
+
+    return opal::BlendFunc::One;
+}
+
+opal::BlendFunc GX::decodeGXDstBlendFactor(uint32_t factor) const {
+    switch (factor) {
+    case 0:
+        return opal::BlendFunc::Zero;
+    case 1:
+        return opal::BlendFunc::One;
+    case 2:
+        return opal::BlendFunc::SrcColor;
+    case 3:
+        return opal::BlendFunc::OneMinusSrcColor;
+    case 4:
+        return opal::BlendFunc::SrcAlpha;
+    case 5:
+        return opal::BlendFunc::OneMinusSrcAlpha;
+    case 6:
+        return opal::BlendFunc::DstAlpha;
+    case 7:
+        return opal::BlendFunc::OneMinusDstAlpha;
+    }
+
+    return opal::BlendFunc::Zero;
+}
+
+opal::CompareOp GX::decodeGXCompare(uint32_t value) const {
+    switch (value) {
+    case 0:
+        return opal::CompareOp::Never;
+    case 1:
+        return opal::CompareOp::Less;
+    case 2:
+        return opal::CompareOp::Equal;
+    case 3:
+        return opal::CompareOp::LessEqual;
+    case 4:
+        return opal::CompareOp::Greater;
+    case 5:
+        return opal::CompareOp::NotEqual;
+    case 6:
+        return opal::CompareOp::GreaterEqual;
+    case 7:
+        return opal::CompareOp::Always;
+    }
+
+    return opal::CompareOp::Always;
 }
