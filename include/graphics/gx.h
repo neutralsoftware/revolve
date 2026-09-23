@@ -337,9 +337,39 @@ static constexpr uint32_t BP_COPY_CLEAR_MASK = 1u << 11;
 
 static constexpr uint32_t BP_COPY_TO_XFB_MASK = 1u << 14;
 
+struct GXRasterState {
+    bool depthTest = false;
+    bool depthWrite = false;
+
+    opal::CompareOp depthCompare = opal::CompareOp::Less;
+    opal::CullMode cullMode = opal::CullMode::None;
+
+    bool blendEnabled = false;
+
+    opal::FrontFace frontFace = opal::FrontFace::Clockwise;
+
+    uint16_t scissorX = 0;
+    uint16_t scissorY = 0;
+    uint16_t scissorWidth = 640;
+    uint16_t scissorHeight = 528;
+};
+
+struct GXScissorState {
+    uint16_t left = 342;
+    uint16_t top = 342;
+
+    uint16_t right = 342 + 639;
+    uint16_t bottom = 342 + 527;
+
+    uint16_t offsetXHalf = 171;
+    uint16_t offsetYHalf = 171;
+};
+
 struct GXBPState {
     std::array<uint32_t, 256> registers{};
     GXBPCopyState copy{};
+    GXRasterState raster{};
+    GXScissorState scissor{};
 };
 
 struct GXState {
@@ -401,9 +431,13 @@ class GXRenderer {
 
     void presentXFB();
 
+    void setRasterState(const GXRasterState &state);
+
     SDL_Window *window = nullptr;
 
   private:
+    void rebuildGXPipeline();
+
     void createEFB();
     void createPresentPipeline();
 
@@ -430,6 +464,13 @@ class GXRenderer {
     std::shared_ptr<opal::DrawingState> fullscreenDrawingState;
 
     std::vector<GXRenderVertex> vertices;
+
+    bool rasterStateDirty = true;
+    GXRasterState currentRasterState{};
+
+    std::vector<opal::VertexAttribute> gxAttributes;
+
+    opal::VertexBinding gxBinding{};
 };
 
 class GX {
@@ -516,6 +557,8 @@ class GX {
 
     void writeBP(uint8_t reg, uint32_t value);
     void executeEfbCopy();
+
+    void updateScissorState();
 
     GXFifoReader reader{};
     GXState state{};

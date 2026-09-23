@@ -888,6 +888,97 @@ void GX::initialize() { renderer->initialize(); }
 
 void GX::writeBP(uint8_t reg, uint32_t value) {
     switch (reg) {
+    case 0x00: {
+        renderer->flushEFB();
+
+        uint32_t cull = (value >> 14) & 0x3;
+
+        switch (cull) {
+        case 0:
+            state.bp.raster.cullMode = opal::CullMode::None;
+            break;
+        case 1:
+            state.bp.raster.cullMode = opal::CullMode::Back;
+            break;
+        case 2:
+            state.bp.raster.cullMode = opal::CullMode::Front;
+            break;
+        case 3:
+            state.bp.raster.cullMode = opal::CullMode::FrontAndBack;
+            break;
+        }
+
+        renderer->setRasterState(state.bp.raster);
+
+        break;
+    }
+    case 0x20: {
+        renderer->flushEFB();
+
+        state.bp.scissor.top = static_cast<uint16_t>(value & 0x7FF);
+        state.bp.scissor.left = static_cast<uint16_t>((value >> 12) & 0x7FF);
+
+        updateScissorState();
+
+        break;
+    }
+    case 0x21: {
+        renderer->flushEFB();
+
+        state.bp.scissor.bottom = static_cast<uint16_t>(value & 0x7FF);
+        state.bp.scissor.right = static_cast<uint16_t>((value >> 12) & 0x7FF);
+
+        updateScissorState();
+
+        break;
+    }
+    case 0x40: {
+        renderer->flushEFB();
+
+        state.bp.raster.depthTest = (value & 1) != 0;
+
+        uint32_t compare = (value >> 1) & 0x7;
+
+        switch (compare) {
+        case 0:
+            state.bp.raster.depthCompare = opal::CompareOp::Never;
+            break;
+
+        case 1:
+            state.bp.raster.depthCompare = opal::CompareOp::Less;
+            break;
+
+        case 2:
+            state.bp.raster.depthCompare = opal::CompareOp::Equal;
+            break;
+
+        case 3:
+            state.bp.raster.depthCompare = opal::CompareOp::LessEqual;
+            break;
+
+        case 4:
+            state.bp.raster.depthCompare = opal::CompareOp::Greater;
+            break;
+
+        case 5:
+            state.bp.raster.depthCompare = opal::CompareOp::NotEqual;
+            break;
+
+        case 6:
+            state.bp.raster.depthCompare = opal::CompareOp::GreaterEqual;
+            break;
+
+        case 7:
+            state.bp.raster.depthCompare = opal::CompareOp::Always;
+            break;
+        }
+
+        state.bp.raster.depthWrite = (value & (1u << 4)) != 0;
+
+        renderer->setRasterState(state.bp.raster);
+
+        break;
+    }
     case 0x49:
         state.bp.copy.sourceX = value & 0x3FF;
         state.bp.copy.sourceY = (value >> 10) & 0x3FF;
@@ -937,6 +1028,17 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
         executeEfbCopy();
 
         break;
+    case 0x59: {
+        renderer->flushEFB();
+
+        state.bp.scissor.offsetXHalf = static_cast<uint16_t>(value & 0x3FF);
+        state.bp.scissor.offsetYHalf =
+            static_cast<uint16_t>((value >> 10) & 0x3FF);
+
+        updateScissorState();
+
+        break;
+    }
     }
 }
 
@@ -956,4 +1058,31 @@ void GX::executeEfbCopy() {
     }
 
     renderer->presentXFB();
+}
+
+void GX::updateScissorState() {
+    const auto &s = state.bp.scissor;
+
+    const int32_t offsetX = static_cast<int32_t>(s.offsetXHalf) * 2;
+    const int32_t offsetY = static_cast<int32_t>(s.offsetYHalf) * 2;
+
+    int32_t left = static_cast<int32_t>(s.left) - offsetX;
+    int32_t top = static_cast<int32_t>(s.top) - offsetY;
+    int32_t right = static_cast<int32_t>(s.right) - offsetX;
+    int32_t bottom = static_cast<int32_t>(s.bottom) - offsetY;
+
+    int32_t width = right - left + 1;
+    int32_t height = bottom - top + 1;
+
+    int32_t x0 = std::clamp<int32_t>(left, 0, EFB_WIDTH);
+    int32_t y0 = std::clamp<int32_t>(top, 0, EFB_HEIGHT);
+    int32_t x1 = std::clamp<int32_t>(left + width, 0, EFB_WIDTH);
+    int32_t y1 = std::clamp<int32_t>(top + height, 0, EFB_HEIGHT);
+
+    state.bp.raster.scissorX = static_cast<uint16_t>(x0);
+    state.bp.raster.scissorY = static_cast<uint16_t>(y0);
+    state.bp.raster.scissorWidth = static_cast<uint16_t>(std::max(0, x1 - x0));
+    state.bp.raster.scissorHeight = static_cast<uint16_t>(std::max(0, y1 - y0));
+
+    renderer->setRasterState(state.bp.raster);
 }

@@ -15,12 +15,9 @@ struct FullscreenVertex {
 };
 
 constexpr FullscreenVertex FULLSCREEN_VERTICES[] = {
-    {-1.0f, -1.0f, 0.0f, 1.0f},
-    {1.0f, -1.0f, 1.0f, 1.0f},
-    {1.0f, 1.0f, 1.0f, 0.0f},
-    {-1.0f, -1.0f, 0.0f, 1.0f},
-    {1.0f, 1.0f, 1.0f, 0.0f},
-    {-1.0f, 1.0f, 0.0f, 0.0f},
+    {-1.0f, -1.0f, 0.0f, 1.0f}, {1.0f, -1.0f, 1.0f, 1.0f},
+    {1.0f, 1.0f, 1.0f, 0.0f},   {-1.0f, -1.0f, 0.0f, 1.0f},
+    {1.0f, 1.0f, 1.0f, 0.0f},   {-1.0f, 1.0f, 0.0f, 0.0f},
 };
 
 std::array<FullscreenVertex, 6> makeFullscreenVertices(float originX,
@@ -38,7 +35,7 @@ std::array<FullscreenVertex, 6> makeFullscreenVertices(float originX,
              {1.0f, 1.0f, right, top},
              {-1.0f, 1.0f, left, top}}};
 }
-}
+} // namespace
 
 void GXRenderer::drawTriangle(const GXRenderVertex &a, const GXRenderVertex &b,
                               const GXRenderVertex &c) {
@@ -63,8 +60,8 @@ void GXRenderer::initialize() {
 
     createEFB();
 
-    auto gxShader = opal::Shader::createFromSource(
-        MINIMAL_SHADER, opal::ShaderType::Vertex);
+    auto gxShader = opal::Shader::createFromSource(MINIMAL_SHADER,
+                                                   opal::ShaderType::Vertex);
     auto gxVertexShader =
         gxShader->forFunction("vertexMain", opal::ShaderType::Vertex);
     auto gxFragmentShader =
@@ -77,43 +74,32 @@ void GXRenderer::initialize() {
     gxShaderProgram->attachShader(gxFragmentShader);
     gxShaderProgram->link();
 
-    gxPipeline = opal::Pipeline::create();
-    gxPipeline->setShaderProgram(gxShaderProgram);
-    gxPipeline->setPrimitiveStyle(opal::PrimitiveStyle::Triangles);
-    gxPipeline->setRasterizerMode(opal::RasterizerMode::Fill);
-    gxPipeline->setCullMode(opal::CullMode::None);
-    gxPipeline->enableDepthTest(false);
-    gxPipeline->enableDepthWrite(false);
-    gxPipeline->enableBlending(false);
+    gxAttributes = {{.name = "inPosition",
+                     .type = opal::VertexAttributeType::Float,
+                     .offset = offsetof(GXRenderVertex, x),
+                     .location = 0,
+                     .normalized = false,
+                     .size = 4,
+                     .stride = sizeof(GXRenderVertex)},
+                    {.name = "inColor",
+                     .type = opal::VertexAttributeType::Float,
+                     .offset = offsetof(GXRenderVertex, r),
+                     .location = 1,
+                     .normalized = false,
+                     .size = 4,
+                     .stride = sizeof(GXRenderVertex)},
+                    {.name = "inUV",
+                     .type = opal::VertexAttributeType::Float,
+                     .offset = offsetof(GXRenderVertex, u),
+                     .location = 2,
+                     .normalized = false,
+                     .size = 2,
+                     .stride = sizeof(GXRenderVertex)}};
 
-    std::vector<opal::VertexAttribute> gxAttributes = {
-        {.name = "inPosition",
-         .type = opal::VertexAttributeType::Float,
-         .offset = offsetof(GXRenderVertex, x),
-         .location = 0,
-         .normalized = false,
-         .size = 4,
-         .stride = sizeof(GXRenderVertex)},
-        {.name = "inColor",
-         .type = opal::VertexAttributeType::Float,
-         .offset = offsetof(GXRenderVertex, r),
-         .location = 1,
-         .normalized = false,
-         .size = 4,
-         .stride = sizeof(GXRenderVertex)},
-        {.name = "inUV",
-         .type = opal::VertexAttributeType::Float,
-         .offset = offsetof(GXRenderVertex, u),
-         .location = 2,
-         .normalized = false,
-         .size = 2,
-         .stride = sizeof(GXRenderVertex)}};
-
-    opal::VertexBinding gxBinding{};
     gxBinding.stride = sizeof(GXRenderVertex);
     gxBinding.inputRate = opal::VertexBindingInputRate::Vertex;
-    gxPipeline->setVertexAttributes(gxAttributes, gxBinding);
-    gxPipeline->build();
+
+    rebuildGXPipeline();
 
     clearEFB({}, 0xFFFFFF);
     createPresentPipeline();
@@ -124,9 +110,8 @@ void GXRenderer::createEFB() {
                                      opal::TextureFormat::Rgba8, EFB_WIDTH,
                                      EFB_HEIGHT);
     efbDepth = opal::Texture::create(
-        opal::TextureType::Texture2D,
-        opal::TextureFormat::Depth24Stencil8, EFB_WIDTH, EFB_HEIGHT,
-        opal::TextureDataFormat::DepthComponent);
+        opal::TextureType::Texture2D, opal::TextureFormat::Depth24Stencil8,
+        EFB_WIDTH, EFB_HEIGHT, opal::TextureDataFormat::DepthComponent);
     efbFramebuffer = opal::Framebuffer::create(EFB_WIDTH, EFB_HEIGHT);
 
     opal::Attachment attachment{};
@@ -141,12 +126,11 @@ void GXRenderer::createEFB() {
 
     efbRenderPass = opal::RenderPass::create();
     efbRenderPass->setFramebuffer(efbFramebuffer);
-
 }
 
 void GXRenderer::createPresentPipeline() {
-    auto shader = opal::Shader::createFromSource(
-        FULLSCREEN_SHADER, opal::ShaderType::Vertex);
+    auto shader = opal::Shader::createFromSource(FULLSCREEN_SHADER,
+                                                 opal::ShaderType::Vertex);
     auto vertexShader =
         shader->forFunction("vertexMain", opal::ShaderType::Vertex);
     auto fragmentShader =
@@ -200,6 +184,10 @@ void GXRenderer::flushEFB() {
     if (vertices.empty())
         return;
 
+    if (rasterStateDirty) {
+        rebuildGXPipeline();
+    }
+
     const size_t size = vertices.size() * sizeof(GXRenderVertex);
     auto vertexBuffer =
         opal::Buffer::create(opal::BufferUsage::VertexBuffer, size,
@@ -208,9 +196,13 @@ void GXRenderer::flushEFB() {
     auto commandBuffer = device->acquireCommandBuffer();
     commandBuffer->start();
     commandBuffer->beginPass(efbRenderPass);
+    commandBuffer->setScissor(
+        currentRasterState.scissorX, currentRasterState.scissorY,
+        currentRasterState.scissorWidth, currentRasterState.scissorHeight);
     commandBuffer->bindPipeline(gxPipeline);
     commandBuffer->bindDrawingState(drawingState);
     commandBuffer->draw(static_cast<uint32_t>(vertices.size()));
+    commandBuffer->resetScissor();
     commandBuffer->endPass();
     commandBuffer->commit();
     device->submitCommandBuffer(commandBuffer);
@@ -272,11 +264,11 @@ void GXRenderer::copyEFBToXFB(const GXBPCopyState &copy) {
 
     presentPipeline->bindTexture("xfbTexture", efbColor, 0);
 
-    const auto copyVertices = makeFullscreenVertices(
-        static_cast<float>(sourceX) / EFB_WIDTH,
-        static_cast<float>(sourceY) / EFB_HEIGHT,
-        static_cast<float>(width) / EFB_WIDTH,
-        static_cast<float>(height) / EFB_HEIGHT);
+    const auto copyVertices =
+        makeFullscreenVertices(static_cast<float>(sourceX) / EFB_WIDTH,
+                               static_cast<float>(sourceY) / EFB_HEIGHT,
+                               static_cast<float>(width) / EFB_WIDTH,
+                               static_cast<float>(height) / EFB_HEIGHT);
     auto copyBuffer = opal::Buffer::create(
         opal::BufferUsage::VertexBuffer, sizeof(copyVertices),
         copyVertices.data(), opal::MemoryUsageType::CPUToGPU);
@@ -329,4 +321,28 @@ void GXRenderer::presentXFB() {
     commandBuffer->endPass();
     commandBuffer->commit();
     device->submitCommandBuffer(commandBuffer);
+}
+
+void GXRenderer::setRasterState(const GXRasterState &state) {
+    currentRasterState = state;
+    rasterStateDirty = true;
+}
+
+void GXRenderer::rebuildGXPipeline() {
+    gxPipeline = opal::Pipeline::create();
+
+    gxPipeline->setShaderProgram(gxShaderProgram);
+    gxPipeline->setPrimitiveStyle(opal::PrimitiveStyle::Triangles);
+    gxPipeline->setRasterizerMode(opal::RasterizerMode::Fill);
+    gxPipeline->setCullMode(currentRasterState.cullMode);
+    gxPipeline->enableDepthTest(currentRasterState.depthTest);
+    gxPipeline->setDepthCompareOp(currentRasterState.depthCompare);
+    gxPipeline->enableDepthWrite(currentRasterState.depthWrite);
+    gxPipeline->enableBlending(currentRasterState.blendEnabled);
+    gxPipeline->setVertexAttributes(gxAttributes, gxBinding);
+    gxPipeline->setFrontFace(currentRasterState.frontFace);
+
+    gxPipeline->build();
+
+    rasterStateDirty = false;
 }
