@@ -770,3 +770,48 @@ GXColor GX::calculateLightingChannel(const GXVertex &vertex, uint32_t channel,
 
     return result;
 }
+
+void GX::decodeTevRegister(uint8_t reg, uint32_t value) {
+    if (reg < 0xE0 || reg > 0xE7)
+        return;
+
+    const uint32_t index = (reg - 0xE0) / 2;
+    const bool high = (reg & 1) != 0;
+    const bool konst = (value & (1u << 23)) != 0;
+
+    auto &target =
+        konst ? state.bp.konstRegisters[index] : state.bp.tevRegisters[index];
+
+    if (!high) {
+        target.r = gx::signExtend11(value >> 0);
+        target.a = gx::signExtend11(value >> 12);
+    } else {
+        target.b = gx::signExtend11(value >> 0);
+        target.g = gx::signExtend11(value >> 12);
+    }
+}
+
+void GX::decodeTevKSel(uint8_t reg, uint32_t value) {
+    if (reg < 0xF6 || reg > 0xFD)
+        return;
+
+    const uint32_t pair = reg - 0xF6;
+    const uint32_t stage0 = pair * 2;
+    const uint32_t stage1 = stage0 + 1;
+
+    if (stage0 < 16) {
+        state.bp.tevStages[stage0].konstColorSel =
+            static_cast<uint8_t>((value >> 4) & 0x1F);
+
+        state.bp.tevStages[stage0].konstAlphaSel =
+            static_cast<uint8_t>((value >> 9) & 0x1F);
+    }
+
+    if (stage1 < 16) {
+        state.bp.tevStages[stage1].konstColorSel =
+            static_cast<uint8_t>((value >> 14) & 0x1F);
+
+        state.bp.tevStages[stage1].konstAlphaSel =
+            static_cast<uint8_t>((value >> 19) & 0x1F);
+    }
+}

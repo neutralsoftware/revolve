@@ -264,6 +264,9 @@ struct GXTevStage {
     GXTevOrder order{};
     GXTevColorCombiner color{};
     GXTevAlphaCombiner alpha{};
+
+    uint8_t konstColorSel = 0;
+    uint8_t konstAlphaSel = 0;
 };
 
 enum class GXTexProjection : uint8_t { ST = 0, STQ = 1 };
@@ -672,6 +675,13 @@ struct GXScissorState {
     uint16_t offsetYHalf = 171;
 };
 
+struct GXTevRegisterValue {
+    int16_t r = 0;
+    int16_t g = 0;
+    int16_t b = 0;
+    int16_t a = 0;
+};
+
 struct GXBPState {
     std::array<uint32_t, 256> registers{};
     GXBPCopyState copy{};
@@ -684,6 +694,9 @@ struct GXBPState {
     std::array<GXTevStage, 16> tevStages{};
 
     uint32_t tevStageCount = 1;
+
+    std::array<GXTevRegisterValue, 4> tevRegisters{};
+    std::array<GXTevRegisterValue, 4> konstRegisters{};
 };
 
 struct GXState {
@@ -779,6 +792,18 @@ static inline GXVec3 normalize(const GXVec3 &v) {
     return result;
 }
 
+static int16_t signExtend11(uint32_t value) {
+    value &= 0x7FF;
+
+    if (value & 0x400)
+        return static_cast<int16_t>(value | 0xF800);
+
+    return static_cast<int16_t>(value);
+}
+
+static float tevComponentToFloat(int16_t value) {
+    return static_cast<float>(value) / 255.0f;
+}
 } // namespace gx
 
 class GXRenderer {
@@ -1088,6 +1113,10 @@ class GX {
                                      const GXVec3 &normal) const;
 
     GXColor getVertexColor(const GXVertex &vertex, uint32_t channel) const;
+
+    void decodeTevRegister(uint8_t reg, uint32_t value);
+
+    void decodeTevKSel(uint8_t reg, uint32_t value);
 
     GXFifoReader reader{};
 

@@ -1198,6 +1198,22 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
         return;
     }
 
+    if (reg >= 0xE0 && reg <= 0xE7) {
+        renderer->flushEFB();
+
+        decodeTevRegister(reg, value);
+
+        return;
+    }
+
+    if (reg >= 0xF6 && reg <= 0xFD) {
+        renderer->flushEFB();
+
+        decodeTevKSel(reg, value);
+
+        return;
+    }
+
     switch (reg) {
     case 0x00: {
         renderer->flushEFB();

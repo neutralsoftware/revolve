@@ -294,6 +294,26 @@ void GXRenderer::flushEFB() {
     gxPipeline->setUniform1i("tevStageCount",
                              static_cast<int>(bp.tevStageCount));
 
+    for (uint32_t i = 0; i < 4; ++i) {
+        const auto &r = bp.tevRegisters[i];
+
+        const std::string name = "tevRegister" + std::to_string(i);
+
+        gxPipeline->setUniform4f(
+            name, gx::tevComponentToFloat(r.r), gx::tevComponentToFloat(r.g),
+            gx::tevComponentToFloat(r.b), gx::tevComponentToFloat(r.a));
+    }
+
+    for (uint32_t i = 0; i < 4; ++i) {
+        const auto &k = bp.konstRegisters[i];
+
+        const std::string name = "konst" + std::to_string(i);
+
+        gxPipeline->setUniform4f(
+            name, gx::tevComponentToFloat(k.r), gx::tevComponentToFloat(k.g),
+            gx::tevComponentToFloat(k.b), gx::tevComponentToFloat(k.a));
+    }
+
     for (int i = 0; i < bp.tevStageCount; ++i) {
         applyTevState(gxPipeline, i);
     }
@@ -559,4 +579,8 @@ void GXRenderer::applyTevState(std::shared_ptr<opal::Pipeline> &pipeline,
                            static_cast<int>(tevStage.alpha.rasterSwap));
     pipeline->setUniform1i(baseName + ".textureSwap",
                            static_cast<int>(tevStage.alpha.textureSwap));
+    pipeline->setUniform1i(baseName + ".konstColorSel",
+                           static_cast<int>(tevStage.konstColorSel));
+    pipeline->setUniform1i(baseName + ".konstAlphaSel",
+                           static_cast<int>(tevStage.konstAlphaSel));
 }

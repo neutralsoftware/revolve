@@ -62,8 +62,8 @@ struct TevStage {
     int rasterSwap;
     int textureSwap;
 
-    int pad0;
-    int pad1;
+    int konstColorSel;
+    int konstAlphaSel;
 };
 
 struct Uniforms {
@@ -76,6 +76,16 @@ struct Uniforms {
     int tevStageCount;
     int pad0;
     int pad1;
+
+    float4 tevRegister0;
+    float4 tevRegister1;
+    float4 tevRegister2;
+    float4 tevRegister3;
+
+    float4 konst0;
+    float4 konst1;
+    float4 konst2;
+    float4 konst3;
 
     TevStage tevStages[16];
 };
@@ -256,7 +266,132 @@ float4 sampleGXTexture(int index, float2 uv) {
     return float4(1.0, 1.0, 1.0, 1.0);
 }
 
-float3 getTevColorArg(int arg, TevRegisters registers, float4 tex, float4 ras) {
+float4 getKonstRegister(int index) {
+    switch (index) {
+    case 0:
+        return uniforms.konst0;
+    case 1:
+        return uniforms.konst1;
+    case 2:
+        return uniforms.konst2;
+    case 3:
+        return uniforms.konst3;
+    }
+
+    return float4(0, 0, 0, 0);
+}
+
+float3 getKonstColor(int sel) {
+    switch (sel) {
+    case 0:
+        return float3(1.0);
+    case 1:
+        return float3(7.0 / 8.0);
+    case 2:
+        return float3(3.0 / 4.0);
+    case 3:
+        return float3(5.0 / 8.0);
+    case 4:
+        return float3(1.0 / 2.0);
+    case 5:
+        return float3(3.0 / 8.0);
+    case 6:
+        return float3(1.0 / 4.0);
+    case 7:
+        return float3(1.0 / 8.0);
+
+    case 8:
+    case 9:
+    case 10:
+    case 11:
+        return float3(0.0);
+
+    case 12:
+        return uniforms.konst0.rgb;
+    case 13:
+        return uniforms.konst1.rgb;
+    case 14:
+        return uniforms.konst2.rgb;
+    case 15:
+        return uniforms.konst3.rgb;
+    }
+
+    int group = (sel - 16) / 4;
+
+    int reg = (sel - 16) % 4;
+
+    float4 k = getKonstRegister(reg);
+
+    float component;
+
+    switch (group) {
+    case 0:
+        component = k.r;
+        break;
+    case 1:
+        component = k.g;
+        break;
+    case 2:
+        component = k.b;
+        break;
+    default:
+        component = k.a;
+        break;
+    }
+
+    return float3(component);
+}
+
+float getKonstAlpha(int sel) {
+    switch (sel) {
+    case 0:
+        return 1.0;
+    case 1:
+        return 7.0 / 8.0;
+    case 2:
+        return 3.0 / 4.0;
+    case 3:
+        return 5.0 / 8.0;
+    case 4:
+        return 1.0 / 2.0;
+    case 5:
+        return 3.0 / 8.0;
+    case 6:
+        return 1.0 / 4.0;
+    case 7:
+        return 1.0 / 8.0;
+
+    case 8:
+    case 9:
+    case 10:
+    case 11:
+    case 12:
+    case 13:
+    case 14:
+    case 15:
+        return 0.0;
+    }
+
+    int group = (sel - 16) / 4;
+
+    int reg = (sel - 16) % 4;
+
+    float4 k = getKonstRegister(reg);
+
+    switch (group) {
+    case 0:
+        return k.r;
+    case 1:
+        return k.g;
+    case 2:
+        return k.b;
+    default:
+        return k.a;
+    }
+}
+
+float3 getTevColorArg(int arg, TevRegisters registers, float4 tex, float4 ras,
+                      float3 konst) {
     switch (arg) {
     case 0:
         return registers.prev.rgb;
@@ -287,8 +422,7 @@ float3 getTevColorArg(int arg, TevRegisters registers, float4 tex, float4 ras) {
     case 13:
         return float3(0.5, 0.5, 0.5);
     case 14:
-        // Konst color
-        return float3(0.0, 0.0, 0.0);
+        return konst;
     case 15:
         return float3(0.0, 0.0, 0.0);
     }
@@ -296,7 +430,8 @@ float3 getTevColorArg(int arg, TevRegisters registers, float4 tex, float4 ras) {
     return float3(0.0, 0.0, 0.0);
 }
 
-float getTevAlphaArg(int arg, TevRegisters registers, float4 tex, float4 ras) {
+float getTevAlphaArg(int arg, TevRegisters registers, float4 tex, float4 ras,
+                     float konst) {
     switch (arg) {
     case 0:
         return registers.prev.a;
@@ -311,8 +446,7 @@ float getTevAlphaArg(int arg, TevRegisters registers, float4 tex, float4 ras) {
     case 5:
         return ras.a;
     case 6:
-        // Konst color
-        return 1.0;
+        return konst;
     case 7:
         return 0.0;
     }
@@ -448,15 +582,18 @@ void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs) {
         tex = sampleGXTexture(stage.texMap, uv);
     }
 
-    float3 A = getTevColorArg(stage.colorA, regs, tex, ras);
-    float3 B = getTevColorArg(stage.colorB, regs, tex, ras);
-    float3 C = getTevColorArg(stage.colorC, regs, tex, ras);
-    float3 D = getTevColorArg(stage.colorD, regs, tex, ras);
+    float3 konstColor = getKonstColor(stage.konstColorSel);
+    float konstAlpha = getKonstAlpha(stage.konstAlphaSel);
 
-    float colorA = getTevAlphaArg(stage.alphaA, regs, tex, ras);
-    float colorB = getTevAlphaArg(stage.alphaB, regs, tex, ras);
-    float colorC = getTevAlphaArg(stage.alphaC, regs, tex, ras);
-    float colorD = getTevAlphaArg(stage.alphaD, regs, tex, ras);
+    float3 A = getTevColorArg(stage.colorA, regs, tex, ras, konstColor);
+    float3 B = getTevColorArg(stage.colorB, regs, tex, ras, konstColor);
+    float3 C = getTevColorArg(stage.colorC, regs, tex, ras, konstColor);
+    float3 D = getTevColorArg(stage.colorD, regs, tex, ras, konstColor);
+
+    float colorA = getTevAlphaArg(stage.alphaA, regs, tex, ras, konstAlpha);
+    float colorB = getTevAlphaArg(stage.alphaB, regs, tex, ras, konstAlpha);
+    float colorC = getTevAlphaArg(stage.alphaC, regs, tex, ras, konstAlpha);
+    float colorD = getTevAlphaArg(stage.alphaD, regs, tex, ras, konstAlpha);
 
     float3 rgb = applyTevColor(A, B, C, D, stage);
     float alpha = applyTevAlpha(colorA, colorB, colorC, colorD, stage);
@@ -468,10 +605,10 @@ void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs) {
 [shader("fragment")]
 float4 fragmentMain(VertexOut input) : SV_TARGET {
     TevRegisters registers;
-    registers.prev = float4(1.0, 1.0, 1.0, 1.0);
-    registers.reg0 = float4(0.0, 0.0, 0.0, 0.0);
-    registers.reg1 = float4(0.0, 0.0, 0.0, 0.0);
-    registers.reg2 = float4(0.0, 0.0, 0.0, 0.0);
+    registers.prev = uniforms.tevRegister0;
+    registers.reg0 = uniforms.tevRegister1;
+    registers.reg1 = uniforms.tevRegister2;
+    registers.reg2 = uniforms.tevRegister3;
 
     for (int i = 0; i < uniforms.tevStageCount; i++) {
         executeTevStage(uniforms.tevStages[i], input, registers);
