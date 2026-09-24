@@ -814,4 +814,19 @@ void GX::decodeTevKSel(uint8_t reg, uint32_t value) {
         state.bp.tevStages[stage1].konstAlphaSel =
             static_cast<uint8_t>((value >> 19) & 0x1F);
     }
+
+    const uint32_t table = (reg - 0xF6) / 2;
+    const bool second = ((reg - 0xF6) & 1) != 0;
+
+    const uint8_t xrb = static_cast<uint8_t>(value & 0x3);
+    const uint8_t xga = static_cast<uint8_t>((value >> 2) & 0x3);
+
+    auto &swap = state.bp.tevSwapTables[table];
+    if (!second) {
+        swap.r = xrb;
+        swap.b = xga;
+    } else {
+        swap.g = xrb;
+        swap.a = xga;
+    }
 }

@@ -87,6 +87,11 @@ struct Uniforms {
     float4 konst2;
     float4 konst3;
 
+    float4 swapTable0;
+    float4 swapTable1;
+    float4 swapTable2;
+    float4 swapTable3;
+
     TevStage tevStages[16];
 };
 
@@ -168,6 +173,65 @@ VertexOut vertexMain(VertexIn input) {
     return output;
 }
 
+uint tev8(float value) { return (uint)round(saturate(value) * 255.0); }
+
+bool compareTevColor(float3 A, float3 B, int scale, int op) {
+    uint3 a = uint3(tev8(A.r), tev8(A.g), tev8(A.b));
+    uint3 b = uint3(tev8(B.r), tev8(B.g), tev8(B.b));
+
+    bool equality = op != 0;
+
+    if (scale == 0) {
+        return equality ? a.r == b.r : a.r > b.r;
+    }
+
+    if (scale == 1) {
+        uint av = (a.g << 8) | a.r;
+        uint bv = (b.g << 8) | b.r;
+
+        return equality ? av == bv : av > bv;
+    }
+
+    if (scale == 2) {
+        uint av = (a.b << 16) | (a.g << 8) | a.r;
+        uint bv = (b.b << 16) | (b.g << 8) | b.r;
+
+        return equality ? av == bv : av > bv;
+    }
+
+    return false;
+}
+
+int4 getSwapTable(int index) {
+    switch (index) {
+    case 0:
+        return int4(uniforms.swapTable0);
+    case 1:
+        return int4(uniforms.swapTable1);
+    case 2:
+        return int4(uniforms.swapTable2);
+    case 3:
+        return int4(uniforms.swapTable3);
+    }
+
+    return int4(0, 1, 2, 3);
+}
+
+float getChannel(float4 value, int channel) {
+    switch (channel) {
+    case 0:
+        return value.r;
+    case 1:
+        return value.g;
+    case 2:
+        return value.b;
+    case 3:
+        return value.a;
+    }
+
+    return 0.0;
+}
+
 float4 getRasterColor(int channel, VertexOut input) {
     switch (channel) {
     case 0:
@@ -241,6 +305,13 @@ bool alphaTest(float alpha) {
     }
 
     return true;
+}
+
+float4 applySwap(float4 value, int tableIndex) {
+    int4 table = getSwapTable(tableIndex);
+
+    return float4(getChannel(value, table.x), getChannel(value, table.y),
+                  getChannel(value, table.z), getChannel(value, table.w));
 }
 
 float4 sampleGXTexture(int index, float2 uv) {
@@ -455,6 +526,42 @@ float getTevAlphaArg(int arg, TevRegisters registers, float4 tex, float4 ras,
 }
 
 float3 applyTevColor(float3 A, float3 B, float3 C, float3 D, TevStage stage) {
+    if (stage.colorBias == 3) {
+        if (stage.colorScale == 3) {
+            uint3 a = uint3(tev8(A.r), tev8(A.g), tev8(A.b));
+
+            uint3 b = uint3(tev8(B.r), tev8(B.g), tev8(B.b));
+
+            bool equality = stage.colorOp != 0;
+
+            float3 mask;
+
+            if (equality) {
+                mask = float3(a.r == b.r ? 1.0 : 0.0, a.g == b.g ? 1.0 : 0.0,
+                              a.b == b.b ? 1.0 : 0.0);
+            } else {
+                mask = float3(a.r > b.r ? 1.0 : 0.0, a.g > b.g ? 1.0 : 0.0,
+                              a.b > b.b ? 1.0 : 0.0);
+            }
+
+            float3 result = D + C * mask;
+
+            if (stage.colorClamp != 0)
+                result = saturate(result);
+
+            return result;
+        }
+
+        bool pass = compareTevColor(A, B, stage.colorScale, stage.colorOp);
+
+        float3 result = D + (pass ? C : float3(0));
+
+        if (stage.colorClamp != 0)
+            result = saturate(result);
+
+        return result;
+    }
+
     float3 blend = A * (1.0 - C) + B * C;
 
     float3 result;
@@ -494,6 +601,23 @@ float3 applyTevColor(float3 A, float3 B, float3 C, float3 D, TevStage stage) {
 }
 
 float applyTevAlpha(float A, float B, float C, float D, TevStage stage) {
+    if (stage.alphaBias == 3) {
+        uint a = tev8(A);
+
+        uint b = tev8(B);
+
+        bool equality = stage.alphaOp != 0;
+
+        bool pass = equality ? a == b : a > b;
+
+        float result = D + (pass ? C : 0.0);
+
+        if (stage.alphaClamp != 0)
+            result = saturate(result);
+
+        return result;
+    }
+
     float blend = A * (1.0 - C) + B * C;
 
     float result;
@@ -573,8 +697,10 @@ void writeTevAlpha(int output, float value, inout TevRegisters regs) {
 
 void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs) {
     float4 ras = getRasterColor(stage.colorChannel, input);
+    ras = applySwap(ras, stage.rasterSwap);
 
     float4 tex = float4(1, 1, 1, 1);
+    tex = applySwap(tex, stage.textureSwap);
 
     if (stage.textureEnabled != 0) {
         float2 uv = getGXTexCoord(stage.texCoord, input);

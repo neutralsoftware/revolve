@@ -113,12 +113,20 @@ void GX::processCPLoad() {
 
 void GX::processBPLoad() {
     uint32_t raw = read32();
-
     uint8_t reg = static_cast<uint8_t>(raw >> 24);
+    uint32_t incoming = raw & 0x00FFFFFF;
 
-    uint32_t value = raw & 0x00FFFFFF;
+    if (reg == 0xFE) {
+        state.bp.writeMask = incoming;
+        return;
+    }
+
+    uint32_t oldValue = state.bp.registers[reg];
+    uint32_t mask = state.bp.writeMask;
+    uint32_t value = (oldValue & ~mask) | (incoming & mask);
 
     state.bp.registers[reg] = value;
+    state.bp.writeMask = 0x00FFFFFF;
 
     writeBP(reg, value);
 }

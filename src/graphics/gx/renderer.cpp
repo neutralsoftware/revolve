@@ -314,6 +314,14 @@ void GXRenderer::flushEFB() {
             gx::tevComponentToFloat(k.b), gx::tevComponentToFloat(k.a));
     }
 
+    for (uint32_t i = 0; i < 4; ++i) {
+        const auto &s = bp.tevSwapTables[i];
+
+        const std::string name = "swapTable" + std::to_string(i);
+
+        gxPipeline->setUniform4f(name, s.r, s.g, s.b, s.a);
+    }
+
     for (int i = 0; i < bp.tevStageCount; ++i) {
         applyTevState(gxPipeline, i);
     }

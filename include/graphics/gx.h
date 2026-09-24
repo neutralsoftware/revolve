@@ -682,6 +682,13 @@ struct GXTevRegisterValue {
     int16_t a = 0;
 };
 
+struct GXTevSwapTable {
+    uint8_t r = 0;
+    uint8_t g = 1;
+    uint8_t b = 2;
+    uint8_t a = 3;
+};
+
 struct GXBPState {
     std::array<uint32_t, 256> registers{};
     GXBPCopyState copy{};
@@ -697,6 +704,15 @@ struct GXBPState {
 
     std::array<GXTevRegisterValue, 4> tevRegisters{};
     std::array<GXTevRegisterValue, 4> konstRegisters{};
+
+    std::array<GXTevSwapTable, 4> tevSwapTables{{
+        {0, 1, 2, 3},
+        {0, 1, 2, 3},
+        {0, 1, 2, 3},
+        {0, 1, 2, 3},
+    }};
+
+    uint32_t writeMask = 0x00FFFFFF;
 };
 
 struct GXState {
