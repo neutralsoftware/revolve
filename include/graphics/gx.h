@@ -241,6 +241,49 @@ struct GXTevStage {
     GXTevAlphaCombiner alpha{};
 };
 
+enum class GXTexProjection : uint8_t { ST = 0, STQ = 1 };
+
+enum class GXTexInputForm : uint8_t { AB11 = 0, ABC1 = 1 };
+
+enum class GXTexGenType : uint8_t {
+    Regular = 0,
+    EmbossMap = 1,
+    Color0 = 2,
+    Color1 = 3,
+};
+
+enum class GXTexSource : uint8_t {
+    Position = 0,
+    Normal = 1,
+    Colors = 2,
+    BinormalT = 3,
+    BinormalB = 4,
+
+    Tex0 = 5,
+    Tex1 = 6,
+    Tex2 = 7,
+    Tex3 = 8,
+    Tex4 = 9,
+    Tex5 = 10,
+    Tex6 = 11,
+    Tex7 = 12,
+};
+
+struct GXTexGenState {
+    GXTexProjection projection = GXTexProjection::ST;
+    GXTexInputForm inputForm = GXTexInputForm::AB11;
+    GXTexGenType type = GXTexGenType::Regular;
+    GXTexSource source = GXTexSource::Tex0;
+
+    uint8_t embossSource = 0;
+    uint8_t embossLight = 0;
+};
+
+struct GXPostTexMatrixState {
+    uint8_t index = 0;
+    bool normalize = false;
+};
+
 enum class GXArrayAttribute : uint8_t {
     Position = 9,
     Normal = 10,
@@ -426,6 +469,16 @@ class GXCommandProcessorState {
         }
     }
 
+    inline uint32_t getTextureMatrixIndex(uint32_t texGen) const {
+        if (texGen >= vcd.texMatrixIndex.size())
+            return 0;
+
+        if (vcd.texMatrixIndex[texGen])
+            return 1;
+
+        return 0;
+    }
+
     GXPositionFormat getPositionFormat(uint8_t vatIndex) const;
     uint32_t getDirectPositionSize(uint8_t vatIndex) const;
 
@@ -467,8 +520,17 @@ struct GXXFState {
 
     std::array<float, 1024> matrixMemory{};
 
+    std::array<float, 256> postMatrices{};
+
+    uint8_t numTexGens = 0;
+
     GXProjection projection{};
     GXViewport viewport{};
+
+    std::array<GXTexGenState, 8> texGens{};
+    std::array<GXPostTexMatrixState, 8> postTexMatrices{};
+
+    bool dualTexTransform = false;
 };
 
 struct GXBPCopyState {
@@ -892,6 +954,16 @@ class GX {
 
     void decodeTevColorCombiner(uint32_t stage, uint32_t value);
     void decodeTevAlphaCombiner(uint32_t stage, uint32_t value);
+
+    uint32_t getTextureMatrixIndex(const GXVertex &vertex,
+                                   uint32_t texGen) const;
+
+    GXVec4 getTexGenSource(const GXVertex &vertex, GXTexSource source) const;
+    GXVec3 applyTextureMatrix(const GXVec4 &v, uint32_t matrixIndex,
+                              GXTexProjection projection) const;
+    GXVec3 applyPostTextureMatrix(GXVec3 tex, uint32_t texGen) const;
+
+    GXVec3 generateTexCoord(const GXVertex &vertex, uint32_t index) const;
 
     GXFifoReader reader{};
     GXState state{};

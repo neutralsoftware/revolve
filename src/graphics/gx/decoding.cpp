@@ -718,6 +718,14 @@ void GX::writeXF(uint16_t address, uint32_t value) {
         return;
     }
 
+    if (address >= 0x500 && address < 0x600) {
+        float f;
+        std::memcpy(&f, &value, sizeof(f));
+
+        state.xf.postMatrices[address - 0x500] = f;
+        return;
+    }
+
     if (address >= 0x1020 && address <= 0x1025) {
         float f;
         std::memcpy(&f, &value, sizeof(f));
@@ -760,6 +768,41 @@ void GX::writeXF(uint16_t address, uint32_t value) {
             state.xf.viewport.farZ = f;
             break;
         }
+
+        return;
+    }
+
+    if (address == 0x1012) {
+        state.xf.dualTexTransform = (value & 1) != 0;
+        return;
+    }
+
+    if (address == 0x103F) {
+        state.xf.numTexGens = static_cast<uint8_t>(value & 0xFu);
+        return;
+    }
+
+    if (address >= 0x1040 && address <= 0x1047) {
+        uint32_t index = address - 0x1040;
+
+        auto &gen = state.xf.texGens[index];
+
+        gen.projection = static_cast<GXTexProjection>((value >> 1) & 0x1);
+        gen.inputForm = static_cast<GXTexInputForm>((value >> 2) & 0x1);
+        gen.type = static_cast<GXTexGenType>((value >> 4) & 0x7);
+        gen.source = static_cast<GXTexSource>((value >> 7) & 0x1F);
+        gen.embossSource = static_cast<uint8_t>((value >> 12) & 0x7);
+        gen.embossLight = static_cast<uint8_t>((value >> 15) & 0x7);
+
+        return;
+    }
+
+    if (address >= 0x1050 && address <= 0x1057) {
+        uint32_t index = address - 0x1050;
+
+        auto &post = state.xf.postTexMatrices[index];
+        post.index = static_cast<uint8_t>(value & 0x3F);
+        post.normalize = ((value >> 8) & 1) != 0;
 
         return;
     }
@@ -878,23 +921,28 @@ GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
     out.b = vertex.color0.b;
     out.a = vertex.color0.a;
 
-    out.u0 = vertex.texCoords[0].x;
-    out.v0 = vertex.texCoords[0].y;
+    auto singleUvParsing = [&](uint32_t index, float &u, float &v) -> void {
+        GXVec3 tex = generateTexCoord(vertex, index);
 
-    out.u1 = vertex.texCoords[1].x;
-    out.v1 = vertex.texCoords[1].y;
-    out.u2 = vertex.texCoords[2].x;
-    out.v2 = vertex.texCoords[2].y;
-    out.u3 = vertex.texCoords[3].x;
-    out.v3 = vertex.texCoords[3].y;
-    out.u4 = vertex.texCoords[4].x;
-    out.v4 = vertex.texCoords[4].y;
-    out.u5 = vertex.texCoords[5].x;
-    out.v5 = vertex.texCoords[5].y;
-    out.u6 = vertex.texCoords[6].x;
-    out.v6 = vertex.texCoords[6].y;
-    out.u7 = vertex.texCoords[7].x;
-    out.v7 = vertex.texCoords[7].y;
+        u = tex.x;
+        v = tex.y;
+
+        if (state.xf.texGens[index].projection == GXTexProjection::STQ &&
+            tex.z != 0.0f) {
+            u /= tex.z;
+            v /= tex.z;
+        }
+    };
+
+    singleUvParsing(0, out.u0, out.v0);
+    singleUvParsing(1, out.u1, out.v1);
+    singleUvParsing(2, out.u2, out.v2);
+    singleUvParsing(3, out.u3, out.v3);
+    singleUvParsing(3, out.u3, out.v3);
+    singleUvParsing(4, out.u4, out.v4);
+    singleUvParsing(5, out.u5, out.v5);
+    singleUvParsing(6, out.u6, out.v6);
+    singleUvParsing(7, out.u7, out.v7);
 
     return out;
 }
@@ -1273,4 +1321,129 @@ opal::CompareOp GX::decodeGXCompare(uint32_t value) const {
     }
 
     return opal::CompareOp::Always;
+}
+
+uint32_t GX::getTextureMatrixIndex(const GXVertex &vertex,
+                                   uint32_t texGen) const {
+    if (state.cp.getVCD().texMatrixIndex[texGen]) {
+        return vertex.texMatrixIndices[texGen];
+    }
+
+    return state.cp.getTextureMatrixIndex(texGen);
+}
+
+GXVec4 GX::getTexGenSource(const GXVertex &vertex, GXTexSource source) const {
+    switch (source) {
+    case GXTexSource::Position:
+        return {vertex.position.x, vertex.position.y, vertex.position.z, 1.0f};
+    case GXTexSource::Normal:
+        return {vertex.normal.x, vertex.normal.y, vertex.normal.z, 1.0f};
+    case GXTexSource::Tex0:
+    case GXTexSource::Tex1:
+    case GXTexSource::Tex2:
+    case GXTexSource::Tex3:
+    case GXTexSource::Tex4:
+    case GXTexSource::Tex5:
+    case GXTexSource::Tex6:
+    case GXTexSource::Tex7: {
+        uint32_t tex = static_cast<uint32_t>(source) -
+                       static_cast<uint32_t>(GXTexSource::Tex0);
+
+        return {vertex.texCoords[tex].x, vertex.texCoords[tex].y, 1.0f, 1.0f};
+    }
+
+    default: {
+        return {
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+        };
+    }
+    }
+}
+
+GXVec3 GX::applyTextureMatrix(const GXVec4 &v, uint32_t matrixIndex,
+                              GXTexProjection projection) const {
+    GXVec3 out{};
+
+    const uint32_t base = matrixIndex;
+
+    auto dotRow = [&](uint32_t row) -> float {
+        return state.xf.matrixMemory[base + row * 4 + 0] * v.x +
+               state.xf.matrixMemory[base + row * 4 + 1] * v.y +
+               state.xf.matrixMemory[base + row * 4 + 2] * v.z +
+               state.xf.matrixMemory[base + row * 4 + 3] * v.w;
+    };
+
+    out.x = dotRow(0);
+    out.y = dotRow(1);
+
+    if (projection == GXTexProjection::STQ) {
+        out.z = dotRow(2);
+    } else {
+        out.z = 1.0f;
+    }
+
+    return out;
+}
+
+GXVec3 GX::generateTexCoord(const GXVertex &vertex, uint32_t index) const {
+    if (index >= state.xf.numTexGens) {
+        return {};
+    }
+
+    const auto &gen = state.xf.texGens[index];
+
+    if (gen.type != GXTexGenType::Regular) {
+        return {};
+    }
+
+    GXVec4 source = getTexGenSource(vertex, gen.source);
+
+    if (gen.inputForm == GXTexInputForm::AB11) {
+        source.z = 1.0f;
+    }
+
+    uint32_t matrixIndex = getTextureMatrixIndex(vertex, index);
+    GXVec3 result = applyTextureMatrix(source, matrixIndex, gen.projection);
+    result = applyPostTextureMatrix(result, index);
+
+    return result;
+}
+
+GXVec3 GX::applyPostTextureMatrix(GXVec3 tex, uint32_t texGen) const {
+    if (!state.xf.dualTexTransform)
+        return tex;
+
+    const auto &post = state.xf.postTexMatrices[texGen];
+
+    if (post.normalize) {
+        float len = std::sqrt(tex.x * tex.x + tex.y * tex.y + tex.z * tex.z);
+
+        if (len != 0.0f) {
+            tex.x /= len;
+            tex.y /= len;
+            tex.z /= len;
+        }
+    }
+
+    const uint32_t base = post.index;
+
+    GXVec3 out{};
+
+    auto row = [&](uint32_t r) -> float {
+        const uint32_t i = (base + r) & 0x3F;
+
+        return state.xf.postMatrices[i * 4 + 0] * tex.x +
+               state.xf.postMatrices[i * 4 + 1] * tex.y +
+               state.xf.postMatrices[i * 4 + 2] * tex.z +
+               state.xf.postMatrices[i * 4 + 3];
+    };
+
+    out.x = row(0);
+    out.y = row(1);
+    out.z = row(2);
+
+    return out;
 }
