@@ -146,6 +146,102 @@ struct GXTevOrder {
     bool textureEnabled = false;
 };
 
+enum class GXTevColorArg : uint8_t {
+    PrevColor = 0,
+    PrevAlpha = 1,
+
+    Color0 = 2,
+    Alpha0 = 3,
+    Color1 = 4,
+    Alpha1 = 5,
+    Color2 = 6,
+    Alpha2 = 7,
+
+    TexColor = 8,
+    TexAlpha = 9,
+    RasColor = 10,
+    RasAlpha = 11,
+
+    One = 12,
+    Half = 13,
+    Konst = 14,
+    Zero = 15
+};
+
+enum class GXTevAlphaArg : uint8_t {
+    PrevAlpha = 0,
+
+    Alpha0 = 1,
+    Alpha1 = 2,
+    Alpha2 = 3,
+
+    TexAlpha = 4,
+    RasAlpha = 5,
+    Konst = 6,
+    Zero = 7
+};
+
+enum class GXTevBias : uint8_t {
+    Zero = 0,
+    AddHalf = 1,
+    SubHalf = 2,
+    Compare = 3
+};
+
+enum class GXTevOp : uint8_t {
+    Add = 0,
+    Sub = 1,
+};
+
+enum class GXTevScale : uint8_t {
+    Scale1 = 0,
+    Scale2 = 1,
+    Scale4 = 2,
+    Divide2 = 3
+};
+
+enum class GXTevOutput : uint8_t {
+    Prev = 0,
+    Color0 = 1,
+    Color1 = 2,
+    Color2 = 3
+};
+
+struct GXTevColorCombiner {
+    GXTevColorArg a = GXTevColorArg::Zero;
+    GXTevColorArg b = GXTevColorArg::Zero;
+    GXTevColorArg c = GXTevColorArg::Zero;
+    GXTevColorArg d = GXTevColorArg::Zero;
+
+    GXTevBias bias = GXTevBias::Zero;
+    GXTevOp op = GXTevOp::Add;
+    bool clamp = true;
+    GXTevScale scale = GXTevScale::Scale1;
+    GXTevOutput output = GXTevOutput::Prev;
+};
+
+struct GXTevAlphaCombiner {
+    GXTevAlphaArg a = GXTevAlphaArg::Zero;
+    GXTevAlphaArg b = GXTevAlphaArg::Zero;
+    GXTevAlphaArg c = GXTevAlphaArg::Zero;
+    GXTevAlphaArg d = GXTevAlphaArg::Zero;
+
+    GXTevBias bias = GXTevBias::Zero;
+    GXTevOp op = GXTevOp::Add;
+    bool clamp = true;
+    GXTevScale scale = GXTevScale::Scale1;
+    GXTevOutput output = GXTevOutput::Prev;
+
+    uint8_t rasterSwap = 0;
+    uint8_t textureSwap = 0;
+};
+
+struct GXTevStage {
+    GXTevOrder order{};
+    GXTevColorCombiner color{};
+    GXTevAlphaCombiner alpha{};
+};
+
 enum class GXArrayAttribute : uint8_t {
     Position = 9,
     Normal = 10,
@@ -456,7 +552,9 @@ struct GXBPState {
     GXAlphaTestState alphaTest{};
 
     std::array<GXTextureState, 8> textures{};
-    std::array<GXTevOrder, 16> tevOrders{};
+    std::array<GXTevStage, 16> tevStages{};
+
+    uint32_t tevStageCount = 1;
 };
 
 struct GXState {
@@ -614,6 +712,9 @@ class GXRenderer {
             return opal::TextureFilterMode::Linear;
         }
     }
+
+    void applyTevState(std::shared_ptr<opal::Pipeline> &pipeline,
+                       uint8_t stage);
 };
 
 class GX {
@@ -789,6 +890,9 @@ class GX {
 
     void decodeTevOrder(uint8_t reg, uint32_t value);
     void decodeTevOrderStage(uint32_t stage, uint32_t raw);
+
+    void decodeTevColorCombiner(uint32_t stage, uint32_t value);
+    void decodeTevAlphaCombiner(uint32_t stage, uint32_t value);
 
     GXFifoReader reader{};
     GXState state{};

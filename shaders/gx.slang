@@ -11,16 +11,60 @@ struct VertexOut {
     float2 uv : TEXCOORD0;
 };
 
+struct TevStage {
+    int texCoord;
+    int texMap;
+    int colorChannel;
+    int textureEnabled;
+
+    int colorA;
+    int colorB;
+    int colorC;
+    int colorD;
+
+    int colorBias;
+    int colorOp;
+    int colorClamp;
+    int colorScale;
+    int colorOutput;
+
+    int alphaA;
+    int alphaB;
+    int alphaC;
+    int alphaD;
+
+    int alphaBias;
+    int alphaOp;
+    int alphaClamp;
+    int alphaScale;
+    int alphaOutput;
+
+    int rasterSwap;
+    int textureSwap;
+
+    int pad0;
+    int pad1;
+};
+
 struct Uniforms {
     float alphaRef0;
     float alphaRef1;
     int alphaComp0;
     int alphaComp1;
-    int alphaLogic;
 
-    int textureEnabled;
-    int activeTexture;
-    int activeTexCoord;
+    int alphaLogic;
+    int tevStageCount;
+    int pad0;
+    int pad1;
+
+    TevStage tevStages[16];
+};
+
+struct TevRegisters {
+    float4 prev;
+    float4 reg0;
+    float4 reg1;
+    float4 reg2;
 };
 
 [[vk::binding(0, 1)]]
@@ -147,14 +191,226 @@ float4 sampleGXTexture(int index, float2 uv) {
     return float4(1.0, 1.0, 1.0, 1.0);
 }
 
+float3 getTevColorArg(int arg, TevRegisters registers, float4 tex, float4 ras) {
+    switch (arg) {
+    case 0:
+        return registers.prev.rgb;
+    case 1:
+        return registers.prev.aaa;
+    case 2:
+        return registers.reg0.rgb;
+    case 3:
+        return registers.reg0.aaa;
+    case 4:
+        return registers.reg1.rgb;
+    case 5:
+        return registers.reg1.aaa;
+    case 6:
+        return registers.reg2.rgb;
+    case 7:
+        return registers.reg2.aaa;
+    case 8:
+        return tex.rgb;
+    case 9:
+        return tex.aaa;
+    case 10:
+        return ras.rgb;
+    case 11:
+        return ras.aaa;
+    case 12:
+        return float3(1.0, 1.0, 1.0);
+    case 13:
+        return float3(0.5, 0.5, 0.5);
+    case 14:
+        // Konst color
+        return float3(0.0, 0.0, 0.0);
+    case 15:
+        return float3(0.0, 0.0, 0.0);
+    }
+
+    return float3(0.0, 0.0, 0.0);
+}
+
+float getTevAlphaArg(int arg, TevRegisters registers, float4 tex, float4 ras) {
+    switch (arg) {
+    case 0:
+        return registers.prev.a;
+    case 1:
+        return registers.reg0.a;
+    case 2:
+        return registers.reg1.a;
+    case 3:
+        return registers.reg2.a;
+    case 4:
+        return tex.a;
+    case 5:
+        return ras.a;
+    case 6:
+        // Konst color
+        return 1.0;
+    case 7:
+        return 0.0;
+    }
+
+    return 0.0;
+}
+
+float3 applyTevColor(float3 A, float3 B, float3 C, float3 D, TevStage stage) {
+    float3 blend = A * (1.0 - C) + B * C;
+
+    float3 result;
+
+    if (stage.colorOp == 0) {
+        result = D + blend;
+    } else {
+        result = D - blend;
+    }
+
+    switch (stage.colorBias) {
+    case 1:
+        result += 0.5;
+        break;
+    case 2:
+        result -= 0.5;
+        break;
+    }
+
+    switch (stage.colorScale) {
+    case 1:
+        result *= 2.0;
+        break;
+    case 2:
+        result *= 4.0;
+        break;
+    case 3:
+        result *= 0.5;
+        break;
+    }
+
+    if (stage.colorClamp != 0) {
+        result = saturate(result);
+    }
+
+    return result;
+}
+
+float applyTevAlpha(float A, float B, float C, float D, TevStage stage) {
+    float blend = A * (1.0 - C) + B * C;
+
+    float result;
+
+    if (stage.alphaOp == 0)
+        result = D + blend;
+    else
+        result = D - blend;
+
+    switch (stage.alphaBias) {
+    case 1:
+        result += 0.5;
+        break;
+
+    case 2:
+        result -= 0.5;
+        break;
+    }
+
+    switch (stage.alphaScale) {
+    case 1:
+        result *= 2.0;
+        break;
+
+    case 2:
+        result *= 4.0;
+        break;
+
+    case 3:
+        result *= 0.5;
+        break;
+    }
+
+    if (stage.alphaClamp != 0)
+        result = saturate(result);
+
+    return result;
+}
+
+void writeTevColor(int output, float3 value, inout TevRegisters regs) {
+    switch (output) {
+    case 0:
+        regs.prev.rgb = value;
+        break;
+    case 1:
+        regs.reg0.rgb = value;
+        break;
+    case 2:
+        regs.reg1.rgb = value;
+        break;
+    case 3:
+        regs.reg2.rgb = value;
+        break;
+    }
+
+    return;
+}
+
+void writeTevAlpha(int output, float value, inout TevRegisters regs) {
+    switch (output) {
+    case 0:
+        regs.prev.a = value;
+        break;
+    case 1:
+        regs.reg0.a = value;
+        break;
+    case 2:
+        regs.reg1.a = value;
+        break;
+    case 3:
+        regs.reg2.a = value;
+        break;
+    }
+
+    return;
+}
+
+void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs) {
+    float4 ras = input.color;
+
+    float4 tex = float4(1, 1, 1, 1);
+
+    if (stage.textureEnabled != 0) {
+        tex = sampleGXTexture(stage.texMap, input.uv);
+    }
+
+    float3 A = getTevColorArg(stage.colorA, regs, tex, ras);
+    float3 B = getTevColorArg(stage.colorB, regs, tex, ras);
+    float3 C = getTevColorArg(stage.colorC, regs, tex, ras);
+    float3 D = getTevColorArg(stage.colorD, regs, tex, ras);
+
+    float colorA = getTevAlphaArg(stage.alphaA, regs, tex, ras);
+    float colorB = getTevAlphaArg(stage.alphaB, regs, tex, ras);
+    float colorC = getTevAlphaArg(stage.alphaC, regs, tex, ras);
+    float colorD = getTevAlphaArg(stage.alphaD, regs, tex, ras);
+
+    float3 rgb = applyTevColor(A, B, C, D, stage);
+    float alpha = applyTevAlpha(colorA, colorB, colorC, colorD, stage);
+
+    writeTevColor(stage.colorOutput, rgb, regs);
+    writeTevAlpha(stage.alphaOutput, alpha, regs);
+}
+
 [shader("fragment")]
 float4 fragmentMain(VertexOut input) : SV_TARGET {
-    float4 color = input.color;
+    TevRegisters registers;
+    registers.prev = float4(1.0, 1.0, 1.0, 1.0);
+    registers.reg0 = float4(0.0, 0.0, 0.0, 0.0);
+    registers.reg1 = float4(0.0, 0.0, 0.0, 0.0);
+    registers.reg2 = float4(0.0, 0.0, 0.0, 0.0);
 
-    if (uniforms.textureEnabled != 0) {
-        float4 texColor = sampleGXTexture(uniforms.activeTexture, input.uv);
-        color = texColor;
+    for (int i = 0; i < uniforms.tevStageCount; i++) {
+        executeTevStage(uniforms.tevStages[i], input, registers);
     }
+
+    float4 color = registers.prev;
 
     if (!alphaTest(color.a)) {
         discard;

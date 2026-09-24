@@ -930,6 +930,18 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
         return;
     }
 
+    if (reg >= 0xC0 && reg <= 0xDF) {
+        renderer->flushEFB();
+
+        uint32_t stage = (reg - 0xC0) / 2;
+        if ((reg & 1u) == 0) {
+            decodeTevColorCombiner(stage, value);
+        } else {
+            decodeTevAlphaCombiner(stage, value);
+        }
+        return;
+    }
+
     switch (reg) {
     case 0x00: {
         renderer->flushEFB();
@@ -950,6 +962,9 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
             state.bp.raster.cullMode = opal::CullMode::FrontAndBack;
             break;
         }
+
+        state.bp.tevStageCount =
+            static_cast<uint8_t>(((value >> 10) & 0xFu) + 1);
 
         renderer->setRasterState(state.bp.raster);
 

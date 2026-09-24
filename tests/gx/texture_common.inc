@@ -53,11 +53,11 @@
 .endm
 
 .macro TEV_ORDER0 map=0, coord=0, channel=0
-    BP_LOAD 0x25, ((\map) | ((\coord) << 3) | 0x40 | ((\channel) << 7))
+    BP_LOAD 0x28, ((\map) | ((\coord) << 3) | 0x40 | ((\channel) << 7))
 .endm
 
 .macro TEV_ORDER1 map=0, coord=0, channel=0
-    BP_LOAD 0x25, (((\map) << 12) | ((\coord) << 15) | 0x40000 | ((\channel) << 19))
+    BP_LOAD 0x28, (((\map) << 12) | ((\coord) << 15) | 0x40000 | ((\channel) << 19))
 .endm
 
 .macro TEV_REPLACE stage=0

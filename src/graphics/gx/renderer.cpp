@@ -5,7 +5,9 @@
 #include "opal/opal.h"
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <string>
 
 namespace {
 struct FullscreenVertex {
@@ -231,10 +233,13 @@ void GXRenderer::flushEFB() {
                              static_cast<int>(currentAlphaTest.comp1));
     gxPipeline->setUniform1i("alphaLogic",
                              static_cast<int>(currentAlphaTest.logic));
-    const auto &order = Device::globalDevice->gx.state.bp.tevOrders[0];
-    gxPipeline->setUniform1i("activeTexture", order.texMap);
-    gxPipeline->setUniform1i("activeTexCoord", order.texCoord);
-    gxPipeline->setUniform1i("textureEnabled", order.textureEnabled ? 1 : 0);
+    const auto &bp = Device::globalDevice->gx.state.bp;
+    gxPipeline->setUniform1i("tevStageCount",
+                             static_cast<int>(bp.tevStageCount));
+
+    for (int i = 0; i < bp.tevStageCount; ++i) {
+        applyTevState(gxPipeline, i);
+    }
 
     static constexpr const char *textureNames[8] = {
         "tex0", "tex1", "tex2", "tex3", "tex4", "tex5", "tex6", "tex7"};
@@ -438,4 +443,63 @@ void GXRenderer::setTexture(uint32_t unit, const GXDecodedTexture &texture,
     tex->setParameters(decodeWrapMode(state.wrapS), decodeWrapMode(state.wrapT),
                        decodeMinFilter(state.minFilter),
                        decodeMagFilter(state.magFilter));
+}
+
+void GXRenderer::applyTevState(std::shared_ptr<opal::Pipeline> &pipeline,
+                               uint8_t stage) {
+    const auto &tevStage = Device::globalDevice->gx.state.bp.tevStages[stage];
+
+    const std::string baseName = "tevStages[" + std::to_string(stage) + "]";
+
+    pipeline->setUniform1i(baseName + ".texCoord", tevStage.order.texMap);
+    pipeline->setUniform1i(baseName + "texMap", tevStage.order.texCoord);
+    pipeline->setUniform1i(baseName + ".colorChannel",
+                           tevStage.order.colorChannel);
+    pipeline->setUniform1i(baseName + ".textureEnabled",
+                           tevStage.order.textureEnabled ? 1 : 0);
+
+    pipeline->setUniform1i(baseName + ".colorA",
+                           static_cast<int>(tevStage.color.a));
+    pipeline->setUniform1i(baseName + ".colorB",
+                           static_cast<int>(tevStage.color.b));
+    pipeline->setUniform1i(baseName + ".colorC",
+                           static_cast<int>(tevStage.color.c));
+    pipeline->setUniform1i(baseName + ".colorD",
+                           static_cast<int>(tevStage.color.d));
+
+    pipeline->setUniform1i(baseName + ".colorBias",
+                           static_cast<int>(tevStage.color.bias));
+    pipeline->setUniform1i(baseName + ".colorOp",
+                           static_cast<int>(tevStage.color.op));
+    pipeline->setUniform1i(baseName + ".colorClamp",
+                           static_cast<int>(tevStage.color.clamp));
+    pipeline->setUniform1i(baseName + ".colorScale",
+                           static_cast<int>(tevStage.color.scale));
+    pipeline->setUniform1i(baseName + ".colorOutput",
+                           static_cast<int>(tevStage.color.output));
+
+    pipeline->setUniform1i(baseName + ".alphaA",
+                           static_cast<int>(tevStage.alpha.a));
+    pipeline->setUniform1i(baseName + ".alphaB",
+                           static_cast<int>(tevStage.alpha.b));
+    pipeline->setUniform1i(baseName + ".alphaC",
+                           static_cast<int>(tevStage.alpha.c));
+    pipeline->setUniform1i(baseName + ".alphaD",
+                           static_cast<int>(tevStage.alpha.d));
+
+    pipeline->setUniform1i(baseName + ".alphaBias",
+                           static_cast<int>(tevStage.alpha.bias));
+    pipeline->setUniform1i(baseName + ".alphaOp",
+                           static_cast<int>(tevStage.alpha.op));
+    pipeline->setUniform1i(baseName + ".alphaClamp",
+                           static_cast<int>(tevStage.alpha.clamp));
+    pipeline->setUniform1i(baseName + ".alphaScale",
+                           static_cast<int>(tevStage.alpha.scale));
+    pipeline->setUniform1i(baseName + ".alphaOutput",
+                           static_cast<int>(tevStage.alpha.output));
+
+    pipeline->setUniform1i(baseName + ".rasterSwap",
+                           static_cast<int>(tevStage.alpha.rasterSwap));
+    pipeline->setUniform1i(baseName + ".textureSwap",
+                           static_cast<int>(tevStage.alpha.textureSwap));
 }

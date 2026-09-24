@@ -532,9 +532,39 @@ void GX::decodeTevOrderStage(uint32_t stage, uint32_t raw) {
     if (stage >= 16)
         return;
 
-    auto &order = state.bp.tevOrders[stage];
+    auto &order = state.bp.tevStages[stage].order;
     order.texMap = static_cast<uint8_t>(raw & 0x7);
     order.texCoord = static_cast<uint8_t>((raw >> 3) & 0x7);
     order.textureEnabled = (raw & (1u << 6)) != 0;
     order.colorChannel = static_cast<uint8_t>((raw >> 7) & 0x7);
+}
+
+void GX::decodeTevColorCombiner(uint32_t stage, uint32_t value) {
+    auto &c = state.bp.tevStages[stage].color;
+
+    c.d = static_cast<GXTevColorArg>(value & 0xFu);
+    c.c = static_cast<GXTevColorArg>((value >> 4) & 0xFu);
+    c.b = static_cast<GXTevColorArg>((value >> 8) & 0xFu);
+    c.a = static_cast<GXTevColorArg>((value >> 12) & 0xFu);
+    c.bias = static_cast<GXTevBias>((value >> 16) & 0x3u);
+    c.op = static_cast<GXTevOp>((value >> 18) & 0x1u);
+    c.clamp = ((value >> 19) & 1u) != 0;
+    c.scale = static_cast<GXTevScale>((value >> 20) & 0x3u);
+    c.output = static_cast<GXTevOutput>((value >> 22) & 0x3u);
+}
+
+void GX::decodeTevAlphaCombiner(uint32_t stage, uint32_t value) {
+    auto &a = state.bp.tevStages[stage].alpha;
+
+    a.rasterSwap = static_cast<uint8_t>(value & 0x3u);
+    a.textureSwap = static_cast<uint8_t>((value >> 2) & 0x3u);
+    a.d = static_cast<GXTevAlphaArg>((value >> 4) & 0x7u);
+    a.c = static_cast<GXTevAlphaArg>((value >> 7) & 0x7u);
+    a.b = static_cast<GXTevAlphaArg>((value >> 10) & 0x7u);
+    a.a = static_cast<GXTevAlphaArg>((value >> 13) & 0x7u);
+    a.bias = static_cast<GXTevBias>((value >> 16) & 0x3u);
+    a.op = static_cast<GXTevOp>((value >> 18) & 0x1u);
+    a.clamp = ((value >> 19) & 1u) != 0;
+    a.scale = static_cast<GXTevScale>((value >> 20) & 0x3u);
+    a.output = static_cast<GXTevOutput>((value >> 22) & 0x3u);
 }
