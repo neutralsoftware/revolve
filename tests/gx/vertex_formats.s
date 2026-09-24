@@ -1,0 +1,98 @@
+.include "common.inc"
+
+.macro TEST_SETUP
+.endm
+
+GX_PROGRAM
+CP_LOAD 0x30, 0
+CP_LOAD 0x50, 0x00002200
+CP_LOAD 0x60, 0
+
+.if CASE == 1
+    CP_LOAD 0x70, 0x00014009
+.elseif CASE == 2
+    CP_LOAD 0x70, 0x00004071
+.elseif CASE == 3
+    CP_LOAD 0x70, 0x00004073
+.elseif CASE == 4
+    CP_LOAD 0x70, 0x000140F5
+.elseif CASE == 5
+    CP_LOAD 0x70, 0x000140F7
+.elseif CASE == 6
+    CP_LOAD 0x70, 0x00000009
+.elseif CASE == 7
+    CP_LOAD 0x70, 0x00004009
+.elseif CASE == 8
+    CP_LOAD 0x70, 0x00008009
+.elseif CASE == 9
+    CP_LOAD 0x70, 0x0000C009
+.elseif CASE == 10
+    CP_LOAD 0x70, 0x00010009
+.elseif CASE == 11
+    CP_LOAD 0x70, 0x00014009
+.endif
+
+XF_IDENTITY_ORTHO
+.byte 0x90
+.short 3
+
+.if CASE == 2
+    .byte 0x40, 0x40, 0, 0xFF, 0, 0, 0xC0, 0x40, 0, 0, 0xFF, 0, 0x40, 0xC0, 0, 0, 0xFF
+.elseif CASE == 3
+    .byte 0xC0, 0xC0, 0, 0xFF, 0, 0, 0x40, 0xC0, 0, 0xFF, 0, 0, 0, 0x40, 0, 0, 0xFF
+.elseif CASE == 4
+    .short 0x4000, 0x4000, 0
+    .long 0xFF0000FF
+    .short 0xC000, 0x4000, 0
+    .long 0x00FF00FF
+    .short 0x8000, 0xC000, 0
+    .long 0x0000FFFF
+.elseif CASE == 5
+    .short 0xC000, 0xC000, 0
+    .long 0xFF0000FF
+    .short 0x4000, 0xC000, 0
+    .long 0x00FF00FF
+    .short 0, 0x4000, 0
+    .long 0x0000FFFF
+.elseif CASE == 6
+    .long 0xBF400000, 0xBF400000, 0
+    .short 0xF800
+    .long 0x3F400000, 0xBF400000, 0
+    .short 0x07E0
+    .long 0, 0x3F400000, 0
+    .short 0x001F
+.elseif CASE == 7
+    .long 0xBF400000, 0xBF400000, 0
+    .byte 0xFF, 0, 0
+    .long 0x3F400000, 0xBF400000, 0
+    .byte 0, 0xFF, 0
+    .long 0, 0x3F400000, 0
+    .byte 0, 0, 0xFF
+.elseif CASE == 8
+    .long 0xBF400000, 0xBF400000, 0
+    .byte 0xFF, 0, 0, 0x55
+    .long 0x3F400000, 0xBF400000, 0
+    .byte 0, 0xFF, 0, 0xAA
+    .long 0, 0x3F400000, 0
+    .byte 0, 0, 0xFF, 0xFF
+.elseif CASE == 9
+    .long 0xBF400000, 0xBF400000, 0
+    .short 0xF00F
+    .long 0x3F400000, 0xBF400000, 0
+    .short 0x0F0F
+    .long 0, 0x3F400000, 0
+    .short 0x00FF
+.elseif CASE == 10
+    .long 0xBF400000, 0xBF400000, 0
+    .byte 0xFC, 0, 0x3F
+    .long 0x3F400000, 0xBF400000, 0
+    .byte 0x03, 0xF0, 0x3F
+    .long 0, 0x3F400000, 0
+    .byte 0, 0x0F, 0xFF
+.else
+    VERTEX_F32 0xBF400000, 0xBF400000, 0, 0xFF0000FF
+    VERTEX_F32 0x3F400000, 0xBF400000, 0, 0x00FF00FF
+    VERTEX_F32 0, 0x3F400000, 0, 0x0000FFFF
+.endif
+
+GX_END

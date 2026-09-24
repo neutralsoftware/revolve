@@ -131,6 +131,7 @@ class Bus {
     static void write32(uint32_t addr, uint32_t value);
     static void write64(uint32_t addr, uint64_t value);
     static void writePhysical32(uint32_t addr, uint32_t value);
+    static void writePhysical8(uint32_t addr, uint8_t value);
 
     static void writeFloat(uint32_t addr, float value);
     static void writeDouble(uint32_t addr, double value);

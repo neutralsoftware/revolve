@@ -1,6 +1,7 @@
 #include "debugger.h"
 #include "core/memory.h"
 #include "core/utils.h"
+#include "device.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -491,6 +492,7 @@ void Debugger::printHelp(const std::vector<std::string> &arguments) {
             {"step",
              "step [count]                 Execute one or more instructions"},
             {"next", "next                         Step over a linked branch"},
+            {"frame", "frame                        Skip to the next frame"},
             {"continue",
              "continue                     Run until a stop condition"},
             {"break",
@@ -1179,6 +1181,55 @@ void Debugger::next() {
     printStatus();
 }
 
+void Debugger::stepFrame() {
+    auto *vi = Device::globalDevice->vi.get();
+
+    if (!vi) {
+        error("Video Interface is not initialized");
+        return;
+    }
+
+    const uint64_t startingFrame = vi->getFrameCounter();
+
+    interrupted = false;
+    bool first = true;
+
+    while (vi->getFrameCounter() == startingFrame) {
+        if (interrupted) {
+            std::cout << color("1;33", "interrupted") << "  "
+                      << formatAddress(cpu.state.cia) << '\n';
+            break;
+        }
+
+        if (!first && breakpoints.contains(cpu.state.cia)) {
+            std::cout << color("1;31", "breakpoint hit") << "  "
+                      << formatAddress(cpu.state.cia) << '\n';
+            break;
+        }
+
+        first = false;
+
+        bool exception = executeOne(false);
+
+        if (checkWatchpoints())
+            break;
+
+        if (exception && stopOnException) {
+            std::cout << color("1;31", "exception") << "  "
+                      << exceptionName(cpu.state.cia) << " at "
+                      << formatAddress(cpu.state.cia) << '\n';
+            break;
+        }
+    }
+
+    if (vi->getFrameCounter() != startingFrame) {
+        std::cout << color("1;32", "frame") << "  " << vi->getFrameCounter()
+                  << '\n';
+    }
+
+    printStatus();
+}
+
 void Debugger::continueExecution() {
     interrupted = false;
     bool first = true;
@@ -1219,6 +1270,8 @@ bool Debugger::executeCommand(const std::string &line) {
             step(arguments);
         else if (command == "n" || command == "next")
             next();
+        else if (command == "f" || command == "frame")
+            stepFrame();
         else if (command == "c" || command == "continue")
             continueExecution();
         else if (command == "b" || command == "break")
