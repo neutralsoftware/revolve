@@ -22,9 +22,15 @@ TEV_MODULATE
 .long 0x000F0600
 .long 0, 0, 0, 0xFFFFFFFF
 .long 0x3F800000, 0, 0, 0x3F800000, 0, 0
-.long 0, 0, 0x40000000, 0, 0, 0xBF800000
+.long 0, 0, 0x40000000, 0, 0, 0x3F800000
 
 .if CASE == 1
+    .byte 0x10
+    .long 0x0000100A
+    .long 0x808080FF
+    .byte 0x10
+    .long 0x0000100C
+    .long 0xC080FFFF
     .byte 0x10
     .long 0x0000100E
     .long 0x00000402
@@ -35,7 +41,7 @@ TEV_MODULATE
 .elseif CASE == 3
     .byte 0x10
     .long 0x00020604
-    .long 0, 0xBF800000, 0x3F800000
+    .long 0xC0400000, 0x40800000, 0
     .byte 0x10
     .long 0x0000100E
     .long 0x00000707
@@ -48,15 +54,21 @@ TEV_MODULATE
     .long 0x00000707
 .elseif CASE == 5
     .byte 0x10
+    .long 0x00000603
+    .long 0xFF4040FF
+    .byte 0x10
     .long 0x0000100E
     .long 0x0000050F
     .byte 0x10
     .long 0x000F0610
     .long 0, 0, 0, 0x4040FFFF
     .long 0x3F800000, 0, 0, 0x3F800000, 0, 0
-    .long 0, 0, 0x40000000, 0, 0, 0xBF800000
+    .long 0, 0, 0x40000000, 0, 0, 0x3F800000
 .elseif CASE == 6
     TEV_ORDER0 0, 0, 1
+    .byte 0x10
+    .long 0x00020604
+    .long 0, 0, 0x3F800000
     .byte 0x10
     .long 0x0000100F
     .long 0x00000207
@@ -74,8 +86,13 @@ TEV_MODULATE
     .long 0x00000507
 .elseif CASE == 9
     .byte 0x10
+    .long 0x000F0610
+    .long 0, 0, 0, 0xFFFFFFFF
+    .long 0x3F800000, 0, 0, 0x3F800000, 0, 0
+    .long 0, 0, 0x40000000, 0, 0, 0x3F800000
+    .byte 0x10
     .long 0x0000100E
-    .long 0x000007FF
+    .long 0x0000050F
 .elseif CASE == 10
     .byte 0x10
     .long 0x0000100E

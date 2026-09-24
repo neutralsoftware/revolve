@@ -24,7 +24,7 @@ struct AdvancedTEVTest {
 
 const std::vector<AdvancedTEVTest> TESTS = {
     {"ATV-LIGHT-AMBIENT", "advanced_lighting.s", 1, "Lighting ambient channel - ambient and material colors illuminate a textured quad"},
-    {"ATV-LIGHT-DIFFUSE", "advanced_lighting.s", 2, "Lighting diffuse channel - a normal-driven directional light shades the surface"},
+    {"ATV-LIGHT-DIFFUSE", "advanced_lighting.s", 2, "Lighting diffuse channel - a normal-driven light shades the surface"},
     {"ATV-LIGHT-SPOT", "advanced_lighting.s", 3, "Lighting spot attenuation - light direction and angular attenuation form a hotspot"},
     {"ATV-LIGHT-DISTANCE", "advanced_lighting.s", 4, "Lighting distance attenuation - quadratic attenuation dims distant vertices"},
     {"ATV-LIGHT-TWO", "advanced_lighting.s", 5, "Lighting two sources - red and blue lights combine across the quad"},

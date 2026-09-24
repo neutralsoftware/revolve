@@ -62,37 +62,40 @@ using namespace metal;
 
 struct main0_out
 {
-    float4 entryPointParam_vertexMain_color [[user(locn0)]];
-    float2 entryPointParam_vertexMain_uv0 [[user(locn1)]];
-    float2 entryPointParam_vertexMain_uv1 [[user(locn2)]];
-    float2 entryPointParam_vertexMain_uv2 [[user(locn3)]];
-    float2 entryPointParam_vertexMain_uv3 [[user(locn4)]];
-    float2 entryPointParam_vertexMain_uv4 [[user(locn5)]];
-    float2 entryPointParam_vertexMain_uv5 [[user(locn6)]];
-    float2 entryPointParam_vertexMain_uv6 [[user(locn7)]];
-    float2 entryPointParam_vertexMain_uv7 [[user(locn8)]];
+    float4 entryPointParam_vertexMain_color0 [[user(locn0)]];
+    float4 entryPointParam_vertexMain_color1 [[user(locn1)]];
+    float2 entryPointParam_vertexMain_uv0 [[user(locn2)]];
+    float2 entryPointParam_vertexMain_uv1 [[user(locn3)]];
+    float2 entryPointParam_vertexMain_uv2 [[user(locn4)]];
+    float2 entryPointParam_vertexMain_uv3 [[user(locn5)]];
+    float2 entryPointParam_vertexMain_uv4 [[user(locn6)]];
+    float2 entryPointParam_vertexMain_uv5 [[user(locn7)]];
+    float2 entryPointParam_vertexMain_uv6 [[user(locn8)]];
+    float2 entryPointParam_vertexMain_uv7 [[user(locn9)]];
     float4 gl_Position [[position]];
 };
 
 struct main0_in
 {
     float4 input_position [[attribute(0)]];
-    float4 input_color [[attribute(1)]];
-    float2 input_uv0 [[attribute(2)]];
-    float2 input_uv1 [[attribute(3)]];
-    float2 input_uv2 [[attribute(4)]];
-    float2 input_uv3 [[attribute(5)]];
-    float2 input_uv4 [[attribute(6)]];
-    float2 input_uv5 [[attribute(7)]];
-    float2 input_uv6 [[attribute(8)]];
-    float2 input_uv7 [[attribute(9)]];
+    float4 input_color0 [[attribute(1)]];
+    float4 input_color1 [[attribute(2)]];
+    float2 input_uv0 [[attribute(3)]];
+    float2 input_uv1 [[attribute(4)]];
+    float2 input_uv2 [[attribute(5)]];
+    float2 input_uv3 [[attribute(6)]];
+    float2 input_uv4 [[attribute(7)]];
+    float2 input_uv5 [[attribute(8)]];
+    float2 input_uv6 [[attribute(9)]];
+    float2 input_uv7 [[attribute(10)]];
 };
 
 vertex main0_out main0(main0_in in [[stage_in]])
 {
     main0_out out = {};
     out.gl_Position = in.input_position;
-    out.entryPointParam_vertexMain_color = in.input_color;
+    out.entryPointParam_vertexMain_color0 = in.input_color0;
+    out.entryPointParam_vertexMain_color1 = in.input_color1;
     out.entryPointParam_vertexMain_uv0 = in.input_uv0;
     out.entryPointParam_vertexMain_uv1 = in.input_uv1;
     out.entryPointParam_vertexMain_uv2 = in.input_uv2;
@@ -168,110 +171,143 @@ struct main0_out
 
 struct main0_in
 {
-    float4 input_color [[user(locn0)]];
-    float2 input_uv0 [[user(locn1)]];
-    float2 input_uv1 [[user(locn2)]];
-    float2 input_uv2 [[user(locn3)]];
-    float2 input_uv3 [[user(locn4)]];
-    float2 input_uv4 [[user(locn5)]];
-    float2 input_uv5 [[user(locn6)]];
-    float2 input_uv6 [[user(locn7)]];
-    float2 input_uv7 [[user(locn8)]];
+    float4 input_color0 [[user(locn0)]];
+    float4 input_color1 [[user(locn1)]];
+    float2 input_uv0 [[user(locn2)]];
+    float2 input_uv1 [[user(locn3)]];
+    float2 input_uv2 [[user(locn4)]];
+    float2 input_uv3 [[user(locn5)]];
+    float2 input_uv4 [[user(locn6)]];
+    float2 input_uv5 [[user(locn7)]];
+    float2 input_uv6 [[user(locn8)]];
+    float2 input_uv7 [[user(locn9)]];
 };
 
 fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uniforms [[buffer(0)]], texture2d<float> tex0 [[texture(0)]], texture2d<float> tex1 [[texture(1)]], texture2d<float> tex2 [[texture(2)]], texture2d<float> tex3 [[texture(3)]], texture2d<float> tex4 [[texture(4)]], texture2d<float> tex5 [[texture(5)]], texture2d<float> tex6 [[texture(6)]], texture2d<float> tex7 [[texture(7)]], sampler samp0 [[sampler(0)]], sampler samp1 [[sampler(1)]], sampler samp2 [[sampler(2)]], sampler samp3 [[sampler(3)]], sampler samp4 [[sampler(4)]], sampler samp5 [[sampler(5)]], sampler samp6 [[sampler(6)]], sampler samp7 [[sampler(7)]])
 {
-    bool _1487 = false;
-    bool _1462 = false;
-    bool _1424 = false;
-    bool _1255 = false;
-    bool _1226 = false;
-    bool _1197 = false;
-    bool _1168 = false;
-    bool _1121 = false;
-    bool _1074 = false;
-    bool _1027 = false;
-    bool _980 = false;
-    bool _921 = false;
-    bool _894 = false;
+    bool _1530 = false;
+    bool _1505 = false;
+    bool _1467 = false;
+    bool _1298 = false;
+    bool _1269 = false;
+    bool _1240 = false;
+    bool _1211 = false;
+    bool _1164 = false;
+    bool _1117 = false;
+    bool _1070 = false;
+    bool _1023 = false;
+    bool _964 = false;
+    bool _937 = false;
+    bool _922 = false;
     main0_out out = {};
-    float4 _1577 = float4(1.0);
-    float4 _1578 = float4(0.0);
-    float4 _1579 = float4(0.0);
-    float4 _1580 = float4(0.0);
+    float4 _1623 = float4(1.0);
+    float4 _1624 = float4(0.0);
+    float4 _1625 = float4(0.0);
+    float4 _1626 = float4(0.0);
     int i = 0;
-    float4 _844;
-    float2 _895;
-    float4 _922;
-    float3 _981;
-    float3 _1028;
-    float3 _1075;
-    float3 _1122;
-    float _1169;
-    float _1198;
-    float _1227;
-    float _1256;
-    float3 _1284;
-    float _1332;
+    float4 _871;
+    float4 _923;
+    float2 _938;
+    float4 _965;
+    float3 _1024;
+    float3 _1071;
+    float3 _1118;
+    float3 _1165;
+    float _1212;
+    float _1241;
+    float _1270;
+    float _1299;
+    float3 _1327;
+    float _1375;
     for (;;)
     {
         if (!(i < uniforms.tevStageCount))
         {
             break;
         }
+        _922 = false;
+        do
+        {
+            switch (uniforms.tevStages.data[i].colorChannel)
+            {
+                case 0:
+                {
+                    _922 = true;
+                    _923 = in.input_color0;
+                    break;
+                }
+                case 1:
+                {
+                    _922 = true;
+                    _923 = in.input_color1;
+                    break;
+                }
+                default:
+                {
+                    _922 = true;
+                    _923 = float4(0.0);
+                    break;
+                }
+            }
+            if (_922)
+            {
+                break;
+            }
+            break;
+        } while(false);
         if (uniforms.tevStages.data[i].textureEnabled != 0)
         {
-            _894 = false;
+            _937 = false;
             do
             {
                 switch (uniforms.tevStages.data[i].texCoord)
                 {
                     case 0:
                     {
-                        _894 = true;
-                        _895 = in.input_uv0;
+                        _937 = true;
+                        _938 = in.input_uv0;
                         break;
                     }
                     case 1:
                     {
-                        _894 = true;
-                        _895 = in.input_uv1;
+                        _937 = true;
+                        _938 = in.input_uv1;
                         break;
                     }
                     case 2:
                     {
-                        _894 = true;
-                        _895 = in.input_uv2;
+                        _937 = true;
+                        _938 = in.input_uv2;
                         break;
                     }
                     case 3:
                     {
-                        _894 = true;
-                        _895 = in.input_uv3;
+                        _937 = true;
+                        _938 = in.input_uv3;
                         break;
                     }
                     case 4:
                     {
-                        _894 = true;
-                        _895 = in.input_uv4;
+                        _937 = true;
+                        _938 = in.input_uv4;
                         break;
                     }
                     case 5:
                     {
-                        _894 = true;
-                        _895 = in.input_uv5;
+                        _937 = true;
+                        _938 = in.input_uv5;
                         break;
                     }
                     case 6:
                     {
-                        _894 = true;
-                        _895 = in.input_uv6;
+                        _937 = true;
+                        _938 = in.input_uv6;
                         break;
                     }
                     case 7:
                     {
-                        _894 = true;
-                        _895 = in.input_uv7;
+                        _937 = true;
+                        _938 = in.input_uv7;
                         break;
                     }
                     default:
@@ -279,65 +315,65 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                         break;
                     }
                 }
-                if (_894)
+                if (_937)
                 {
                     break;
                 }
-                _894 = true;
-                _895 = float2(0.0);
+                _937 = true;
+                _938 = float2(0.0);
                 break;
             } while(false);
-            _921 = false;
+            _964 = false;
             do
             {
                 switch (uniforms.tevStages.data[i].texMap)
                 {
                     case 0:
                     {
-                        _921 = true;
-                        _922 = tex0.sample(samp0, _895);
+                        _964 = true;
+                        _965 = tex0.sample(samp0, _938);
                         break;
                     }
                     case 1:
                     {
-                        _921 = true;
-                        _922 = tex1.sample(samp1, _895);
+                        _964 = true;
+                        _965 = tex1.sample(samp1, _938);
                         break;
                     }
                     case 2:
                     {
-                        _921 = true;
-                        _922 = tex2.sample(samp2, _895);
+                        _964 = true;
+                        _965 = tex2.sample(samp2, _938);
                         break;
                     }
                     case 3:
                     {
-                        _921 = true;
-                        _922 = tex3.sample(samp3, _895);
+                        _964 = true;
+                        _965 = tex3.sample(samp3, _938);
                         break;
                     }
                     case 4:
                     {
-                        _921 = true;
-                        _922 = tex4.sample(samp4, _895);
+                        _964 = true;
+                        _965 = tex4.sample(samp4, _938);
                         break;
                     }
                     case 5:
                     {
-                        _921 = true;
-                        _922 = tex5.sample(samp5, _895);
+                        _964 = true;
+                        _965 = tex5.sample(samp5, _938);
                         break;
                     }
                     case 6:
                     {
-                        _921 = true;
-                        _922 = tex6.sample(samp6, _895);
+                        _964 = true;
+                        _965 = tex6.sample(samp6, _938);
                         break;
                     }
                     case 7:
                     {
-                        _921 = true;
-                        _922 = tex7.sample(samp7, _895);
+                        _964 = true;
+                        _965 = tex7.sample(samp7, _938);
                         break;
                     }
                     default:
@@ -345,119 +381,119 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                         break;
                     }
                 }
-                if (_921)
+                if (_964)
                 {
                     break;
                 }
-                _921 = true;
-                _922 = float4(1.0);
+                _964 = true;
+                _965 = float4(1.0);
                 break;
             } while(false);
-            _844 = _922;
+            _871 = _965;
         }
         else
         {
-            _844 = float4(1.0);
+            _871 = float4(1.0);
         }
-        _980 = false;
+        _1023 = false;
         do
         {
             switch (uniforms.tevStages.data[i].colorA)
             {
                 case 0:
                 {
-                    _980 = true;
-                    _981 = _1577.xyz;
+                    _1023 = true;
+                    _1024 = _1623.xyz;
                     break;
                 }
                 case 1:
                 {
-                    _980 = true;
-                    _981 = _1577.www;
+                    _1023 = true;
+                    _1024 = _1623.www;
                     break;
                 }
                 case 2:
                 {
-                    _980 = true;
-                    _981 = _1578.xyz;
+                    _1023 = true;
+                    _1024 = _1624.xyz;
                     break;
                 }
                 case 3:
                 {
-                    _980 = true;
-                    _981 = _1578.www;
+                    _1023 = true;
+                    _1024 = _1624.www;
                     break;
                 }
                 case 4:
                 {
-                    _980 = true;
-                    _981 = _1579.xyz;
+                    _1023 = true;
+                    _1024 = _1625.xyz;
                     break;
                 }
                 case 5:
                 {
-                    _980 = true;
-                    _981 = _1579.www;
+                    _1023 = true;
+                    _1024 = _1625.www;
                     break;
                 }
                 case 6:
                 {
-                    _980 = true;
-                    _981 = _1580.xyz;
+                    _1023 = true;
+                    _1024 = _1626.xyz;
                     break;
                 }
                 case 7:
                 {
-                    _980 = true;
-                    _981 = _1580.www;
+                    _1023 = true;
+                    _1024 = _1626.www;
                     break;
                 }
                 case 8:
                 {
-                    _980 = true;
-                    _981 = _844.xyz;
+                    _1023 = true;
+                    _1024 = _871.xyz;
                     break;
                 }
                 case 9:
                 {
-                    _980 = true;
-                    _981 = _844.www;
+                    _1023 = true;
+                    _1024 = _871.www;
                     break;
                 }
                 case 10:
                 {
-                    _980 = true;
-                    _981 = in.input_color.xyz;
+                    _1023 = true;
+                    _1024 = _923.xyz;
                     break;
                 }
                 case 11:
                 {
-                    _980 = true;
-                    _981 = in.input_color.www;
+                    _1023 = true;
+                    _1024 = _923.www;
                     break;
                 }
                 case 12:
                 {
-                    _980 = true;
-                    _981 = float3(1.0);
+                    _1023 = true;
+                    _1024 = float3(1.0);
                     break;
                 }
                 case 13:
                 {
-                    _980 = true;
-                    _981 = float3(0.5);
+                    _1023 = true;
+                    _1024 = float3(0.5);
                     break;
                 }
                 case 14:
                 {
-                    _980 = true;
-                    _981 = float3(0.0);
+                    _1023 = true;
+                    _1024 = float3(0.0);
                     break;
                 }
                 case 15:
                 {
-                    _980 = true;
-                    _981 = float3(0.0);
+                    _1023 = true;
+                    _1024 = float3(0.0);
                     break;
                 }
                 default:
@@ -465,113 +501,113 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_980)
+            if (_1023)
             {
                 break;
             }
-            _980 = true;
-            _981 = float3(0.0);
+            _1023 = true;
+            _1024 = float3(0.0);
             break;
         } while(false);
-        _1027 = false;
+        _1070 = false;
         do
         {
             switch (uniforms.tevStages.data[i].colorB)
             {
                 case 0:
                 {
-                    _1027 = true;
-                    _1028 = _1577.xyz;
+                    _1070 = true;
+                    _1071 = _1623.xyz;
                     break;
                 }
                 case 1:
                 {
-                    _1027 = true;
-                    _1028 = _1577.www;
+                    _1070 = true;
+                    _1071 = _1623.www;
                     break;
                 }
                 case 2:
                 {
-                    _1027 = true;
-                    _1028 = _1578.xyz;
+                    _1070 = true;
+                    _1071 = _1624.xyz;
                     break;
                 }
                 case 3:
                 {
-                    _1027 = true;
-                    _1028 = _1578.www;
+                    _1070 = true;
+                    _1071 = _1624.www;
                     break;
                 }
                 case 4:
                 {
-                    _1027 = true;
-                    _1028 = _1579.xyz;
+                    _1070 = true;
+                    _1071 = _1625.xyz;
                     break;
                 }
                 case 5:
                 {
-                    _1027 = true;
-                    _1028 = _1579.www;
+                    _1070 = true;
+                    _1071 = _1625.www;
                     break;
                 }
                 case 6:
                 {
-                    _1027 = true;
-                    _1028 = _1580.xyz;
+                    _1070 = true;
+                    _1071 = _1626.xyz;
                     break;
                 }
                 case 7:
                 {
-                    _1027 = true;
-                    _1028 = _1580.www;
+                    _1070 = true;
+                    _1071 = _1626.www;
                     break;
                 }
                 case 8:
                 {
-                    _1027 = true;
-                    _1028 = _844.xyz;
+                    _1070 = true;
+                    _1071 = _871.xyz;
                     break;
                 }
                 case 9:
                 {
-                    _1027 = true;
-                    _1028 = _844.www;
+                    _1070 = true;
+                    _1071 = _871.www;
                     break;
                 }
                 case 10:
                 {
-                    _1027 = true;
-                    _1028 = in.input_color.xyz;
+                    _1070 = true;
+                    _1071 = _923.xyz;
                     break;
                 }
                 case 11:
                 {
-                    _1027 = true;
-                    _1028 = in.input_color.www;
+                    _1070 = true;
+                    _1071 = _923.www;
                     break;
                 }
                 case 12:
                 {
-                    _1027 = true;
-                    _1028 = float3(1.0);
+                    _1070 = true;
+                    _1071 = float3(1.0);
                     break;
                 }
                 case 13:
                 {
-                    _1027 = true;
-                    _1028 = float3(0.5);
+                    _1070 = true;
+                    _1071 = float3(0.5);
                     break;
                 }
                 case 14:
                 {
-                    _1027 = true;
-                    _1028 = float3(0.0);
+                    _1070 = true;
+                    _1071 = float3(0.0);
                     break;
                 }
                 case 15:
                 {
-                    _1027 = true;
-                    _1028 = float3(0.0);
+                    _1070 = true;
+                    _1071 = float3(0.0);
                     break;
                 }
                 default:
@@ -579,113 +615,113 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1027)
+            if (_1070)
             {
                 break;
             }
-            _1027 = true;
-            _1028 = float3(0.0);
+            _1070 = true;
+            _1071 = float3(0.0);
             break;
         } while(false);
-        _1074 = false;
+        _1117 = false;
         do
         {
             switch (uniforms.tevStages.data[i].colorC)
             {
                 case 0:
                 {
-                    _1074 = true;
-                    _1075 = _1577.xyz;
+                    _1117 = true;
+                    _1118 = _1623.xyz;
                     break;
                 }
                 case 1:
                 {
-                    _1074 = true;
-                    _1075 = _1577.www;
+                    _1117 = true;
+                    _1118 = _1623.www;
                     break;
                 }
                 case 2:
                 {
-                    _1074 = true;
-                    _1075 = _1578.xyz;
+                    _1117 = true;
+                    _1118 = _1624.xyz;
                     break;
                 }
                 case 3:
                 {
-                    _1074 = true;
-                    _1075 = _1578.www;
+                    _1117 = true;
+                    _1118 = _1624.www;
                     break;
                 }
                 case 4:
                 {
-                    _1074 = true;
-                    _1075 = _1579.xyz;
+                    _1117 = true;
+                    _1118 = _1625.xyz;
                     break;
                 }
                 case 5:
                 {
-                    _1074 = true;
-                    _1075 = _1579.www;
+                    _1117 = true;
+                    _1118 = _1625.www;
                     break;
                 }
                 case 6:
                 {
-                    _1074 = true;
-                    _1075 = _1580.xyz;
+                    _1117 = true;
+                    _1118 = _1626.xyz;
                     break;
                 }
                 case 7:
                 {
-                    _1074 = true;
-                    _1075 = _1580.www;
+                    _1117 = true;
+                    _1118 = _1626.www;
                     break;
                 }
                 case 8:
                 {
-                    _1074 = true;
-                    _1075 = _844.xyz;
+                    _1117 = true;
+                    _1118 = _871.xyz;
                     break;
                 }
                 case 9:
                 {
-                    _1074 = true;
-                    _1075 = _844.www;
+                    _1117 = true;
+                    _1118 = _871.www;
                     break;
                 }
                 case 10:
                 {
-                    _1074 = true;
-                    _1075 = in.input_color.xyz;
+                    _1117 = true;
+                    _1118 = _923.xyz;
                     break;
                 }
                 case 11:
                 {
-                    _1074 = true;
-                    _1075 = in.input_color.www;
+                    _1117 = true;
+                    _1118 = _923.www;
                     break;
                 }
                 case 12:
                 {
-                    _1074 = true;
-                    _1075 = float3(1.0);
+                    _1117 = true;
+                    _1118 = float3(1.0);
                     break;
                 }
                 case 13:
                 {
-                    _1074 = true;
-                    _1075 = float3(0.5);
+                    _1117 = true;
+                    _1118 = float3(0.5);
                     break;
                 }
                 case 14:
                 {
-                    _1074 = true;
-                    _1075 = float3(0.0);
+                    _1117 = true;
+                    _1118 = float3(0.0);
                     break;
                 }
                 case 15:
                 {
-                    _1074 = true;
-                    _1075 = float3(0.0);
+                    _1117 = true;
+                    _1118 = float3(0.0);
                     break;
                 }
                 default:
@@ -693,113 +729,113 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1074)
+            if (_1117)
             {
                 break;
             }
-            _1074 = true;
-            _1075 = float3(0.0);
+            _1117 = true;
+            _1118 = float3(0.0);
             break;
         } while(false);
-        _1121 = false;
+        _1164 = false;
         do
         {
             switch (uniforms.tevStages.data[i].colorD)
             {
                 case 0:
                 {
-                    _1121 = true;
-                    _1122 = _1577.xyz;
+                    _1164 = true;
+                    _1165 = _1623.xyz;
                     break;
                 }
                 case 1:
                 {
-                    _1121 = true;
-                    _1122 = _1577.www;
+                    _1164 = true;
+                    _1165 = _1623.www;
                     break;
                 }
                 case 2:
                 {
-                    _1121 = true;
-                    _1122 = _1578.xyz;
+                    _1164 = true;
+                    _1165 = _1624.xyz;
                     break;
                 }
                 case 3:
                 {
-                    _1121 = true;
-                    _1122 = _1578.www;
+                    _1164 = true;
+                    _1165 = _1624.www;
                     break;
                 }
                 case 4:
                 {
-                    _1121 = true;
-                    _1122 = _1579.xyz;
+                    _1164 = true;
+                    _1165 = _1625.xyz;
                     break;
                 }
                 case 5:
                 {
-                    _1121 = true;
-                    _1122 = _1579.www;
+                    _1164 = true;
+                    _1165 = _1625.www;
                     break;
                 }
                 case 6:
                 {
-                    _1121 = true;
-                    _1122 = _1580.xyz;
+                    _1164 = true;
+                    _1165 = _1626.xyz;
                     break;
                 }
                 case 7:
                 {
-                    _1121 = true;
-                    _1122 = _1580.www;
+                    _1164 = true;
+                    _1165 = _1626.www;
                     break;
                 }
                 case 8:
                 {
-                    _1121 = true;
-                    _1122 = _844.xyz;
+                    _1164 = true;
+                    _1165 = _871.xyz;
                     break;
                 }
                 case 9:
                 {
-                    _1121 = true;
-                    _1122 = _844.www;
+                    _1164 = true;
+                    _1165 = _871.www;
                     break;
                 }
                 case 10:
                 {
-                    _1121 = true;
-                    _1122 = in.input_color.xyz;
+                    _1164 = true;
+                    _1165 = _923.xyz;
                     break;
                 }
                 case 11:
                 {
-                    _1121 = true;
-                    _1122 = in.input_color.www;
+                    _1164 = true;
+                    _1165 = _923.www;
                     break;
                 }
                 case 12:
                 {
-                    _1121 = true;
-                    _1122 = float3(1.0);
+                    _1164 = true;
+                    _1165 = float3(1.0);
                     break;
                 }
                 case 13:
                 {
-                    _1121 = true;
-                    _1122 = float3(0.5);
+                    _1164 = true;
+                    _1165 = float3(0.5);
                     break;
                 }
                 case 14:
                 {
-                    _1121 = true;
-                    _1122 = float3(0.0);
+                    _1164 = true;
+                    _1165 = float3(0.0);
                     break;
                 }
                 case 15:
                 {
-                    _1121 = true;
-                    _1122 = float3(0.0);
+                    _1164 = true;
+                    _1165 = float3(0.0);
                     break;
                 }
                 default:
@@ -807,65 +843,65 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1121)
+            if (_1164)
             {
                 break;
             }
-            _1121 = true;
-            _1122 = float3(0.0);
+            _1164 = true;
+            _1165 = float3(0.0);
             break;
         } while(false);
-        _1168 = false;
+        _1211 = false;
         do
         {
             switch (uniforms.tevStages.data[i].alphaA)
             {
                 case 0:
                 {
-                    _1168 = true;
-                    _1169 = _1577.w;
+                    _1211 = true;
+                    _1212 = _1623.w;
                     break;
                 }
                 case 1:
                 {
-                    _1168 = true;
-                    _1169 = _1578.w;
+                    _1211 = true;
+                    _1212 = _1624.w;
                     break;
                 }
                 case 2:
                 {
-                    _1168 = true;
-                    _1169 = _1579.w;
+                    _1211 = true;
+                    _1212 = _1625.w;
                     break;
                 }
                 case 3:
                 {
-                    _1168 = true;
-                    _1169 = _1580.w;
+                    _1211 = true;
+                    _1212 = _1626.w;
                     break;
                 }
                 case 4:
                 {
-                    _1168 = true;
-                    _1169 = _844.w;
+                    _1211 = true;
+                    _1212 = _871.w;
                     break;
                 }
                 case 5:
                 {
-                    _1168 = true;
-                    _1169 = in.input_color.w;
+                    _1211 = true;
+                    _1212 = _923.w;
                     break;
                 }
                 case 6:
                 {
-                    _1168 = true;
-                    _1169 = 1.0;
+                    _1211 = true;
+                    _1212 = 1.0;
                     break;
                 }
                 case 7:
                 {
-                    _1168 = true;
-                    _1169 = 0.0;
+                    _1211 = true;
+                    _1212 = 0.0;
                     break;
                 }
                 default:
@@ -873,65 +909,65 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1168)
+            if (_1211)
             {
                 break;
             }
-            _1168 = true;
-            _1169 = 0.0;
+            _1211 = true;
+            _1212 = 0.0;
             break;
         } while(false);
-        _1197 = false;
+        _1240 = false;
         do
         {
             switch (uniforms.tevStages.data[i].alphaB)
             {
                 case 0:
                 {
-                    _1197 = true;
-                    _1198 = _1577.w;
+                    _1240 = true;
+                    _1241 = _1623.w;
                     break;
                 }
                 case 1:
                 {
-                    _1197 = true;
-                    _1198 = _1578.w;
+                    _1240 = true;
+                    _1241 = _1624.w;
                     break;
                 }
                 case 2:
                 {
-                    _1197 = true;
-                    _1198 = _1579.w;
+                    _1240 = true;
+                    _1241 = _1625.w;
                     break;
                 }
                 case 3:
                 {
-                    _1197 = true;
-                    _1198 = _1580.w;
+                    _1240 = true;
+                    _1241 = _1626.w;
                     break;
                 }
                 case 4:
                 {
-                    _1197 = true;
-                    _1198 = _844.w;
+                    _1240 = true;
+                    _1241 = _871.w;
                     break;
                 }
                 case 5:
                 {
-                    _1197 = true;
-                    _1198 = in.input_color.w;
+                    _1240 = true;
+                    _1241 = _923.w;
                     break;
                 }
                 case 6:
                 {
-                    _1197 = true;
-                    _1198 = 1.0;
+                    _1240 = true;
+                    _1241 = 1.0;
                     break;
                 }
                 case 7:
                 {
-                    _1197 = true;
-                    _1198 = 0.0;
+                    _1240 = true;
+                    _1241 = 0.0;
                     break;
                 }
                 default:
@@ -939,65 +975,65 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1197)
+            if (_1240)
             {
                 break;
             }
-            _1197 = true;
-            _1198 = 0.0;
+            _1240 = true;
+            _1241 = 0.0;
             break;
         } while(false);
-        _1226 = false;
+        _1269 = false;
         do
         {
             switch (uniforms.tevStages.data[i].alphaC)
             {
                 case 0:
                 {
-                    _1226 = true;
-                    _1227 = _1577.w;
+                    _1269 = true;
+                    _1270 = _1623.w;
                     break;
                 }
                 case 1:
                 {
-                    _1226 = true;
-                    _1227 = _1578.w;
+                    _1269 = true;
+                    _1270 = _1624.w;
                     break;
                 }
                 case 2:
                 {
-                    _1226 = true;
-                    _1227 = _1579.w;
+                    _1269 = true;
+                    _1270 = _1625.w;
                     break;
                 }
                 case 3:
                 {
-                    _1226 = true;
-                    _1227 = _1580.w;
+                    _1269 = true;
+                    _1270 = _1626.w;
                     break;
                 }
                 case 4:
                 {
-                    _1226 = true;
-                    _1227 = _844.w;
+                    _1269 = true;
+                    _1270 = _871.w;
                     break;
                 }
                 case 5:
                 {
-                    _1226 = true;
-                    _1227 = in.input_color.w;
+                    _1269 = true;
+                    _1270 = _923.w;
                     break;
                 }
                 case 6:
                 {
-                    _1226 = true;
-                    _1227 = 1.0;
+                    _1269 = true;
+                    _1270 = 1.0;
                     break;
                 }
                 case 7:
                 {
-                    _1226 = true;
-                    _1227 = 0.0;
+                    _1269 = true;
+                    _1270 = 0.0;
                     break;
                 }
                 default:
@@ -1005,65 +1041,65 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1226)
+            if (_1269)
             {
                 break;
             }
-            _1226 = true;
-            _1227 = 0.0;
+            _1269 = true;
+            _1270 = 0.0;
             break;
         } while(false);
-        _1255 = false;
+        _1298 = false;
         do
         {
             switch (uniforms.tevStages.data[i].alphaD)
             {
                 case 0:
                 {
-                    _1255 = true;
-                    _1256 = _1577.w;
+                    _1298 = true;
+                    _1299 = _1623.w;
                     break;
                 }
                 case 1:
                 {
-                    _1255 = true;
-                    _1256 = _1578.w;
+                    _1298 = true;
+                    _1299 = _1624.w;
                     break;
                 }
                 case 2:
                 {
-                    _1255 = true;
-                    _1256 = _1579.w;
+                    _1298 = true;
+                    _1299 = _1625.w;
                     break;
                 }
                 case 3:
                 {
-                    _1255 = true;
-                    _1256 = _1580.w;
+                    _1298 = true;
+                    _1299 = _1626.w;
                     break;
                 }
                 case 4:
                 {
-                    _1255 = true;
-                    _1256 = _844.w;
+                    _1298 = true;
+                    _1299 = _871.w;
                     break;
                 }
                 case 5:
                 {
-                    _1255 = true;
-                    _1256 = in.input_color.w;
+                    _1298 = true;
+                    _1299 = _923.w;
                     break;
                 }
                 case 6:
                 {
-                    _1255 = true;
-                    _1256 = 1.0;
+                    _1298 = true;
+                    _1299 = 1.0;
                     break;
                 }
                 case 7:
                 {
-                    _1255 = true;
-                    _1256 = 0.0;
+                    _1298 = true;
+                    _1299 = 0.0;
                     break;
                 }
                 default:
@@ -1071,33 +1107,33 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1255)
+            if (_1298)
             {
                 break;
             }
-            _1255 = true;
-            _1256 = 0.0;
+            _1298 = true;
+            _1299 = 0.0;
             break;
         } while(false);
-        float3 _1291 = (_981 * (float3(1.0) - _1075)) + (_1028 * _1075);
+        float3 _1334 = (_1024 * (float3(1.0) - _1118)) + (_1071 * _1118);
         if (uniforms.tevStages.data[i].colorOp == 0)
         {
-            _1284 = _1122 + _1291;
+            _1327 = _1165 + _1334;
         }
         else
         {
-            _1284 = _1122 - _1291;
+            _1327 = _1165 - _1334;
         }
         switch (uniforms.tevStages.data[i].colorBias)
         {
             case 1:
             {
-                _1284 += float3(0.5);
+                _1327 += float3(0.5);
                 break;
             }
             case 2:
             {
-                _1284 -= float3(0.5);
+                _1327 -= float3(0.5);
                 break;
             }
             default:
@@ -1109,17 +1145,17 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
         {
             case 1:
             {
-                _1284 *= 2.0;
+                _1327 *= 2.0;
                 break;
             }
             case 2:
             {
-                _1284 *= 4.0;
+                _1327 *= 4.0;
                 break;
             }
             case 3:
             {
-                _1284 *= 0.5;
+                _1327 *= 0.5;
                 break;
             }
             default:
@@ -1129,27 +1165,27 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
         }
         if (uniforms.tevStages.data[i].colorClamp != 0)
         {
-            _1284 = fast::clamp(_1284, float3(0.0), float3(1.0));
+            _1327 = fast::clamp(_1327, float3(0.0), float3(1.0));
         }
-        float _1338 = (_1169 * (1.0 - _1227)) + (_1198 * _1227);
+        float _1381 = (_1212 * (1.0 - _1270)) + (_1241 * _1270);
         if (uniforms.tevStages.data[i].alphaOp == 0)
         {
-            _1332 = _1256 + _1338;
+            _1375 = _1299 + _1381;
         }
         else
         {
-            _1332 = _1256 - _1338;
+            _1375 = _1299 - _1381;
         }
         switch (uniforms.tevStages.data[i].alphaBias)
         {
             case 1:
             {
-                _1332 += 0.5;
+                _1375 += 0.5;
                 break;
             }
             case 2:
             {
-                _1332 -= 0.5;
+                _1375 -= 0.5;
                 break;
             }
             default:
@@ -1161,17 +1197,17 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
         {
             case 1:
             {
-                _1332 *= 2.0;
+                _1375 *= 2.0;
                 break;
             }
             case 2:
             {
-                _1332 *= 4.0;
+                _1375 *= 4.0;
                 break;
             }
             case 3:
             {
-                _1332 *= 0.5;
+                _1375 *= 0.5;
                 break;
             }
             default:
@@ -1181,44 +1217,44 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
         }
         if (uniforms.tevStages.data[i].alphaClamp != 0)
         {
-            _1332 = fast::clamp(_1332, 0.0, 1.0);
+            _1375 = fast::clamp(_1375, 0.0, 1.0);
         }
         switch (uniforms.tevStages.data[i].colorOutput)
         {
             case 0:
             {
-                float4 _1639 = _1577;
-                _1639.x = _1284.x;
-                _1639.y = _1284.y;
-                _1639.z = _1284.z;
-                _1577 = _1639;
+                float4 _1685 = _1623;
+                _1685.x = _1327.x;
+                _1685.y = _1327.y;
+                _1685.z = _1327.z;
+                _1623 = _1685;
                 break;
             }
             case 1:
             {
-                float4 _1633 = _1578;
-                _1633.x = _1284.x;
-                _1633.y = _1284.y;
-                _1633.z = _1284.z;
-                _1578 = _1633;
+                float4 _1679 = _1624;
+                _1679.x = _1327.x;
+                _1679.y = _1327.y;
+                _1679.z = _1327.z;
+                _1624 = _1679;
                 break;
             }
             case 2:
             {
-                float4 _1627 = _1579;
-                _1627.x = _1284.x;
-                _1627.y = _1284.y;
-                _1627.z = _1284.z;
-                _1579 = _1627;
+                float4 _1673 = _1625;
+                _1673.x = _1327.x;
+                _1673.y = _1327.y;
+                _1673.z = _1327.z;
+                _1625 = _1673;
                 break;
             }
             case 3:
             {
-                float4 _1621 = _1580;
-                _1621.x = _1284.x;
-                _1621.y = _1284.y;
-                _1621.z = _1284.z;
-                _1580 = _1621;
+                float4 _1667 = _1626;
+                _1667.x = _1327.x;
+                _1667.y = _1327.y;
+                _1667.z = _1327.z;
+                _1626 = _1667;
                 break;
             }
             default:
@@ -1230,30 +1266,30 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
         {
             case 0:
             {
-                float4 _1651 = _1577;
-                _1651.w = _1332;
-                _1577 = _1651;
+                float4 _1697 = _1623;
+                _1697.w = _1375;
+                _1623 = _1697;
                 break;
             }
             case 1:
             {
-                float4 _1649 = _1578;
-                _1649.w = _1332;
-                _1578 = _1649;
+                float4 _1695 = _1624;
+                _1695.w = _1375;
+                _1624 = _1695;
                 break;
             }
             case 2:
             {
-                float4 _1647 = _1579;
-                _1647.w = _1332;
-                _1579 = _1647;
+                float4 _1693 = _1625;
+                _1693.w = _1375;
+                _1625 = _1693;
                 break;
             }
             case 3:
             {
-                float4 _1645 = _1580;
-                _1645.w = _1332;
-                _1580 = _1645;
+                float4 _1691 = _1626;
+                _1691.w = _1375;
+                _1626 = _1691;
                 break;
             }
             default:
@@ -1264,62 +1300,62 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
         i++;
         continue;
     }
-    _1424 = false;
-    bool _1425;
+    _1467 = false;
+    bool _1468;
     do
     {
-        _1462 = false;
-        bool _1463;
+        _1505 = false;
+        bool _1506;
         do
         {
             switch (uniforms.alphaComp0)
             {
                 case 0:
                 {
-                    _1462 = true;
-                    _1463 = false;
+                    _1505 = true;
+                    _1506 = false;
                     break;
                 }
                 case 1:
                 {
-                    _1462 = true;
-                    _1463 = _1577.w < uniforms.alphaRef0;
+                    _1505 = true;
+                    _1506 = _1623.w < uniforms.alphaRef0;
                     break;
                 }
                 case 2:
                 {
-                    _1462 = true;
-                    _1463 = _1577.w == uniforms.alphaRef0;
+                    _1505 = true;
+                    _1506 = _1623.w == uniforms.alphaRef0;
                     break;
                 }
                 case 3:
                 {
-                    _1462 = true;
-                    _1463 = _1577.w <= uniforms.alphaRef0;
+                    _1505 = true;
+                    _1506 = _1623.w <= uniforms.alphaRef0;
                     break;
                 }
                 case 4:
                 {
-                    _1462 = true;
-                    _1463 = _1577.w > uniforms.alphaRef0;
+                    _1505 = true;
+                    _1506 = _1623.w > uniforms.alphaRef0;
                     break;
                 }
                 case 5:
                 {
-                    _1462 = true;
-                    _1463 = _1577.w != uniforms.alphaRef0;
+                    _1505 = true;
+                    _1506 = _1623.w != uniforms.alphaRef0;
                     break;
                 }
                 case 6:
                 {
-                    _1462 = true;
-                    _1463 = _1577.w >= uniforms.alphaRef0;
+                    _1505 = true;
+                    _1506 = _1623.w >= uniforms.alphaRef0;
                     break;
                 }
                 case 7:
                 {
-                    _1462 = true;
-                    _1463 = true;
+                    _1505 = true;
+                    _1506 = true;
                     break;
                 }
                 default:
@@ -1327,66 +1363,66 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1462)
+            if (_1505)
             {
                 break;
             }
-            _1462 = true;
-            _1463 = true;
+            _1505 = true;
+            _1506 = true;
             break;
         } while(false);
-        _1487 = false;
-        bool _1488;
+        _1530 = false;
+        bool _1531;
         do
         {
             switch (uniforms.alphaComp1)
             {
                 case 0:
                 {
-                    _1487 = true;
-                    _1488 = false;
+                    _1530 = true;
+                    _1531 = false;
                     break;
                 }
                 case 1:
                 {
-                    _1487 = true;
-                    _1488 = _1577.w < uniforms.alphaRef1;
+                    _1530 = true;
+                    _1531 = _1623.w < uniforms.alphaRef1;
                     break;
                 }
                 case 2:
                 {
-                    _1487 = true;
-                    _1488 = _1577.w == uniforms.alphaRef1;
+                    _1530 = true;
+                    _1531 = _1623.w == uniforms.alphaRef1;
                     break;
                 }
                 case 3:
                 {
-                    _1487 = true;
-                    _1488 = _1577.w <= uniforms.alphaRef1;
+                    _1530 = true;
+                    _1531 = _1623.w <= uniforms.alphaRef1;
                     break;
                 }
                 case 4:
                 {
-                    _1487 = true;
-                    _1488 = _1577.w > uniforms.alphaRef1;
+                    _1530 = true;
+                    _1531 = _1623.w > uniforms.alphaRef1;
                     break;
                 }
                 case 5:
                 {
-                    _1487 = true;
-                    _1488 = _1577.w != uniforms.alphaRef1;
+                    _1530 = true;
+                    _1531 = _1623.w != uniforms.alphaRef1;
                     break;
                 }
                 case 6:
                 {
-                    _1487 = true;
-                    _1488 = _1577.w >= uniforms.alphaRef1;
+                    _1530 = true;
+                    _1531 = _1623.w >= uniforms.alphaRef1;
                     break;
                 }
                 case 7:
                 {
-                    _1487 = true;
-                    _1488 = true;
+                    _1530 = true;
+                    _1531 = true;
                     break;
                 }
                 default:
@@ -1394,55 +1430,55 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1487)
+            if (_1530)
             {
                 break;
             }
-            _1487 = true;
-            _1488 = true;
+            _1530 = true;
+            _1531 = true;
             break;
         } while(false);
-        bool _1426;
+        bool _1469;
         switch (uniforms.alphaLogic)
         {
             case 0:
             {
-                if (_1463)
+                if (_1506)
                 {
-                    _1426 = _1488;
+                    _1469 = _1531;
                 }
                 else
                 {
-                    _1426 = false;
+                    _1469 = false;
                 }
-                _1424 = true;
-                _1425 = _1426;
+                _1467 = true;
+                _1468 = _1469;
                 break;
             }
             case 1:
             {
-                if (_1463)
+                if (_1506)
                 {
-                    _1426 = true;
+                    _1469 = true;
                 }
                 else
                 {
-                    _1426 = _1488;
+                    _1469 = _1531;
                 }
-                _1424 = true;
-                _1425 = _1426;
+                _1467 = true;
+                _1468 = _1469;
                 break;
             }
             case 2:
             {
-                _1424 = true;
-                _1425 = _1463 != _1488;
+                _1467 = true;
+                _1468 = _1506 != _1531;
                 break;
             }
             case 3:
             {
-                _1424 = true;
-                _1425 = _1463 == _1488;
+                _1467 = true;
+                _1468 = _1506 == _1531;
                 break;
             }
             default:
@@ -1450,19 +1486,19 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                 break;
             }
         }
-        if (_1424)
+        if (_1467)
         {
             break;
         }
-        _1424 = true;
-        _1425 = true;
+        _1467 = true;
+        _1468 = true;
         break;
     } while(false);
-    if (!_1425)
+    if (!_1468)
     {
         discard_fragment();
     }
-    out.entryPointParam_fragmentMain = _1577;
+    out.entryPointParam_fragmentMain = _1623;
     return out;
 }
 

@@ -18,6 +18,22 @@ struct GXVec3 {
     float x = 0.0f;
     float y = 0.0f;
     float z = 0.0f;
+
+    GXVec3 operator+(const GXVec3 &other) const {
+        return {x + other.x, y + other.y, z + other.z};
+    }
+
+    GXVec3 operator-(const GXVec3 &other) const {
+        return {x - other.x, y - other.y, z - other.z};
+    }
+
+    GXVec3 operator*(float scalar) const {
+        return {x * scalar, y * scalar, z * scalar};
+    }
+
+    GXVec3 operator/(float scalar) const {
+        return {x / scalar, y / scalar, z / scalar};
+    }
 };
 
 struct GXVec4 {
@@ -36,7 +52,12 @@ struct GXColor {
 
 struct GXRenderVertex {
     float x, y, z, w;
+
+    // Raster 1
     float r, g, b, a;
+
+    // Raster 2
+    float r1, g1, b1, a1;
 
     float u0, v0;
     float u1, v1;
@@ -50,6 +71,10 @@ struct GXRenderVertex {
 
 struct GXMatrix3x4 {
     float m[3][4]{};
+};
+
+struct GXMatrix3x3 {
+    float m[3][3]{};
 };
 
 struct GXProjection {
@@ -414,6 +439,21 @@ struct GXTexCoordFormat {
     uint8_t fractionalBits = 0;
 };
 
+struct GXLight {
+    GXColor color{};
+
+    GXVec3 cosAttenuation{};
+    GXVec3 distAttenuation{};
+
+    GXVec3 position{};
+    GXVec3 direction{};
+};
+
+struct GXLightingChannel {
+    uint32_t colorControl = 0x401;
+    uint32_t alphaControl = 0x401;
+};
+
 class GXCommandProcessorState {
   public:
     void write(uint8_t reg, uint32_t value);
@@ -537,6 +577,8 @@ struct GXXFState {
 
     std::array<float, 1024> matrixMemory{};
 
+    std::array<float, 96> normalMatrixMemory{};
+
     std::array<float, 256> postMatrices{};
 
     uint8_t numTexGens = 0;
@@ -546,8 +588,17 @@ struct GXXFState {
 
     std::array<GXTexGenState, 8> texGens{};
     std::array<GXPostTexMatrixState, 8> postTexMatrices{};
+    std::array<GXLight, 8> lights{};
 
     bool dualTexTransform = false;
+
+    uint8_t numColorChannels = 0;
+
+    std::array<GXColor, 2> ambientColors{};
+    std::array<GXColor, 2> materialColors{GXColor{1.0f, 1.0f, 1.0f, 1.0f},
+                                          GXColor{1.0f, 1.0f, 1.0f, 1.0f}};
+
+    std::array<GXLightingChannel, 2> lightingChannels{};
 };
 
 struct GXBPCopyState {
@@ -689,6 +740,45 @@ static inline int textureUnitFromBP(uint8_t reg, uint8_t base0, uint8_t base4) {
 
     return -1;
 }
+
+static inline GXColor decodeXFColor(uint32_t value) {
+    GXColor color{};
+
+    color.r = static_cast<float>((value >> 24) & 0xFF) / 255.0f;
+    color.g = static_cast<float>((value >> 16) & 0xFF) / 255.0f;
+    color.b = static_cast<float>((value >> 8) & 0xFF) / 255.0f;
+    color.a = static_cast<float>(value & 0xFF) / 255.0f;
+
+    return color;
+}
+
+static inline uint8_t getGXLightMask(uint32_t control) {
+    const uint8_t low = static_cast<uint8_t>((control >> 2) & 0xF);
+    const uint8_t high = static_cast<uint8_t>((control >> 11) & 0xF);
+
+    return low | (high << 4);
+}
+
+static inline float dot(const GXVec3 &a, const GXVec3 &b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+static inline float length(const GXVec3 &v) { return std::sqrt(dot(v, v)); }
+
+static inline GXVec3 normalize(const GXVec3 &v) {
+    const float len = length(v);
+
+    GXVec3 result = v;
+
+    if (len > 0.0f) {
+        result.x /= len;
+        result.y /= len;
+        result.z /= len;
+    }
+
+    return result;
+}
+
 } // namespace gx
 
 class GXRenderer {
@@ -986,6 +1076,18 @@ class GX {
 
     void processCallDisplayList();
     void processDisplayList(uint32_t address, uint32_t size);
+
+    GXMatrix3x3 getNormalMatrix(uint32_t matrixIndex) const;
+    GXVec3 transformNormal(const GXVertex &vertex, uint32_t matrixIndex) const;
+
+    GXColor calculateLight(const GXLight &light, uint32_t control,
+                           const GXVec3 &position, const GXVec3 &normal) const;
+
+    GXColor calculateLightingChannel(const GXVertex &vertex, uint32_t channel,
+                                     const GXVec3 &viewPosition,
+                                     const GXVec3 &normal) const;
+
+    GXColor getVertexColor(const GXVertex &vertex, uint32_t channel) const;
 
     GXFifoReader reader{};
 

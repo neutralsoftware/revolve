@@ -1,7 +1,9 @@
 
 struct VertexIn {
     float4 position : POSITION;
-    float4 color : COLOR0;
+
+    float4 color0 : COLOR0;
+    float4 color1 : COLOR1;
 
     float2 uv0 : TEXCOORD0;
     float2 uv1 : TEXCOORD1;
@@ -15,7 +17,9 @@ struct VertexIn {
 
 struct VertexOut {
     float4 position : SV_POSITION;
-    float4 color : COLOR0;
+
+    float4 color0 : COLOR0;
+    float4 color1 : COLOR1;
 
     float2 uv0 : TEXCOORD0;
     float2 uv1 : TEXCOORD1;
@@ -138,7 +142,9 @@ SamplerState samp7;
 VertexOut vertexMain(VertexIn input) {
     VertexOut output;
     output.position = input.position;
-    output.color = input.color;
+
+    output.color0 = input.color0;
+    output.color1 = input.color1;
 
     output.uv0 = input.uv0;
     output.uv1 = input.uv1;
@@ -150,6 +156,17 @@ VertexOut vertexMain(VertexIn input) {
     output.uv7 = input.uv7;
 
     return output;
+}
+
+float4 getRasterColor(int channel, VertexOut input) {
+    switch (channel) {
+    case 0:
+        return input.color0;
+    case 1:
+        return input.color1;
+    default:
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
 }
 
 float2 getGXTexCoord(int index, VertexOut input) {
@@ -421,7 +438,7 @@ void writeTevAlpha(int output, float value, inout TevRegisters regs) {
 }
 
 void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs) {
-    float4 ras = input.color;
+    float4 ras = getRasterColor(stage.colorChannel, input);
 
     float4 tex = float4(1, 1, 1, 1);
 

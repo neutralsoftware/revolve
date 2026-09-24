@@ -13,6 +13,11 @@
     CP_LOAD 0x80, 0x00000009
     XF_IDENTITY_ORTHO
     .byte 0x10
+    .long 0x00080400
+    .long 0x3F800000, 0, 0
+    .long 0, 0x3F800000, 0
+    .long 0, 0, 0x3F800000
+    .byte 0x10
     .long 0x0000103F
     .long \texgens
     .byte 0x10

@@ -749,11 +749,139 @@ void GX::writeXF(uint16_t address, uint32_t value) {
         return;
     }
 
+    if (address >= 0x400 && address < 0x460) {
+        float f;
+        std::memcpy(&f, &value, sizeof(f));
+
+        state.xf.normalMatrixMemory[address - 0x400] = f;
+        return;
+    }
+
     if (address >= 0x500 && address < 0x600) {
         float f;
         std::memcpy(&f, &value, sizeof(f));
 
         state.xf.postMatrices[address - 0x500] = f;
+        return;
+    }
+
+    if (address >= 0x600 && address < 0x680) {
+        const uint32_t relative = address - 0x600;
+
+        const uint32_t lightIndex = relative / 0x10;
+        const uint32_t word = relative % 0x10;
+
+        if (lightIndex >= state.xf.lights.size())
+            return;
+
+        GXLight &light = state.xf.lights[lightIndex];
+
+        auto rawFloat = [&]() {
+            float f;
+            std::memcpy(&f, &value, sizeof(f));
+            return f;
+        };
+
+        switch (word) {
+        case 0:
+        case 1:
+        case 2:
+            break;
+
+        case 3:
+            light.color.r = static_cast<float>((value >> 24) & 0xFF) / 255.0f;
+            light.color.g = static_cast<float>((value >> 16) & 0xFF) / 255.0f;
+            light.color.b = static_cast<float>((value >> 8) & 0xFF) / 255.0f;
+            light.color.a = static_cast<float>(value & 0xFF) / 255.0f;
+            break;
+
+        case 4:
+            light.cosAttenuation.x = rawFloat();
+            break;
+        case 5:
+            light.cosAttenuation.y = rawFloat();
+            break;
+        case 6:
+            light.cosAttenuation.z = rawFloat();
+            break;
+
+        case 7:
+            light.distAttenuation.x = rawFloat();
+            break;
+        case 8:
+            light.distAttenuation.y = rawFloat();
+            break;
+        case 9:
+            light.distAttenuation.z = rawFloat();
+            break;
+
+        case 0xA:
+            light.position.x = rawFloat();
+            break;
+        case 0xB:
+            light.position.y = rawFloat();
+            break;
+        case 0xC:
+            light.position.z = rawFloat();
+            break;
+
+        case 0xD:
+            light.direction.x = rawFloat();
+            break;
+        case 0xE:
+            light.direction.y = rawFloat();
+            break;
+        case 0xF:
+            light.direction.z = rawFloat();
+            break;
+        }
+
+        return;
+    }
+
+    if (address == 0x1009) {
+        state.xf.numColorChannels = static_cast<uint8_t>(value & 0x3);
+
+        return;
+    }
+
+    if (address == 0x100A) {
+        state.xf.ambientColors[0] = gx::decodeXFColor(value);
+        return;
+    }
+
+    if (address == 0x100B) {
+        state.xf.ambientColors[1] = gx::decodeXFColor(value);
+        return;
+    }
+
+    if (address == 0x100C) {
+        state.xf.materialColors[0] = gx::decodeXFColor(value);
+        return;
+    }
+
+    if (address == 0x100D) {
+        state.xf.materialColors[1] = gx::decodeXFColor(value);
+        return;
+    }
+
+    if (address == 0x100E) {
+        state.xf.lightingChannels[0].colorControl = value;
+        return;
+    }
+
+    if (address == 0x100F) {
+        state.xf.lightingChannels[1].colorControl = value;
+        return;
+    }
+
+    if (address == 0x1010) {
+        state.xf.lightingChannels[0].alphaControl = value;
+        return;
+    }
+
+    if (address == 0x1011) {
+        state.xf.lightingChannels[1].alphaControl = value;
         return;
     }
 
@@ -953,6 +1081,39 @@ GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
     out.g = vertex.color0.g;
     out.b = vertex.color0.b;
     out.a = vertex.color0.a;
+
+    const uint32_t matrixIndex = getVertexPositionMatrixIndex(vertex);
+
+    const GXVec3 transformedNormal = transformNormal(vertex, matrixIndex);
+
+    const GXVec3 viewPosition{view.x, view.y, view.z};
+
+    GXColor color0{};
+    GXColor color1{};
+
+    if (state.xf.numColorChannels >= 1) {
+        color0 = calculateLightingChannel(vertex, 0, viewPosition,
+                                          transformedNormal);
+    } else {
+        color0 = getVertexColor(vertex, 0);
+    }
+
+    if (state.xf.numColorChannels >= 2) {
+        color1 = calculateLightingChannel(vertex, 1, viewPosition,
+                                          transformedNormal);
+    } else {
+        color1 = color0;
+    }
+
+    out.r = color0.r;
+    out.g = color0.g;
+    out.b = color0.b;
+    out.a = color0.a;
+
+    out.r1 = color1.r;
+    out.g1 = color1.g;
+    out.b1 = color1.b;
+    out.a1 = color1.a;
 
     auto singleUvParsing = [&](uint32_t index, float &u, float &v) -> void {
         GXVec3 tex = generateTexCoord(vertex, index);
@@ -1568,4 +1729,51 @@ void GX::processDisplayList(uint32_t address, uint32_t size) {
 
     commandSource = previousSource;
     displayListReader = previousReader;
+}
+
+GXMatrix3x3 GX::getNormalMatrix(uint32_t matrixIndex) const {
+    GXMatrix3x3 result{};
+
+    const uint32_t row = matrixIndex & 0x1F;
+    const uint32_t base = row * 3;
+
+    if (base + 8 >= state.xf.normalMatrixMemory.size())
+        return result;
+
+    for (uint32_t r = 0; r < 3; ++r) {
+        for (uint32_t c = 0; c < 3; ++c) {
+            result.m[r][c] = state.xf.normalMatrixMemory[base + r * 3 + c];
+        }
+    }
+
+    return result;
+}
+
+GXVec3 GX::transformNormal(const GXVertex &vertex, uint32_t matrixIndex) const {
+    const GXMatrix3x3 matrix = getNormalMatrix(matrixIndex);
+
+    GXVec3 result{};
+
+    result.x = matrix.m[0][0] * vertex.normal.x +
+               matrix.m[0][1] * vertex.normal.y +
+               matrix.m[0][2] * vertex.normal.z;
+
+    result.y = matrix.m[1][0] * vertex.normal.x +
+               matrix.m[1][1] * vertex.normal.y +
+               matrix.m[1][2] * vertex.normal.z;
+
+    result.z = matrix.m[2][0] * vertex.normal.x +
+               matrix.m[2][1] * vertex.normal.y +
+               matrix.m[2][2] * vertex.normal.z;
+
+    const float length = std::sqrt(result.x * result.x + result.y * result.y +
+                                   result.z * result.z);
+
+    if (length > 0.0f) {
+        result.x /= length;
+        result.y /= length;
+        result.z /= length;
+    }
+
+    return result;
 }

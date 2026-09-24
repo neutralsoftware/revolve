@@ -568,3 +568,205 @@ void GX::decodeTevAlphaCombiner(uint32_t stage, uint32_t value) {
     a.scale = static_cast<GXTevScale>((value >> 20) & 0x3u);
     a.output = static_cast<GXTevOutput>((value >> 22) & 0x3u);
 }
+
+GXColor GX::calculateLight(const GXLight &light, uint32_t control,
+                           const GXVec3 &position, const GXVec3 &normal) const {
+    const uint32_t diffuseFunction = (control >> 7) & 0x3;
+    const uint32_t attenuationFunction = (control >> 9) & 0x3;
+
+    GXVec3 lightDirection{};
+    float attenuation = 1.0f;
+
+    if (attenuationFunction == 0 || attenuationFunction == 2) {
+        lightDirection = gx::normalize(light.position - position);
+
+        attenuation = 1.0f;
+
+        if (gx::length(lightDirection) == 0.0f)
+            lightDirection = normal;
+    } else if (attenuationFunction == 1) {
+        lightDirection = gx::normalize(light.position - position);
+
+        float d = gx::dot(normal, lightDirection);
+        float x = 0.0f;
+
+        if (d >= 0.0f) {
+            x = std::max(0.0f, gx::dot(normal, light.direction));
+        }
+
+        GXVec3 distAtt = light.distAttenuation;
+        if (diffuseFunction != 0) {
+            distAtt = gx::normalize(distAtt);
+        }
+
+        const float numerator =
+            std::max(0.0f, light.cosAttenuation.x + light.cosAttenuation.y * x +
+                               light.cosAttenuation.z * x * x);
+        const float denominator = distAtt.x + distAtt.y * x + distAtt.z * x * x;
+
+        attenuation = denominator != 0.0f ? numerator / denominator : 0.0f;
+    } else if (attenuationFunction == 3) {
+        GXVec3 delta = light.position - position;
+
+        const float distanceSquared = gx::dot(delta, delta);
+
+        const float distance = std::sqrt(distanceSquared);
+
+        if (distance > 0.0f) {
+            lightDirection = {delta.x / distance, delta.y / distance,
+                              delta.z / distance};
+        } else {
+            lightDirection = normal;
+        }
+
+        const float angle =
+            std::max(0.0f, gx::dot(lightDirection, light.direction));
+
+        const float numerator = std::max(
+            0.0f, light.cosAttenuation.x + light.cosAttenuation.y * angle +
+                      light.cosAttenuation.z * angle * angle);
+
+        const float denominator = light.distAttenuation.x +
+                                  light.distAttenuation.y * distance +
+                                  light.distAttenuation.z * distanceSquared;
+
+        attenuation = denominator != 0.0f ? numerator / denominator : 0.0f;
+    }
+
+    float diffuse = 1.0f;
+
+    switch (diffuseFunction) {
+    case 0:
+        // GX_DF_NONE
+        diffuse = 1.0f;
+        break;
+
+    case 1:
+        // GX_DF_SIGN
+        diffuse = gx::dot(lightDirection, normal);
+        break;
+
+    case 2:
+        // GX_DF_CLAMP
+        diffuse = std::max(0.0f, gx::dot(lightDirection, normal));
+        break;
+
+    default:
+        diffuse = 0.0f;
+        break;
+    }
+
+    const float scale = attenuation * diffuse;
+
+    return {light.color.r * scale, light.color.g * scale, light.color.b * scale,
+            light.color.a * scale};
+}
+
+GXColor GX::getVertexColor(const GXVertex &vertex, uint32_t channel) const {
+    const auto &vcd = state.cp.getVCD();
+
+    if (channel == 0) {
+        if (vcd.color0 != GXVertexAttributeMode::None)
+            return vertex.color0;
+
+        if (vcd.color1 != GXVertexAttributeMode::None)
+            return vertex.color1;
+    } else {
+        if (vcd.color1 != GXVertexAttributeMode::None)
+            return vertex.color1;
+
+        if (vcd.color0 != GXVertexAttributeMode::None)
+            return vertex.color0;
+    }
+
+    return {1, 1, 1, 1};
+}
+
+GXColor GX::calculateLightingChannel(const GXVertex &vertex, uint32_t channel,
+                                     const GXVec3 &viewPosition,
+                                     const GXVec3 &normal) const {
+    if (channel >= 2)
+        return {};
+
+    const auto &lighting = state.xf.lightingChannels[channel];
+
+    const uint32_t colorControl = lighting.colorControl;
+    const uint32_t alphaControl = lighting.alphaControl;
+
+    const GXColor vertexColor = getVertexColor(vertex, channel);
+
+    GXColor material = state.xf.materialColors[channel];
+
+    if (colorControl & 1u) {
+        material.r = vertexColor.r;
+        material.g = vertexColor.g;
+        material.b = vertexColor.b;
+    }
+
+    if (alphaControl & 1u) {
+        material.a = vertexColor.a;
+    }
+
+    GXColor accumulated{1.0f, 1.0f, 1.0f, 1.0f};
+    if (colorControl & (1u << 1)) {
+        GXColor ambient = state.xf.ambientColors[channel];
+        if (colorControl & (1u << 6)) {
+            ambient.r = vertexColor.r;
+            ambient.g = vertexColor.g;
+            ambient.b = vertexColor.b;
+        }
+
+        accumulated.r = ambient.r;
+        accumulated.g = ambient.g;
+        accumulated.b = ambient.b;
+
+        const uint8_t mask = gx::getGXLightMask(colorControl);
+
+        for (uint32_t i = 0; i < 8; ++i) {
+            if ((mask & (1u << i)) == 0)
+                continue;
+
+            GXColor contribution = calculateLight(
+                state.xf.lights[i], colorControl, viewPosition, normal);
+
+            accumulated.r += contribution.r;
+            accumulated.g += contribution.g;
+            accumulated.b += contribution.b;
+        }
+    }
+
+    if (alphaControl & (1u << 1)) {
+        float ambientAlpha = state.xf.ambientColors[channel].a;
+
+        if (alphaControl & (1u << 6))
+            ambientAlpha = vertexColor.a;
+
+        accumulated.a = ambientAlpha;
+
+        const uint8_t mask = gx::getGXLightMask(alphaControl);
+
+        for (uint32_t i = 0; i < 8; ++i) {
+            if ((mask & (1u << i)) == 0)
+                continue;
+
+            const GXColor contribution = calculateLight(
+                state.xf.lights[i], alphaControl, viewPosition, normal);
+
+            accumulated.a += contribution.a;
+        }
+    }
+
+    accumulated.r = std::clamp(accumulated.r, 0.0f, 1.0f);
+    accumulated.g = std::clamp(accumulated.g, 0.0f, 1.0f);
+    accumulated.b = std::clamp(accumulated.b, 0.0f, 1.0f);
+    accumulated.a = std::clamp(accumulated.a, 0.0f, 1.0f);
+
+    GXColor result{};
+
+    result.r = material.r * accumulated.r;
+    result.g = material.g * accumulated.g;
+    result.b = material.b * accumulated.b;
+    result.a = material.a * accumulated.a;
+
+    return result;
+}
