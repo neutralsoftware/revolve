@@ -43,6 +43,12 @@ class ProcessorInterface : public MMIODevice {
         interruptCause &= ~(1u << static_cast<uint32_t>(interrupt));
     }
 
+    uint32_t gatherPipeDestination() const { return fifoWritePointer; }
+    void advanceGatherPipe() {
+        fifoWritePointer = fifoWritePointer == fifoEnd ? fifoBase
+                                                       : fifoWritePointer + 32;
+    }
+
   private:
     uint32_t interruptMask = 0;
     uint32_t interruptCause = 0;

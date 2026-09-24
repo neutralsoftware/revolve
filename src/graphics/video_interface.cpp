@@ -124,11 +124,6 @@ void VideoInterface::decodeRegisterWrite(uint32_t offset, uint32_t value,
     case VIRegister::Interupt3Lo:
         break;
     default:
-        Logger::log(
-            "VI", LogLevel::Error,
-            "Write to unknown register offset: 0x" + std::to_string(offset) +
-                " with value: 0x" + std::to_string(value) +
-                " and size: " + std::to_string(static_cast<uint32_t>(size)));
         break;
     }
 }

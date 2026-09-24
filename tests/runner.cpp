@@ -1,4 +1,9 @@
 
+#include "device.h"
+#include "SDL3/SDL.h"
+#include <algorithm>
+#include <chrono>
+#include <filesystem>
 #include <array>
 #include <fstream>
 #include <iostream>
@@ -138,7 +143,10 @@ void runMemorySuite() {
     std::cout << runElfOutput << std::endl;
 }
 
+bool graphicsSmoke = false;
+
 int main(int argc, char *argv[]) {
+    graphicsSmoke = argc > 2 && std::string(argv[2]) == "--smoke";
     std::string suite;
     if (argc > 1) {
         suite = argv[1];
@@ -177,4 +185,61 @@ int main(int argc, char *argv[]) {
             throw std::runtime_error("Clean failed: " + cleanOutput);
         }
     }
+}
+
+bool runGraphicsSmoke(Device &device, const std::string &id, bool requireColor) {
+    const auto started = std::chrono::steady_clock::now();
+    uint32_t steps = 0;
+    while (device.pe->read(0x0E, AccessSize::U16) != 0xBEEF) {
+        device.step();
+        ++steps;
+        if (device.cpu.state.exceptionTaken)
+            throw std::runtime_error(id + ": guest CPU exception before EFB copy");
+        if ((steps & 4095) == 0) {
+            SDL_PumpEvents();
+            if (steps >= 2000000 || std::chrono::steady_clock::now() - started >
+                                        std::chrono::seconds(15))
+                throw std::runtime_error(id + ": timed out before EFB copy; PC=" +
+                                         utils::toHexString(device.cpu.state.cia));
+        }
+    }
+    device.gx.renderer->presentXFB();
+    constexpr uint32_t width = 640;
+    constexpr uint32_t height = 528;
+    std::vector<uint8_t> pixels(width * height * 4);
+    uint32_t changed = 0;
+    const uint8_t firstLuma = Bus::readPhysical8(0x10000);
+    for (uint32_t y = 0; y < height; ++y) {
+        for (uint32_t x = 0; x < width; ++x) {
+            const uint32_t pair = 0x10000 + y * width * 2 + (x & ~1u) * 2;
+            const int luma = Bus::readPhysical8(pair + (x & 1) * 2);
+            const int u = static_cast<int>(Bus::readPhysical8(pair + 1)) - 128;
+            const int v = static_cast<int>(Bus::readPhysical8(pair + 3)) - 128;
+            changed += luma != firstLuma;
+            const size_t output = (y * width + x) * 4;
+            pixels[output] = std::clamp((298 * (luma - 16) + 409 * v + 128) >> 8, 0, 255);
+            pixels[output + 1] = std::clamp((298 * (luma - 16) - 100 * u - 208 * v + 128) >> 8, 0, 255);
+            pixels[output + 2] = std::clamp((298 * (luma - 16) + 516 * u + 128) >> 8, 0, 255);
+            pixels[output + 3] = 255;
+        }
+    }
+    const std::string directory = std::string(TESTS_PATH) + "/build/smoke";
+    std::filesystem::create_directories(directory);
+    SDL_Surface *surface = SDL_CreateSurfaceFrom(width, height, SDL_PIXELFORMAT_RGBA32,
+                                                 pixels.data(), width * 4);
+    if (!surface)
+        throw std::runtime_error(SDL_GetError());
+    const bool saved = SDL_SaveBMP(surface, (directory + "/" + id + ".bmp").c_str());
+    SDL_DestroySurface(surface);
+    if (!saved)
+        throw std::runtime_error(SDL_GetError());
+    const double seconds = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - started).count();
+    std::cout << "SMOKE " << id << ": " << steps << " instructions, " << seconds
+              << " s, " << changed << " differing luminance pixels\n";
+    if (id == "ATV-COLOR-MASK" && changed != 0)
+        throw std::runtime_error(id + ": disabled color writes changed the XFB");
+    if (requireColor && changed == 0)
+        throw std::runtime_error(id + ": XFB contains no visible variation");
+    return true;
 }

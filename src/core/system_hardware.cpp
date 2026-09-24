@@ -1,0 +1,328 @@
+#include "core/system_hardware.h"
+#include "device.h"
+#include <stdexcept>
+
+uint16_t DSPInterface::read16(uint32_t offset) {
+    switch (offset) {
+    case 0x00:
+        return static_cast<uint16_t>(mailToDSP >> 16);
+    case 0x02:
+        return static_cast<uint16_t>(mailToDSP);
+    case 0x04:
+        return static_cast<uint16_t>(mailFromDSP >> 16) |
+               (mailFromDSPReady ? 0x8000 : 0);
+    case 0x06: {
+        const uint16_t value = static_cast<uint16_t>(mailFromDSP);
+        mailFromDSPReady = false;
+        return value;
+    }
+    case 0x0A:
+        return control;
+    case 0x10:
+        return interruptControl;
+    case 0x12:
+        return arInfo;
+    case 0x16:
+        return 1;
+    case 0x1A:
+        return arRefresh;
+    case 0x20:
+        return static_cast<uint16_t>(arMainAddress >> 16);
+    case 0x22:
+        return static_cast<uint16_t>(arMainAddress);
+    case 0x24:
+        return static_cast<uint16_t>(arAddress >> 16);
+    case 0x26:
+        return static_cast<uint16_t>(arAddress);
+    case 0x28:
+        return static_cast<uint16_t>(arCount >> 16);
+    case 0x2A:
+        return static_cast<uint16_t>(arCount);
+    default:
+        return 0;
+    }
+}
+
+uint32_t DSPInterface::read(uint32_t offset, AccessSize size) {
+    if (size == AccessSize::U16)
+        return read16(offset);
+    if (size == AccessSize::U32)
+        return (static_cast<uint32_t>(read16(offset)) << 16) |
+               read16(offset + 2);
+    if (size == AccessSize::U8) {
+        const uint16_t value = read16(offset & ~1u);
+        return (offset & 1) ? value & 0xFF : value >> 8;
+    }
+    throw std::runtime_error("Unsupported DSP interface access size");
+}
+
+void DSPInterface::write16(uint32_t offset, uint16_t value) {
+    switch (offset) {
+    case 0x00:
+        mailToDSP = (mailToDSP & 0xFFFF) | (static_cast<uint32_t>(value) << 16);
+        break;
+    case 0x02:
+        mailToDSP = (mailToDSP & 0xFFFF0000) | value;
+        break;
+    case 0x0A: {
+        constexpr uint16_t pending = 0x00A8;
+        constexpr uint16_t writable = 0x0D56;
+        const bool wasHalted = (control & 4) != 0;
+        control &= ~(value & pending);
+        control = (control & ~writable) | (value & writable);
+        control &= ~1u;
+        if (value & 0x0800)
+            initCodeLoaded = true;
+        if (wasHalted && !(control & 4) && initCodeLoaded) {
+            mailFromDSP = 0x00544348;
+            mailFromDSPReady = true;
+            initCodeLoaded = false;
+        }
+        updateInterrupt();
+        break;
+    }
+    case 0x10:
+        interruptControl = value;
+        break;
+    case 0x12:
+        arInfo = value & 0x7F;
+        break;
+    case 0x1A:
+        arRefresh = value & 0x7FF;
+        break;
+    case 0x20:
+        arMainAddress = (arMainAddress & 0xFFFF) |
+                        (static_cast<uint32_t>(value & 0x03FF) << 16);
+        break;
+    case 0x22:
+        arMainAddress = (arMainAddress & 0xFFFF0000) | (value & 0xFFE0);
+        break;
+    case 0x24:
+        arAddress = (arAddress & 0xFFFF) |
+                    (static_cast<uint32_t>(value & 0x03FF) << 16);
+        break;
+    case 0x26:
+        arAddress = (arAddress & 0xFFFF0000) | (value & 0xFFE0);
+        break;
+    case 0x28:
+        arCount = (arCount & 0xFFFF) |
+                  (static_cast<uint32_t>(value & 0x83FF) << 16);
+        break;
+    case 0x2A:
+        arCount = (arCount & 0xFFFF0000) | (value & 0xFFE0);
+        completeARAMTransfer();
+        break;
+    default:
+        break;
+    }
+}
+
+void DSPInterface::completeARAMTransfer() {
+    const bool fromARAM = (arCount & 0x80000000u) != 0;
+    const uint32_t size = arCount & 0x03FFFFE0u;
+    control |= 1u << 9;
+    for (uint32_t offset = 0; offset < size; ++offset) {
+        const uint32_t main = (arMainAddress + offset) & 0x03FFFFFFu;
+        const uint32_t aram = 0x10000000u +
+                              ((arAddress + offset) & 0x03FFFFFFu);
+        if (fromARAM)
+            Bus::writePhysical8(main, Bus::readPhysical8(aram));
+        else
+            Bus::writePhysical8(aram, Bus::readPhysical8(main));
+    }
+    arMainAddress += size;
+    arAddress += size;
+    arCount &= 0x80000000u;
+    control &= ~(1u << 9);
+    control |= 1u << 5;
+    updateInterrupt();
+}
+
+void DSPInterface::updateInterrupt() {
+    const bool pending = ((control & (1u << 3)) && (control & (1u << 4))) ||
+                         ((control & (1u << 5)) && (control & (1u << 6))) ||
+                         ((control & (1u << 7)) && (control & (1u << 8)));
+    if (pending)
+        Device::globalDevice->pi->raiseInterrupt(PIInterrupt::DSP);
+    else
+        Device::globalDevice->pi->clearInterrupt(PIInterrupt::DSP);
+}
+
+void DSPInterface::write(uint32_t offset, uint32_t value, AccessSize size) {
+    if (size == AccessSize::U16) {
+        write16(offset, static_cast<uint16_t>(value));
+        return;
+    }
+    if (size == AccessSize::U32) {
+        write16(offset, static_cast<uint16_t>(value >> 16));
+        write16(offset + 2, static_cast<uint16_t>(value));
+        return;
+    }
+    if (size == AccessSize::U8) {
+        const uint32_t aligned = offset & ~1u;
+        uint16_t merged = read16(aligned);
+        if (offset & 1)
+            merged = (merged & 0xFF00) | (value & 0xFF);
+        else
+            merged = (merged & 0x00FF) | ((value & 0xFF) << 8);
+        write16(aligned, merged);
+        return;
+    }
+    throw std::runtime_error("Unsupported DSP interface access size");
+}
+
+uint32_t SerialInterface::read(uint32_t offset, AccessSize size) {
+    if (offset >= SI_SIZE)
+        return 0;
+    const uint32_t aligned = offset & ~3u;
+    uint32_t value = registers[aligned / 4];
+    if ((aligned == 0x04 || aligned == 0x08 || aligned == 0x10 ||
+         aligned == 0x14 || aligned == 0x1C || aligned == 0x20 ||
+         aligned == 0x28 || aligned == 0x2C) && size == AccessSize::U32) {
+        const uint32_t channel = aligned / 0x0C;
+        registers[0x38 / 4] &= ~(0x20000000u >> (channel * 8));
+        updateInterrupt();
+    }
+    if (size == AccessSize::U32)
+        return value;
+    if (size == AccessSize::U16)
+        return (offset & 2) ? value & 0xFFFF : value >> 16;
+    if (size == AccessSize::U8)
+        return (value >> ((3 - (offset & 3)) * 8)) & 0xFF;
+    throw std::runtime_error("Unsupported serial interface access size");
+}
+
+void SerialInterface::write(uint32_t offset, uint32_t value, AccessSize size) {
+    if (offset >= SI_SIZE)
+        return;
+    const uint32_t aligned = offset & ~3u;
+    uint32_t merged = registers[aligned / 4];
+    if (size == AccessSize::U32)
+        merged = value;
+    else if (size == AccessSize::U16) {
+        const uint32_t shift = (offset & 2) ? 0 : 16;
+        merged = (merged & ~(0xFFFFu << shift)) | ((value & 0xFFFF) << shift);
+    } else if (size == AccessSize::U8) {
+        const uint32_t shift = (3 - (offset & 3)) * 8;
+        merged = (merged & ~(0xFFu << shift)) | ((value & 0xFF) << shift);
+    } else {
+        throw std::runtime_error("Unsupported serial interface access size");
+    }
+
+    if (aligned == 0x34) {
+        uint32_t current = registers[0x34 / 4];
+        current = (current & ((1u << 28) | (1u << 29) | (1u << 31))) |
+                  (merged & 0x4F7F7FC7u);
+        if (merged & (1u << 28))
+            current &= ~(1u << 28);
+        if (merged & (1u << 31))
+            current &= ~(1u << 31);
+        if (merged & 1) {
+            const uint32_t channel = (merged >> 1) & 3;
+            current &= ~1u;
+            current |= (1u << 29) | (1u << 31);
+            registers[0x38 / 4] |= 1u << (27 - channel * 8);
+        }
+        registers[0x34 / 4] = current;
+    } else if (aligned == 0x38) {
+        registers[0x38 / 4] &= ~(merged & 0x0F0F0F0Fu);
+        registers[0x38 / 4] &= ~(1u << 31);
+    } else {
+        registers[aligned / 4] = merged;
+    }
+    updateInterrupt();
+}
+
+void SerialInterface::updateInterrupt() {
+    const uint32_t controlValue = registers[0x34 / 4];
+    const bool pending = ((controlValue & (1u << 28)) &&
+                          (controlValue & (1u << 27))) ||
+                         ((controlValue & (1u << 31)) &&
+                          (controlValue & (1u << 30)));
+    if (pending)
+        Device::globalDevice->pi->raiseInterrupt(PIInterrupt::SI);
+    else
+        Device::globalDevice->pi->clearInterrupt(PIInterrupt::SI);
+}
+
+ExpansionInterface::ExpansionInterface() {
+    status[0] = 1u << 11;
+    status[1] = (1u << 11) | (1u << 7);
+}
+
+uint32_t ExpansionInterface::read(uint32_t offset, AccessSize size) {
+    if (size != AccessSize::U32 || offset >= EXI_SIZE)
+        return 0;
+    const uint32_t channel = offset / 0x14;
+    const uint32_t reg = offset % 0x14;
+    if (channel >= 3)
+        return 0;
+    switch (reg) {
+    case 0x00:
+        return status[channel];
+    case 0x04:
+        return dmaAddress[channel];
+    case 0x08:
+        return dmaLength[channel];
+    case 0x0C:
+        return control[channel];
+    case 0x10:
+        return immediateData[channel];
+    default:
+        return 0;
+    }
+}
+
+void ExpansionInterface::write(uint32_t offset, uint32_t value,
+                               AccessSize size) {
+    if (size != AccessSize::U32 || offset >= EXI_SIZE)
+        return;
+    const uint32_t channel = offset / 0x14;
+    const uint32_t reg = offset % 0x14;
+    if (channel >= 3)
+        return;
+    switch (reg) {
+    case 0x00: {
+        constexpr uint32_t flags = (1u << 1) | (1u << 3) | (1u << 11);
+        constexpr uint32_t writable = 1u | (1u << 2) | 0x70u | 0x380u |
+                                      (1u << 10) | (1u << 13);
+        status[channel] &= ~(value & flags);
+        status[channel] = (status[channel] & ~writable) | (value & writable);
+        break;
+    }
+    case 0x04:
+        dmaAddress[channel] = value;
+        break;
+    case 0x08:
+        dmaLength[channel] = value;
+        break;
+    case 0x0C:
+        control[channel] = value;
+        if (value & 1) {
+            control[channel] &= ~1u;
+            status[channel] |= 1u << 3;
+            if ((value & 2) == 0 && (value & 0x0C) == 0)
+                immediateData[channel] = 0xFFFFFFFF;
+        }
+        break;
+    case 0x10:
+        immediateData[channel] = value;
+        break;
+    default:
+        break;
+    }
+    updateInterrupt();
+}
+
+void ExpansionInterface::updateInterrupt() {
+    bool pending = false;
+    for (uint32_t value : status) {
+        pending |= ((value & 1) && (value & 2)) ||
+                   ((value & 4) && (value & 8)) ||
+                   ((value & (1u << 10)) && (value & (1u << 11)));
+    }
+    if (pending)
+        Device::globalDevice->pi->raiseInterrupt(PIInterrupt::EXI);
+    else
+        Device::globalDevice->pi->clearInterrupt(PIInterrupt::EXI);
+}

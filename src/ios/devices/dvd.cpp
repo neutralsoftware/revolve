@@ -18,7 +18,7 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
         if (!disc->readRaw(0, diskID))
             return static_cast<int32_t>(DIResult::DriveError);
 
-        memory.writeBlock(request.outPtr, std::span<uint8_t>(diskID));
+        Bus::writeBlock(request.outPtr, std::span<uint8_t>(diskID));
 
         discIDRead = true;
         lastLength = 0x20;
@@ -34,7 +34,7 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
 
         const uint32_t status = (disc && disc->isOpen()) ? 2 : 1;
 
-        memory.write32(request.outPtr, status);
+        Bus::writePhysical32(request.outPtr, status);
 
         Logger::log("DI", LogLevel::Info,
                     "DVDLowGetCoverStatus: " + std::to_string(status));
@@ -47,7 +47,7 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
 
         const uint32_t value = (disc && disc->isOpen()) ? 1 : 0;
 
-        memory.write32(request.outPtr, value);
+        Bus::writePhysical32(request.outPtr, value);
 
         return static_cast<int32_t>(DIResult::Success);
     }
@@ -65,7 +65,7 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
         if (request.outSize < 4)
             return static_cast<int32_t>(DIResult::SecurityError);
 
-        memory.write32(request.outPtr, lastLength);
+        Bus::writePhysical32(request.outPtr, lastLength);
         Logger::log("DI", LogLevel::Info,
                     "DVDLowGetLength: " + std::to_string(lastLength));
 
@@ -77,9 +77,9 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
         if (request.inSize < 0x20)
             return static_cast<int32_t>(DIResult::BadArgument);
 
-        uint32_t length = memory.read32(request.inPtr + 4);
+        uint32_t length = Bus::readPhysical32(request.inPtr + 4);
         uint64_t offset =
-            static_cast<uint64_t>(memory.read32(request.inPtr + 8)) << 2;
+            static_cast<uint64_t>(Bus::readPhysical32(request.inPtr + 8)) << 2;
         if (request.outSize < length)
             return static_cast<int32_t>(DIResult::ReadTimedOut);
         if ((request.outPtr & 0x1F) != 0 || (length & 0x1F) != 0)
@@ -99,7 +99,7 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
             lastDriveError = 0x052100;
             return static_cast<int32_t>(DIResult::DriveError);
         }
-        memory.writeBlock(request.outPtr, std::span<uint8_t>(buffer));
+        Bus::writeBlock(request.outPtr, std::span<uint8_t>(buffer));
         lastLength = length;
         return static_cast<int32_t>(DIResult::Success);
     }
@@ -110,9 +110,9 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
         if (request.inSize < 0x20)
             return static_cast<int32_t>(DIResult::BadArgument);
 
-        const uint32_t length = memory.read32(request.inPtr + 4);
+        const uint32_t length = Bus::readPhysical32(request.inPtr + 4);
 
-        const uint32_t position = memory.read32(request.inPtr + 8);
+        const uint32_t position = Bus::readPhysical32(request.inPtr + 8);
 
         const uint64_t offset = static_cast<uint64_t>(position) << 2;
 
@@ -131,7 +131,7 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
             return static_cast<int32_t>(DIResult::DriveError);
         }
 
-        memory.writeBlock(request.outPtr, std::span<uint8_t>(buffer));
+        Bus::writeBlock(request.outPtr, std::span<uint8_t>(buffer));
 
         lastLength = length;
 
@@ -144,7 +144,7 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
     }
     case DIIoctl::RequestError: {
         if (request.outSize >= 4)
-            memory.write32(request.outPtr, lastDriveError);
+            Bus::writePhysical32(request.outPtr, lastDriveError);
 
         return static_cast<int32_t>(DIResult::Success);
     }
@@ -193,7 +193,7 @@ int32_t DIDevice::ioctlv(const IOSIoctlvRequest &request,
             return static_cast<int32_t>(DIResult::BadArgument);
 
         const uint32_t partitionOffsetWords =
-            memory.read32(vectors[0].address + 4);
+            Bus::readPhysical32(vectors[0].address + 4);
 
         const uint64_t partitionOffset =
             static_cast<uint64_t>(partitionOffsetWords) << 2;
@@ -216,10 +216,10 @@ int32_t DIDevice::ioctlv(const IOSIoctlvRequest &request,
             return static_cast<int32_t>(DIResult::DriveError);
         }
 
-        memory.writeBlock(vectors[3].address, std::span<uint8_t>(tmd));
+        Bus::writeBlock(vectors[3].address, std::span<uint8_t>(tmd));
 
         if (vectors[4].size >= 4)
-            memory.write32(vectors[4].address, 0);
+            Bus::writePhysical32(vectors[4].address, 0);
 
         currentPartition = partitionOffset;
 

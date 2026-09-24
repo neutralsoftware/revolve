@@ -26,12 +26,23 @@ std::shared_ptr<Device> Device::createDevice() {
     globalDevice->mmioDispatcher.registerDevice(
         IPC_MMIO_BASE, IPC_MMIO_END - IPC_MMIO_BASE + 1,
         globalDevice->ipc.get());
+    globalDevice->mmioDispatcher.registerDevice(
+        0x0D000000, IPC_MMIO_END - IPC_MMIO_BASE + 1, globalDevice->ipc.get());
     globalDevice->mmioDispatcher.registerDevice(VI_BASE, VI_SIZE,
                                                 globalDevice->vi.get());
     globalDevice->mmioDispatcher.registerDevice(CP_BASE, CP_SIZE,
                                                 globalDevice->cp.get());
     globalDevice->mmioDispatcher.registerDevice(WGPIPE_BASE, WGPIPE_SIZE,
                                                 globalDevice->wgpipe.get());
+    globalDevice->mmioDispatcher.registerDevice(DSP_BASE, DSP_SIZE,
+                                                globalDevice->dsp.get());
+    globalDevice->mmioDispatcher.registerDevice(SI_BASE, SI_SIZE,
+                                                globalDevice->si.get());
+    globalDevice->mmioDispatcher.registerDevice(EXI_BASE, EXI_SIZE,
+                                                globalDevice->exi.get());
+
+    globalDevice->mmioDispatcher.registerDevice(0x0C001000, 0x100,
+                                                globalDevice->pe.get());
 
     globalDevice->ios.init();
     globalDevice->vi->initialize();
@@ -46,6 +57,21 @@ std::shared_ptr<Device> Device::createDevice() {
     Bus::writePhysical32(0x00F0, 0x01800000);
     Bus::writePhysical32(0x00F8, 0x0E7BE2C0);
     Bus::writePhysical32(0x00FC, 0x2B73A840);
+
+    Bus::writePhysical32(0x3100, 0x01800000);
+    Bus::writePhysical32(0x3104, 0x01800000);
+    Bus::writePhysical32(0x3108, 0x81800000);
+    Bus::writePhysical32(0x310C, 0);
+    Bus::writePhysical32(0x3110, 0x817FEC60);
+    Bus::writePhysical32(0x3118, 0x04000000);
+    Bus::writePhysical32(0x311C, 0x04000000);
+    Bus::writePhysical32(0x3120, 0x93400000);
+    Bus::writePhysical32(0x3124, 0x90000800);
+    Bus::writePhysical32(0x3128, 0x933E0000);
+    Bus::writePhysical32(0x3130, 0x933E0000);
+    Bus::writePhysical32(0x3134, 0x93400000);
+    Bus::writePhysical32(0x3148, 0x93400000);
+    Bus::writePhysical32(0x314C, 0x94000000);
 
     Bus::writePhysical32(0x30D8, 0xFFFFFFFF);
     Bus::writePhysical32(0x30DC, 0);
@@ -96,7 +122,10 @@ void Device::start() {
             }
         }
 
-        step();
+        if (!running)
+            break;
+        for (uint32_t instruction = 0; instruction < 4096; ++instruction)
+            step();
     }
 }
 

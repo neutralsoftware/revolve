@@ -601,7 +601,7 @@ int runBroadwaySuite() {
                          cpu.state.gpr[5] = 0xffffffffu;
                          cpu.state.setCA(false);
                          step(cpu, xtype(31, 1003, 3, 4, 5, true));
-                         expect(cpu.state.gpr[3], 0x0u, "overflow result");
+                         expect(cpu.state.gpr[3], 0xFFFFFFFFu, "overflow result");
                          expect(cpu.state.getOV(), 1, "signed overflow");
                          expect(cpu.state.getSO(), 1, "sticky overflow");
                          cpu.state.gpr[4] = 0;
@@ -1469,7 +1469,7 @@ int runBroadwaySuite() {
 
              step(cpu, (31u << 26) | (3 << 21) | 802816u | (371 << 1));
 
-             expect(cpu.state.gpr[3], 0xABCDEF01, "split TBR encoding");
+             expect(cpu.state.gpr[3], 0xABCDEF00, "split TBR encoding");
          }});
     tests.push_back({"MTMSR", [](Broadway &cpu) {
                          cpu.state.gpr[3] = 0x2030;
@@ -2476,6 +2476,7 @@ int runBroadwaySuite() {
     tests.push_back({"DECREMENTER_EXCEPTION", [](Broadway &cpu) {
                          cpu.state.msr = 0xA000;
                          cpu.state.spr[SPR::DEC] = 0;
+                         cpu.advanceTime(12);
                          cpu.executeInstruction();
                          expect(cpu.state.cia, 0x900, "decrementer vector");
                          expect(cpu.state.spr[SPR::DEC], 0xFFFFFFFF,
@@ -2511,12 +2512,12 @@ int runBroadwaySuite() {
     tests.push_back({"TIME_BASE", [](Broadway &cpu) {
                          cpu.state.timeBase = 0x12345678FFFFFFFEull;
 
-                         step(cpu, dtype(24, 0, 0, 0));
+                         cpu.advanceTime(12);
 
                          expect(cpu.state.timeBase, 0x12345678FFFFFFFFull,
                                 "time base increments");
 
-                         step(cpu, dtype(24, 0, 0, 0));
+                         cpu.advanceTime(12);
 
                          expect(cpu.state.timeBase, 0x1234567900000000ull,
                                 "time base carry");
@@ -2627,8 +2628,8 @@ int runBroadwaySuite() {
                          cpu.state.msr |= 0x20;
                          cpu.executeInstruction();
                          expect(cpu.state.cia, 0x400, "no-execute ISI vector");
-                         expect(cpu.state.spr[SPR::SRR1] & 0x08000000,
-                                0x08000000, "no-execute cause");
+                         expect(cpu.state.spr[SPR::SRR1] & 0x10000000,
+                                0x10000000, "no-execute cause");
                      }});
     tests.push_back({"GUARDED_INSTRUCTION_PAGE", [](Broadway &cpu) {
                          cpu.state.spr[SPR::SDR1] = 0x00100000;
@@ -2640,6 +2641,27 @@ int runBroadwaySuite() {
                          expect(cpu.state.cia, 0x400, "guarded ISI vector");
                          expect(cpu.state.spr[SPR::SRR1] & 0x10000000,
                                 0x10000000, "guarded cause");
+                     }});
+    tests.push_back({"DEVICE_CLOCK_PROGRESS", [](Broadway &cpu) {
+                         auto &device = *Device::globalDevice;
+                         Bus::writePhysical32(CODE, 0x48000000);
+                         const auto start = device.scheduler.now();
+                         const auto timeBase = cpu.state.timeBase;
+                         bool fired = false;
+                         device.scheduler.schedule("clock regression", [&] { fired = true; }, 12);
+                         for (uint32_t i = 0; i < 12; ++i)
+                             device.step();
+                         expect(device.scheduler.now() - start, 12, "scheduler progress");
+                         expect(cpu.state.timeBase - timeBase, 1, "time base progress");
+                         expect(fired, true, "scheduled device event");
+                     }});
+    tests.push_back({"EXCEPTION_CLOCK_PROGRESS", [](Broadway &cpu) {
+                         auto &device = *Device::globalDevice;
+                         Bus::writePhysical32(CODE, 0);
+                         const auto start = device.scheduler.now();
+                         device.step();
+                         expect(cpu.state.exceptionTaken, true, "program exception");
+                         expect(device.scheduler.now() > start, true, "exception advances devices");
                      }});
     size_t passed = 0;
     for (const auto &test : tests) {

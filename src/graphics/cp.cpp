@@ -52,7 +52,7 @@ uint16_t CommandProcessor::read16(uint32_t offset) const {
         uint16_t value = 0;
 
         if (state.breakpointEnable)
-            value |= 1 << 5;
+            value |= 1 << 1;
 
         if (state.fifoLinkEnable)
             value |= 1 << 4;
@@ -64,7 +64,7 @@ uint16_t CommandProcessor::read16(uint32_t offset) const {
             value |= 1 << 2;
 
         if (state.cpInterruptEnable)
-            value |= 1 << 1;
+            value |= 1 << 5;
 
         if (state.fifoReadEnable)
             value |= 1 << 0;
@@ -136,7 +136,7 @@ void CommandProcessor::write16(uint32_t offset, uint16_t value) {
     case CPRegister::Control: {
         bool wasFifoReadEnabled = state.fifoReadEnable;
 
-        state.breakpointEnable = (value & (1 << 5)) != 0;
+        state.breakpointEnable = (value & (1 << 1)) != 0;
 
         state.fifoLinkEnable = (value & (1 << 4)) != 0;
 
@@ -144,14 +144,14 @@ void CommandProcessor::write16(uint32_t offset, uint16_t value) {
 
         state.overflowInterruptEnable = (value & (1 << 2)) != 0;
 
-        state.cpInterruptEnable = (value & (1 << 1)) != 0;
+        state.cpInterruptEnable = (value & (1 << 5)) != 0;
 
         state.fifoReadEnable = (value & (1 << 0)) != 0;
 
         if (!wasFifoReadEnabled && state.fifoReadEnable)
             Device::globalDevice->gx.initializeFifoReader();
 
-        updateInterrupt();
+        updateStatus();
 
         return;
     }
@@ -255,6 +255,8 @@ uint32_t CommandProcessor::calculateFifoDistance() const {
 }
 
 void CommandProcessor::updateStatus() {
+    state.bpInterrupt = state.breakpointEnable &&
+                        state.fifo.readPointer == state.fifo.breakpoint;
     state.overflow = state.fifo.readWriteDistance > state.fifo.highWatermark;
     state.underflow = state.fifo.readWriteDistance < state.fifo.lowWatermark;
     state.readIdle = state.fifo.readWriteDistance == 0;
@@ -313,4 +315,68 @@ void CommandProcessor::onFifoBlockConsumed() {
         state.fifo.readWriteDistance = 0;
 
     updateStatus();
+}
+
+bool CommandProcessor::canReadFifo() {
+    updateStatus();
+    return state.fifoReadEnable && !state.bpInterrupt;
+}
+
+uint32_t PixelEngine::read(uint32_t offset, AccessSize size) {
+    if (size == AccessSize::U32) {
+        const uint32_t high = read(offset, AccessSize::U16);
+        return (high << 16) | read(offset + 2, AccessSize::U16);
+    }
+    if (size != AccessSize::U16 || (offset & 1))
+        return 0;
+    if (offset < 10)
+        return registers[offset / 2];
+    if (offset == 0x0A)
+        return control;
+    if (offset == 0x0E)
+        return token;
+    return 0;
+}
+
+void PixelEngine::write(uint32_t offset, uint32_t value, AccessSize size) {
+    if (size == AccessSize::U32) {
+        write(offset, value >> 16, AccessSize::U16);
+        write(offset + 2, value & 0xFFFF, AccessSize::U16);
+        return;
+    }
+    if (size != AccessSize::U16 || (offset & 1))
+        return;
+    if (offset < 10)
+        registers[offset / 2] = static_cast<uint16_t>(value);
+    if (offset == 0x0A) {
+        control = value & 3;
+        if (value & 4)
+            tokenPending = false;
+        if (value & 8)
+            finishPending = false;
+        updateInterrupts();
+    }
+}
+
+void PixelEngine::setToken(uint16_t value, bool interrupt) {
+    token = value;
+    tokenPending |= interrupt;
+    updateInterrupts();
+}
+
+void PixelEngine::finish() {
+    finishPending = true;
+    updateInterrupts();
+}
+
+void PixelEngine::updateInterrupts() {
+    auto &pi = *Device::globalDevice->pi;
+    if (tokenPending && (control & 1))
+        pi.raiseInterrupt(PIInterrupt::PEToken);
+    else
+        pi.clearInterrupt(PIInterrupt::PEToken);
+    if (finishPending && (control & 2))
+        pi.raiseInterrupt(PIInterrupt::PEFinish);
+    else
+        pi.clearInterrupt(PIInterrupt::PEFinish);
 }

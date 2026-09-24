@@ -23,7 +23,7 @@ BP_LOAD 0xC3, 0x08F2F0
     .long 0x00001040
     .long 0x00000084
     .byte 0x10
-    .long 0x000B001E
+    .long 0x000B0078
     .long 0x3F000000, 0, 0, 0x3F000000
     .long 0, 0x3F000000, 0, 0x3F000000
     .long 0, 0, 0x3F800000, 0
@@ -33,13 +33,17 @@ BP_LOAD 0xC3, 0x08F2F0
     .long 0x00001040
     .long 0x00000006
     .byte 0x10
-    .long 0x000B001E
-    .long 0x3F000000, 0, 0, 0x3F000000, 0, 0x3F000000, 0x3F000000, 0, 0, 0x3F000000, 0x3F800000
+    .long 0x000B0078
+    .long 0x3F000000, 0, 0, 0x3F000000
+    .long 0, 0x3F000000, 0, 0x3F000000
+    .long 0, 0, 0x3F000000, 0x3F800000
     CP_LOAD 0x30, 0x00000780
 .elseif CASE == 4
     .byte 0x10
-    .long 0x000B001E
-    .long 0x3F000000, 0, 0, 0x3E800000, 0, 0x3F000000, 0x3E800000, 0, 0, 0x3F800000, 0
+    .long 0x000B0078
+    .long 0x3F000000, 0, 0, 0x3E800000
+    .long 0, 0x3F000000, 0, 0x3E800000
+    .long 0, 0, 0x3F800000, 0
     CP_LOAD 0x30, 0x00000780
 .elseif CASE == 5
     .byte 0x10
@@ -72,7 +76,7 @@ BP_LOAD 0xC3, 0x08F2F0
 .elseif CASE == 9
     CP_LOAD 0x50, 0x00002202
     .byte 0x10
-    .long 0x000B001E
+    .long 0x000B0078
     .long 0x3F000000, 0, 0, 0, 0, 0x3F000000, 0, 0, 0, 0, 0x3F800000, 0
 .elseif CASE == 10
     .byte 0x10

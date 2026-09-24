@@ -17,6 +17,8 @@ class WriteGatherPipe : public MMIODevice {
 
     std::string getName() override { return "Write Gather Pipe"; }
 
+    bool empty() const { return count == 0; }
+
   private:
     void push8(uint8_t value);
     void push16(uint16_t value);

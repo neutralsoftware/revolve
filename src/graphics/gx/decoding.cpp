@@ -6,6 +6,18 @@
 #include <cmath>
 #include <cstdint>
 
+namespace {
+uint8_t normalFractionalBits(GXComponentFormat format) {
+    switch (format) {
+    case GXComponentFormat::U8: return 7;
+    case GXComponentFormat::S8: return 6;
+    case GXComponentFormat::U16: return 15;
+    case GXComponentFormat::S16: return 14;
+    default: return 0;
+    }
+}
+}
+
 uint8_t GX::read8() {
     if (commandSource == GXCommandSource::DisplayList) {
         if (displayListReader.remaining == 0) {
@@ -23,28 +35,50 @@ uint8_t GX::read8() {
         return value;
     }
 
-    if (reader.availableBytes == 0) {
-        return 0;
+    return fifoBuffer.at(fifoBufferOffset++);
+}
+
+bool GX::commandAvailable() const {
+    const bool display = commandSource == GXCommandSource::DisplayList;
+    const size_t available = display ? displayListReader.remaining
+                                    : fifoBuffer.size() - fifoBufferOffset;
+    if (available == 0)
+        return false;
+    auto peek = [&](size_t offset) -> uint8_t {
+        return display ? Bus::readPhysical8(displayListReader.address + offset)
+                       : fifoBuffer[fifoBufferOffset + offset];
+    };
+    const uint8_t command = peek(0);
+    size_t required = 1;
+    switch (static_cast<GXCommand>(command)) {
+    case GXCommand::CPLoad:
+        required = 6;
+        break;
+    case GXCommand::XFLoad:
+        if (available < 5)
+            return false;
+        required = 5 + ((((peek(1) & 15u) << 8) | peek(2)) + 1) * 4;
+        break;
+    case GXCommand::XFIndexedLoadA:
+    case GXCommand::XFIndexedLoadB:
+    case GXCommand::XFIndexedLoadC:
+    case GXCommand::XFIndexedLoadD:
+    case GXCommand::BPLoad:
+        required = 5;
+        break;
+    case GXCommand::CallDisplayList:
+        required = 9;
+        break;
+    default:
+        if (command & 0x80) {
+            if (available < 3)
+                return false;
+            const uint32_t count = (static_cast<uint32_t>(peek(1)) << 8) | peek(2);
+            required = 3 + static_cast<size_t>(count) * state.cp.getVertexSize(command & 7);
+        }
+        break;
     }
-
-    uint8_t value = Bus::readPhysical8(reader.cursor);
-
-    const auto &fifo = Device::globalDevice->cp->getFifo();
-
-    reader.cursor++;
-    reader.bytesIntoBlock++;
-    reader.availableBytes--;
-
-    if (reader.cursor > fifo.end)
-        reader.cursor = fifo.base;
-
-    if (reader.bytesIntoBlock == 32) {
-        reader.bytesIntoBlock = 0;
-
-        Device::globalDevice->cp->onFifoBlockConsumed();
-    }
-
-    return value;
+    return available >= required;
 }
 
 uint16_t GX::read16() {
@@ -137,7 +171,7 @@ void GX::processXFLoad() {
 
     uint16_t address = static_cast<uint16_t>(header & 0xFFFF);
 
-    uint32_t count = (header >> 16) + 1;
+    uint32_t count = ((header >> 16) & 0xFFF) + 1;
 
     Logger::log("GX", LogLevel::Info,
                 "XF load addr=" + utils::toHexString(address) +
@@ -154,11 +188,22 @@ void GX::run() {
     if (!Device::globalDevice->cp->isFifoReadEnabled())
         return;
 
-    if (reader.availableBytes == 0)
-        return;
+    auto *cp = Device::globalDevice->cp.get();
+    const auto &fifo = cp->getFifo();
+    while (reader.availableBytes >= 32 && cp->canReadFifo()) {
+        for (uint32_t i = 0; i < 32; ++i)
+            fifoBuffer.push_back(Bus::readPhysical8(reader.cursor + i));
+        reader.cursor = reader.cursor == fifo.end ? fifo.base : reader.cursor + 32;
+        reader.availableBytes -= 32;
+        cp->onFifoBlockConsumed();
+    }
 
-    while (reader.availableBytes > 0) {
+    while (commandAvailable())
         processCommand();
+
+    if (fifoBufferOffset != 0) {
+        fifoBuffer.erase(fifoBuffer.begin(), fifoBuffer.begin() + fifoBufferOffset);
+        fifoBufferOffset = 0;
     }
 }
 
@@ -250,9 +295,9 @@ GXVec3 GX::readDirectNormal(uint8_t vat) {
 
     GXVec3 result{};
 
-    result.x = readComponent(fmt.format, 0);
-    result.y = readComponent(fmt.format, 0);
-    result.z = readComponent(fmt.format, 0);
+    result.x = readComponent(fmt.format, normalFractionalBits(fmt.format));
+    result.y = readComponent(fmt.format, normalFractionalBits(fmt.format));
+    result.z = readComponent(fmt.format, normalFractionalBits(fmt.format));
 
     return result;
 }
@@ -386,9 +431,29 @@ GXVertex GX::readVertex(uint8_t vat) {
 
     case GXVertexAttributeMode::Index8:
     case GXVertexAttributeMode::Index16: {
-        uint32_t index = readAttributeIndex(vcd.normal);
-
-        vertex.normal = readIndexedNormal(vat, index);
+        const auto fmt = state.cp.getNormalFormat(vat);
+        const uint32_t index = readAttributeIndex(vcd.normal);
+        uint32_t address = getIndexedAddress(GXArrayAttribute::Normal, index);
+        const uint8_t fraction = normalFractionalBits(fmt.format);
+        auto readVector = [&]() {
+            GXVec3 value{};
+            value.x = readMemoryComponent(address, fmt.format, fraction);
+            value.y = readMemoryComponent(address, fmt.format, fraction);
+            value.z = readMemoryComponent(address, fmt.format, fraction);
+            return value;
+        };
+        vertex.normal = readVector();
+        if (fmt.vectors == 3) {
+            const uint32_t vectorSize = state.cp.getDirectNormalSize(vat) / 3;
+            if (fmt.index3)
+                address = getIndexedAddress(GXArrayAttribute::Normal,
+                                            readAttributeIndex(vcd.normal)) + vectorSize;
+            vertex.binormal = readVector();
+            if (fmt.index3)
+                address = getIndexedAddress(GXArrayAttribute::Normal,
+                                            readAttributeIndex(vcd.normal)) + vectorSize * 2;
+            vertex.tangent = readVector();
+        }
         break;
     }
     }
@@ -516,9 +581,9 @@ GXVec3 GX::readIndexedNormal(uint8_t vat, uint32_t index) {
     const GXNormalFormat fmt = state.cp.getNormalFormat(vat);
 
     GXVec3 result{};
-    result.x = readMemoryComponent(address, fmt.format, 0);
-    result.y = readMemoryComponent(address, fmt.format, 0);
-    result.z = readMemoryComponent(address, fmt.format, 0);
+    result.x = readMemoryComponent(address, fmt.format, normalFractionalBits(fmt.format));
+    result.y = readMemoryComponent(address, fmt.format, normalFractionalBits(fmt.format));
+    result.z = readMemoryComponent(address, fmt.format, normalFractionalBits(fmt.format));
 
     return result;
 }
@@ -577,7 +642,8 @@ GXColor GX::readIndexedColor(uint8_t vat, uint32_t colorIndex, uint32_t index) {
         break;
 
     case GXColorFormat::RGB565: {
-        uint16_t raw = static_cast<uint16_t>(readByte()) << 8 | readByte();
+        uint16_t raw = static_cast<uint16_t>(readByte()) << 8;
+        raw |= readByte();
 
         uint32_t r = (raw >> 11) & 0x1F;
         uint32_t g = (raw >> 5) & 0x3F;
@@ -591,7 +657,8 @@ GXColor GX::readIndexedColor(uint8_t vat, uint32_t colorIndex, uint32_t index) {
     }
 
     case GXColorFormat::RGBA4: {
-        uint16_t raw = static_cast<uint16_t>(readByte()) << 8 | readByte();
+        uint16_t raw = static_cast<uint16_t>(readByte()) << 8;
+        raw |= readByte();
 
         result.r = ((raw >> 12) & 0xF) / 15.0f;
         result.g = ((raw >> 8) & 0xF) / 15.0f;
@@ -601,8 +668,9 @@ GXColor GX::readIndexedColor(uint8_t vat, uint32_t colorIndex, uint32_t index) {
     }
 
     case GXColorFormat::RGBA6: {
-        uint32_t raw = static_cast<uint32_t>(readByte()) << 16 |
-                       static_cast<uint32_t>(readByte()) << 8 | readByte();
+        uint32_t raw = static_cast<uint32_t>(readByte()) << 16;
+        raw |= static_cast<uint32_t>(readByte()) << 8;
+        raw |= readByte();
 
         result.r = ((raw >> 18) & 0x3F) / 63.0f;
         result.g = ((raw >> 12) & 0x3F) / 63.0f;
@@ -626,9 +694,9 @@ void GX::readDirectNBT(uint8_t vat, GXVertex &vertex) {
     auto readVec = [&]() {
         GXVec3 result{};
 
-        result.x = readComponent(fmt.format, 0);
-        result.y = readComponent(fmt.format, 0);
-        result.z = readComponent(fmt.format, 0);
+        result.x = readComponent(fmt.format, normalFractionalBits(fmt.format));
+        result.y = readComponent(fmt.format, normalFractionalBits(fmt.format));
+        result.z = readComponent(fmt.format, normalFractionalBits(fmt.format));
 
         return result;
     };
@@ -1155,6 +1223,16 @@ GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
 void GX::initialize() { renderer->initialize(); }
 
 void GX::writeBP(uint8_t reg, uint32_t value) {
+    if (reg == 0x45 && (value & 0xFF) == 2) {
+        renderer->flushEFB();
+        Device::globalDevice->pe->finish();
+        return;
+    }
+    if (reg == 0x47 || reg == 0x48) {
+        renderer->flushEFB();
+        Device::globalDevice->pe->setToken(static_cast<uint16_t>(value), reg == 0x48);
+        return;
+    }
     if (int unit = gx::textureUnitFromBP(reg, 0x80, 0xA0); unit >= 0) {
         renderer->flushEFB();
         decodeTextureMode0(static_cast<uint32_t>(unit), value);
@@ -1714,7 +1792,7 @@ GXVec3 GX::applyTextureMatrix(const GXVec4 &v, uint32_t matrixIndex,
 
     GXVec3 out{};
 
-    const uint32_t base = matrixIndex;
+    const uint32_t base = (matrixIndex & 0x3F) * 4;
 
     auto dotRow = [&](uint32_t row) -> float {
         const uint32_t offset = base + row * 4;
@@ -1954,9 +2032,10 @@ void GX::processDisplayList(uint32_t address, uint32_t size) {
 
     displayListDepth++;
 
-    while (displayListReader.remaining > 0) {
+    while (commandAvailable())
         processCommand();
-    }
+    if (displayListReader.remaining != 0)
+        Logger::log("GX", LogLevel::Error, "Truncated GX display list");
 
     displayListDepth--;
 

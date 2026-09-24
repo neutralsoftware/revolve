@@ -183,6 +183,9 @@ Executable Executable::parseFromElf(const std::string &filename) {
 
 void Executable::loadIntoMemory() {
     GET_DEVICE();
+    for (uint32_t i = 0; i < bssSize; ++i)
+        Bus::writePhysical8(bssAddress + i, 0);
+
     for (const auto &section : textSections) {
         if (section.size == 0)
             continue;
@@ -199,10 +202,6 @@ void Executable::loadIntoMemory() {
         data->moveTo(section.startAddress);
 
         Bus::writeFromStream(section.loadAddress, section.size, *data);
-    }
-
-    for (uint32_t i = 0; i < bssSize; ++i) {
-        Bus::write8(bssAddress + i, 0);
     }
 }
 

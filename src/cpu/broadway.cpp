@@ -1,4 +1,5 @@
 #include "cpu/broadway.h"
+#include "device.h"
 #include "core/utils.h"
 #include <bit>
 #include <cstdint>
@@ -6,6 +7,7 @@
 
 void Broadway::reset(uint32_t entryPoint) {
     state = {};
+    timeBaseRemainder = 0;
     state.cia = entryPoint;
     state.nia = entryPoint + 4;
     state.spr[SPR::DEC] = 0xFFFFFFFF;
@@ -290,18 +292,19 @@ void Broadway::executeIType(uint32_t instruction) {
 }
 
 void Broadway::raiseException(uint32_t vector, uint32_t cause) {
-    Logger::log("CPU", LogLevel::Error,
-                "Exception vector=" + utils::toHexString(vector) +
-                    " cause=" + utils::toHexString(cause) +
-                    " CIA=" + utils::toHexString(state.cia) +
-                    " NIA=" + utils::toHexString(state.nia) +
-                    " LR=" + utils::toHexString(state.spr[SPR::LR]) +
-                    " MSR=" + utils::toHexString(state.msr));
+    if (vector != 0x500 && vector != 0x900 && vector != 0xC00)
+        Logger::log("CPU", LogLevel::Error,
+                    "Exception vector=" + utils::toHexString(vector) +
+                        " cause=" + utils::toHexString(cause) +
+                        " CIA=" + utils::toHexString(state.cia) +
+                        " NIA=" + utils::toHexString(state.nia) +
+                        " LR=" + utils::toHexString(state.spr[SPR::LR]) +
+                        " MSR=" + utils::toHexString(state.msr));
 
     state.spr[SPR::SRR0] = state.cia;
     state.spr[SPR::SRR1] = (state.msr & 0x87C0FFFFu) | cause;
     state.nia = ((state.msr & 0x40) ? 0xFFF00000u : 0) | vector;
-    state.msr = (state.msr & ~0x0004EF36u) | ((state.msr >> 16) & 1);
+    state.msr = (state.msr & ~0x0004EF37u) | ((state.msr >> 16) & 1);
     state.reservationValid = false;
     state.exceptionTaken = true;
 }
@@ -374,7 +377,7 @@ bool Broadway::translateBAT(uint32_t address, MemoryAccess access,
         if (!(upper & (user ? 1u : 2u)))
             continue;
         uint32_t blockMask = ((upper & 0x00001FFCu) << 15) | 0x1FFFFu;
-        if ((address & ~blockMask) != (upper & 0xFFFE0000u))
+        if ((address & ~blockMask) != (upper & 0xFFFE0000u & ~blockMask))
             continue;
         uint32_t protection = lower & 3;
         if (protection == 0 ||
@@ -394,7 +397,7 @@ bool Broadway::translateBAT(uint32_t address, MemoryAccess access,
             raiseException(0x400, 0x10000000);
             throw MemoryAccessException{};
         }
-        physicalAddress = (lower & 0xFFFE0000u) | (address & blockMask);
+        physicalAddress = (lower & 0xFFFE0000u & ~blockMask) | (address & blockMask);
         return true;
     }
     return false;
@@ -415,7 +418,7 @@ uint32_t Broadway::translatePage(uint32_t address, MemoryAccess access) {
         throw MemoryAccessException{};
     }
     if (instruction && (segment & 0x10000000)) {
-        raiseException(0x400, 0x08000000);
+        raiseException(0x400, 0x10000000);
         throw MemoryAccessException{};
     }
 
@@ -574,12 +577,12 @@ uint32_t Broadway::executeInstruction() {
     state.nia = state.cia + 4;
     if (deliverPendingException()) {
         state.cia = state.nia;
-        return 0;
+        return 1;
     }
     if (state.cia & 3) {
         raiseException(0x600);
         state.cia = state.nia;
-        return 0;
+        return 1;
     }
     uint32_t instruction;
     try {
@@ -594,7 +597,7 @@ uint32_t Broadway::executeInstruction() {
             throw;
         }
         state.cia = state.nia;
-        return 0;
+        return 1;
     }
 
     InstructionType type = getInstructionType(instruction);
@@ -608,13 +611,13 @@ uint32_t Broadway::executeInstruction() {
     if (floating && !(state.msr & 0x2000)) {
         raiseException(0x800);
         state.cia = state.nia;
-        return 0;
+        return 1;
     }
     if ((op == 4 || type == InstructionType::PSQ_D) &&
         !(state.spr[SPR::HID2] & 0x20000000)) {
         raiseException(0x700, 0x80000);
         state.cia = state.nia;
-        return 0;
+        return 1;
     }
 
     try {
@@ -705,10 +708,9 @@ void Broadway::setupWiiBATs() {
 }
 
 void Broadway::advanceTime(uint64_t cycles) {
-    timeBaseRemainder += cycles;
-
-    const uint64_t ticks = timeBaseRemainder / 12;
-    timeBaseRemainder %= 12;
+    const uint64_t partial = cycles % 12 + timeBaseRemainder;
+    const uint64_t ticks = cycles / 12 + partial / 12;
+    timeBaseRemainder = static_cast<uint32_t>(partial % 12);
 
     if (ticks == 0)
         return;
@@ -724,6 +726,9 @@ void Broadway::advanceTime(uint64_t cycles) {
 
 uint32_t Broadway::readSPR(uint32_t spr) {
     switch (spr) {
+    case SPR::WPAR:
+        return (state.spr[SPR::WPAR] & ~1u) |
+               (Device::globalDevice && !Device::globalDevice->wgpipe->empty() ? 1u : 0u);
     case SPR::TBL:
         return static_cast<uint32_t>(state.timeBase & 0xFFFFFFFFull);
     case SPR::TBU:
@@ -740,6 +745,7 @@ void Broadway::setupWiiHLEBootState() {
     state.spr[SPR::HID1] = 0x80000000;
     state.spr[SPR::HID2] = 0xE0000000;
     state.spr[SPR::HID4] = 0x83900000;
+    state.spr[SPR::WPAR] = 0x0C008000;
 
     state.msr = 0x00002032;
 

@@ -25,6 +25,12 @@
     CP_LOAD 0x60, 0x00000001
     CP_LOAD 0x70, \vat
     XF_IDENTITY_ORTHO
+    .byte 0x10
+    .long 0x0000103F
+    .long 1
+    .byte 0x10
+    .long 0x00001040
+    .long 0x00000280
     BP_LOAD 0x00, 0x000001
 .endm
 

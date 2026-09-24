@@ -71,23 +71,23 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 
 ## GX / Hollywood Graphics
 
-- [ ] Implement the GX Command Processor
-- [ ] Decode GX vertices
-- [ ] Add primitive assembly support
-- [ ] Implement the GX Transform Unit
-- [ ] Add GX rasterization
-- [ ] Implement GX TEV
-- [ ] Add texture memory
-- [ ] Decode GX texture formats
-- [ ] Implement mipmaps
-- [ ] Add EFB support
-- [ ] Add XFB support
+- [x] Implement the GX Command Processor
+- [x] Decode GX vertices
+- [x] Add primitive assembly support
+- [x] Implement the GX Transform Unit
+- [x] Add GX rasterization
+- [x] Implement GX TEV
+- [x] Add texture memory
+- [x] Decode GX texture formats
+- [x] Implement mipmaps
+- [x] Add EFB support
+- [x] Add XFB support
 
 ## First Graphics Milestones
 
-- [ ] Render a triangle from emulated GX commands
-- [ ] Render a basic homebrew application
-- [ ] Produce a recognizable game frame
+- [x] Render a triangle from emulated GX commands
+- [x] Render a basic homebrew application
+- [x] Produce a recognizable game frame
 
 ## Input
 

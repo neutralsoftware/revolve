@@ -50,12 +50,14 @@ void WriteGatherPipe::push32(uint32_t value) {
 
 void WriteGatherPipe::flush() {
     auto *cp = Device::globalDevice->cp.get();
-    uint32_t destination = cp->getFifo().writePointer;
+    auto *pi = Device::globalDevice->pi.get();
+    uint32_t destination = pi->gatherPipeDestination();
 
     for (uint32_t i = 0; i < 32; i++) {
         Bus::writePhysical8(destination + i, buffer[i]);
     }
 
+    pi->advanceGatherPipe();
     cp->onGatherPipeBurst();
 
     count = 0;

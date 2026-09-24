@@ -5,7 +5,7 @@
 #include <cstdint>
 
 constexpr uint32_t IPC_MMIO_BASE = 0x0D800000;
-constexpr uint32_t IPC_MMIO_END = 0x0D80000F;
+constexpr uint32_t IPC_MMIO_END = 0x0D8001FF;
 
 constexpr uint32_t IPC_PPCMSG = 0x0;
 constexpr uint32_t IPC_PPCCTRL = 0x4;
@@ -40,6 +40,10 @@ class IPC : public MMIODevice {
 
     bool interruptY1 = false;
     bool interruptY2 = false;
+
+    uint32_t gpioDirection = 0x00FFDF3F;
+    uint32_t gpioOutput = 0;
+    uint32_t hardwareResets = 0xFFFFFFFF;
 
     void updateInterrupts();
 };

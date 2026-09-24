@@ -1117,6 +1117,7 @@ class GX {
     }
 
   private:
+    bool commandAvailable() const;
     uint8_t read8();
     uint16_t read16();
     uint32_t read32();
@@ -1304,6 +1305,8 @@ class GX {
     void decodeIndirectMatrixWord(uint8_t reg, uint32_t value);
 
     GXFifoReader reader{};
+    std::vector<uint8_t> fifoBuffer;
+    size_t fifoBufferOffset = 0;
 
     GXCommandSource commandSource = GXCommandSource::FIFO;
     GXDisplayListReader displayListReader{};

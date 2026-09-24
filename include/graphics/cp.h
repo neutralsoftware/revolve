@@ -15,29 +15,29 @@ enum class CPRegister : uint32_t {
 
     Token = 0x0E,
 
-    FifoStartHi = 0x20,
-    FifoStartLo = 0x22,
+    FifoStartHi = 0x22,
+    FifoStartLo = 0x20,
 
-    FifoEndHi = 0x24,
-    FifoEndLo = 0x26,
+    FifoEndHi = 0x26,
+    FifoEndLo = 0x24,
 
-    FifoHighWatermarkHi = 0x28,
-    FifoHighWatermarkLo = 0x2A,
+    FifoHighWatermarkHi = 0x2A,
+    FifoHighWatermarkLo = 0x28,
 
-    FifoLowWatermarkHi = 0x2C,
-    FifoLowWatermarkLo = 0x2E,
+    FifoLowWatermarkHi = 0x2E,
+    FifoLowWatermarkLo = 0x2C,
 
-    FifoReadWriteDistanceHi = 0x30,
-    FifoReadWriteDistanceLo = 0x32,
+    FifoReadWriteDistanceHi = 0x32,
+    FifoReadWriteDistanceLo = 0x30,
 
-    FifoWritePointerHi = 0x34,
-    FifoWritePointerLo = 0x36,
+    FifoWritePointerHi = 0x36,
+    FifoWritePointerLo = 0x34,
 
-    FifoReadPointerHi = 0x38,
-    FifoReadPointerLo = 0x3A,
+    FifoReadPointerHi = 0x3A,
+    FifoReadPointerLo = 0x38,
 
-    FifoBreakpointHi = 0x3C,
-    FifoBreakpointLo = 0x3E,
+    FifoBreakpointHi = 0x3E,
+    FifoBreakpointLo = 0x3C,
 };
 
 struct CPFifo {
@@ -63,11 +63,11 @@ struct CPState {
     bool overflow = false;
 
     bool breakpointEnable = false;
-    bool fifoLinkEnable = true;
+    bool fifoLinkEnable = false;
     bool underflowInterruptEnable = false;
-    bool overflowInterruptEnable = true;
+    bool overflowInterruptEnable = false;
     bool cpInterruptEnable = false;
-    bool fifoReadEnable = true;
+    bool fifoReadEnable = false;
 
     uint16_t token = 0;
 
@@ -97,6 +97,7 @@ class CommandProcessor : public MMIODevice {
     CPFifo &getFifo() { return state.fifo; }
     bool isFifoReadEnabled() const { return state.fifoReadEnable; }
 
+    bool canReadFifo();
     void onGatherPipeBurst();
 
     void onFifoBlockConsumed();
@@ -111,6 +112,23 @@ class CommandProcessor : public MMIODevice {
     void updateInterrupt();
 
     CPState state{};
+};
+
+class PixelEngine : public MMIODevice {
+  public:
+    uint32_t read(uint32_t offset, AccessSize size) override;
+    void write(uint32_t offset, uint32_t value, AccessSize size) override;
+    std::string getName() override { return "Pixel Engine"; }
+    void setToken(uint16_t value, bool interrupt);
+    void finish();
+
+  private:
+    void updateInterrupts();
+    uint16_t registers[5]{};
+    uint16_t control = 0;
+    uint16_t token = 0;
+    bool tokenPending = false;
+    bool finishPending = false;
 };
 
 #endif

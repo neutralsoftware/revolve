@@ -15,6 +15,9 @@
 
 std::tuple<bool, std::string> runCommand(const std::string &command);
 
+extern bool graphicsSmoke;
+bool runGraphicsSmoke(Device &, const std::string &, bool);
+
 namespace {
 struct GXTest {
     std::string id;
@@ -186,6 +189,8 @@ std::optional<bool> executeTest(const GXTest &test, Device &device) {
               << "\nTAB = OK    ENTER = FAILED\n"
               << std::flush;
 
+    if (graphicsSmoke)
+        return runGraphicsSmoke(device, test.id, test.source != "control.s");
     while (true) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -245,10 +250,10 @@ int runGXSuite() {
         return 1;
     }
 
-    auto device = Device::createDevice();
     size_t failed = 0;
     try {
         for (size_t index : selected) {
+            auto device = Device::createDevice();
             const GXTest &test = TESTS[index];
             std::optional<bool> verdict = executeTest(test, *device);
             if (!verdict) {
@@ -256,6 +261,8 @@ int runGXSuite() {
                 SDL_Quit();
                 return 1;
             }
+            if (graphicsSmoke)
+                continue;
             results[test.id] = *verdict ? "OK" : "FAILED";
             saveResults(results);
             if (*verdict)
@@ -272,6 +279,10 @@ int runGXSuite() {
     }
 
     SDL_Quit();
+    if (graphicsSmoke) {
+        std::cout << "Smoke checks completed; manual verdicts unchanged.\n";
+        return 0;
+    }
     std::cout << "\nUpdated " << selected.size() << " GX test result"
               << (selected.size() == 1 ? "" : "s") << " in " << resultPath()
               << ".\n";

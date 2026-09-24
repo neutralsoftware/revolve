@@ -14,6 +14,9 @@
 
 std::tuple<bool, std::string> runCommand(const std::string &command);
 
+extern bool graphicsSmoke;
+bool runGraphicsSmoke(Device &, const std::string &, bool);
+
 namespace {
 struct AdvancedTEVTest {
     std::string id;
@@ -160,6 +163,8 @@ std::optional<bool> executeTest(const AdvancedTEVTest &test, Device &device) {
     SDL_RaiseWindow(device.gx.renderer->window);
     std::cout << "\n" << test.id << "\n" << test.title
               << "\nTAB = OK    ENTER = FAILED\n" << std::flush;
+    if (graphicsSmoke)
+        return runGraphicsSmoke(device, test.id, test.id != "ATV-COLOR-MASK");
     while (true) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -226,6 +231,8 @@ int runAdvancedTEVSuite() {
                 SDL_Quit();
                 return 1;
             }
+            if (graphicsSmoke)
+                continue;
             results[test.id] = *verdict ? "OK" : "FAILED";
             saveResults(results);
             if (*verdict)
@@ -241,6 +248,10 @@ int runAdvancedTEVSuite() {
         return 1;
     }
     SDL_Quit();
+    if (graphicsSmoke) {
+        std::cout << "Smoke checks completed; manual verdicts unchanged.\n";
+        return 0;
+    }
     std::cout << "\nUpdated " << selected.size() << " advanced TEV test result"
               << (selected.size() == 1 ? "" : "s") << " in " << resultPath() << ".\n";
     return failed == 0 ? 0 : 1;

@@ -278,3 +278,9 @@ int32_t IOS::allocateFileDescriptor(const std::string &path,
 
     return fd;
 }
+
+void IOS::prepareDiscBoot(uint64_t partitionOffset) {
+    auto device = std::dynamic_pointer_cast<DIDevice>(devices.at("/dev/di"));
+    if (device)
+        device->prepareBoot(partitionOffset);
+}

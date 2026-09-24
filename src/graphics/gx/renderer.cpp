@@ -684,10 +684,14 @@ void GXRenderer::rebuildGXPipeline() {
     gxPipeline->setDepthCompareOp(currentRasterState.depthCompare);
     gxPipeline->enableDepthWrite(currentRasterState.depthWrite);
     gxPipeline->enableBlending(currentRasterState.blendEnabled);
-    gxPipeline->setBlendFunc(currentRasterState.srcBlend,
-                             currentRasterState.dstBlend);
+    gxPipeline->setBlendFunc(currentRasterState.subtractBlend
+                                 ? opal::BlendFunc::One
+                                 : currentRasterState.srcBlend,
+                             currentRasterState.subtractBlend
+                                 ? opal::BlendFunc::One
+                                 : currentRasterState.dstBlend);
     gxPipeline->setBlendEquation(currentRasterState.subtractBlend
-                                     ? opal::BlendEquation::Subtract
+                                     ? opal::BlendEquation::ReverseSubtract
                                      : opal::BlendEquation::Add);
     gxPipeline->enableLogicOp(currentRasterState.logicOpEnabled &&
                               !currentRasterState.blendEnabled);

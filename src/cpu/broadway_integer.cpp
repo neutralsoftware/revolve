@@ -96,7 +96,9 @@ void Broadway::executeXFXType(uint32_t instruction) {
     uint32_t d = (instruction >> 21) & 31;
     uint32_t xo = (instruction >> 1) & 1023;
     uint32_t spr = ((instruction >> 16) & 31) | ((instruction >> 6) & 992);
-    if ((xo == 339 || xo == 467) && (spr & 16) && (state.msr & 0x4000)) {
+    if ((state.msr & 0x4000) && (xo == 339 || xo == 467) &&
+        spr != SPR::XER && spr != SPR::LR && spr != SPR::CTR &&
+        !(xo == 339 && (spr == SPR::TBL || spr == SPR::TBU))) {
         raiseException(0x700, 0x40000);
         return;
     }
@@ -129,18 +131,25 @@ void Broadway::executeXFXType(uint32_t instruction) {
 
         break;
     }
-    case 467:
+    case 467: {
+        if (spr == SPR::PVR)
+            return;
+        const uint32_t oldValue = state.spr[spr];
         spr = spr == 284 ? 268 : spr == 285 ? 269 : spr;
         state.spr[spr] = state.gpr[d];
-        if (spr == SPR::DEC)
-            state.decrementerPending = false;
-        else if (spr == SPR::TBL)
+        if (spr == SPR::HID0)
+            state.spr[spr] &= ~0x00000C00u;
+        if (spr == SPR::DEC) {
+            if (!(oldValue & 0x80000000u) && (state.gpr[d] & 0x80000000u))
+                state.decrementerPending = true;
+        } else if (spr == SPR::TBL)
             state.timeBase =
                 (state.timeBase & 0xFFFFFFFF00000000ull) | state.gpr[d];
         else if (spr == SPR::TBU)
             state.timeBase = (state.timeBase & 0xFFFFFFFFull) |
                              (static_cast<uint64_t>(state.gpr[d]) << 32);
         break;
+    }
     default:
         raiseException(0x700, 0x80000);
         break;
@@ -359,19 +368,21 @@ void Broadway::executeXType(uint32_t instruction) {
             return;
         }
         state.gpr[d] = Bus::read32(address);
-        state.reservationAddress = address;
+        state.reservationAddress = translateAddress(address, MemoryAccess::Read);
         state.reservationValid = true;
         return;
     case 150: {
-        bool success =
-            state.reservationValid && state.reservationAddress == address;
-        state.reservationValid = false;
         if (address & 3) {
+            state.reservationValid = false;
             state.spr[SPR::DAR] = address;
             state.spr[SPR::DSISR] = 0x02000000;
             raiseException(0x600);
             return;
         }
+        const uint32_t physical = translateAddress(address, MemoryAccess::Write);
+        const bool success = state.reservationValid &&
+                             state.reservationAddress == physical;
+        state.reservationValid = false;
         if (success)
             Bus::write32(address, source);
         state.setCRField(0, (success ? 2u : 0u) | state.getSO());

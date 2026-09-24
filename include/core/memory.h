@@ -9,6 +9,7 @@
 #include <string>
 #include <sys/types.h>
 #include <vector>
+#include <unordered_map>
 
 constexpr uint32_t MEM1_CACHED_START = 0x80000000;
 constexpr uint32_t MEM1_CACHED_END = 0x817FFFFF;
@@ -27,9 +28,9 @@ constexpr uint32_t MEM2_UNCACHED_END = 0xD3FFFFFF;
 constexpr uint32_t MEM2_PHYS_START = 0x10000000;
 
 constexpr uint32_t MMIO_GAMECUBE_START = 0xCC000000;
-constexpr uint32_t MMIO_GAMECUBE_END = 0xCC008003;
+constexpr uint32_t MMIO_GAMECUBE_END = 0xCC00801F;
 constexpr uint32_t MMIO_GAMECUBE_PHYS_START = 0x0C000000;
-constexpr uint32_t MMIO_GAMECUBE_PHYS_END = 0x0C008003;
+constexpr uint32_t MMIO_GAMECUBE_PHYS_END = 0x0C00801F;
 
 constexpr uint32_t MMIO_WII_START = 0xCD000000;
 constexpr uint32_t MMIO_WII_END = 0xCDFFFFFF;
@@ -111,6 +112,8 @@ class MMIO {
     };
 
     std::vector<MMIOEntry> devices = {};
+    std::unordered_map<uint64_t, uint64_t> unmappedAccessCounts;
+    void logUnmapped(uint32_t address, AccessSize size, bool write);
 };
 
 class Bus {

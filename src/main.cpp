@@ -98,7 +98,14 @@ int main(int argc, const char *argv[]) {
         }
         if (!debug)
             Logger::logObject(*exec, LogLevel::Info);
-        exec->loadIntoMemory();
+        try {
+            exec->loadIntoMemory();
+            if (Device::globalDevice->disc->isOpen())
+                Device::globalDevice->disc->prepareBoot(*exec);
+        } catch (const std::exception &error) {
+            std::cerr << "Error preparing executable: " << error.what() << std::endl;
+            return 1;
+        }
 
         Device::globalDevice->cpu.reset(exec->entryPoint);
         Device::globalDevice->cpu.setupWiiBATs();

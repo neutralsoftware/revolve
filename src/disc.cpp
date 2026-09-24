@@ -1,4 +1,5 @@
 #include "disc.h"
+#include "device.h"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -707,4 +708,43 @@ std::string DiscImage::log() {
                << partition.dataSize << std::dec << '\n';
     }
     return output.str();
+}
+
+void DiscImage::prepareBoot(const Executable &executable) {
+    const auto partition = getDataPartition();
+    if (!partition)
+        throw std::runtime_error("Wii disc has no data partition");
+    std::array<uint8_t, 0x440> header{};
+    if (!readPartition(*partition, 0, header))
+        throw std::runtime_error("Failed to read Wii boot header");
+    const uint64_t fstOffset = static_cast<uint64_t>(::readBE32(header, 0x424)) << 2;
+    const uint64_t fstSize = static_cast<uint64_t>(::readBE32(header, 0x428)) << 2;
+    const uint64_t fstMaximum = static_cast<uint64_t>(::readBE32(header, 0x42C)) << 2;
+    if (fstSize < 12 || fstMaximum < fstSize || fstMaximum > 0x01000000)
+        throw std::runtime_error("Invalid Wii file-system table size");
+    const uint32_t fstAddress = (0x817FEC60u - static_cast<uint32_t>(fstMaximum)) & ~31u;
+    auto overlaps = [&](uint32_t address, uint32_t size) {
+        const auto resolved = Bus::resolveAddress(address);
+        return size != 0 && resolved.region == MemoryRegion::MEM1 &&
+               static_cast<uint64_t>(resolved.offset) + size > (fstAddress & 0x1FFFFFFu);
+    };
+    for (const auto &section : executable.textSections)
+        if (overlaps(section.loadAddress, section.size))
+            throw std::runtime_error("Wii file-system table overlaps DOL text");
+    for (const auto &section : executable.dataSections)
+        if (overlaps(section.loadAddress, section.size))
+            throw std::runtime_error("Wii file-system table overlaps DOL data");
+    if (overlaps(executable.bssAddress, executable.bssSize))
+        throw std::runtime_error("Wii file-system table overlaps DOL BSS");
+    std::vector<uint8_t> fst(static_cast<size_t>(fstSize));
+    if (!readPartition(*partition, fstOffset, fst))
+        throw std::runtime_error("Failed to read Wii file-system table");
+    Bus::writeBlock(fstAddress, fst);
+    Bus::writeBlock(0, std::span<const uint8_t>(header.data(), 0x20));
+    Bus::writePhysical32(0x34, fstAddress);
+    Bus::writePhysical32(0x38, fstAddress);
+    Bus::writePhysical32(0x3C, static_cast<uint32_t>(fstMaximum));
+    Bus::writePhysical32(0x3110, fstAddress);
+    Bus::writePhysical32(0x3180, ::readBE32(header, 0));
+    Device::globalDevice->ios.prepareDiscBoot(partition->offset);
 }

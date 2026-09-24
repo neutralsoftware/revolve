@@ -1,5 +1,9 @@
 .include "common.inc"
 
+.if CASE == 13
+.set GX_START_CONTROL, 0x1D
+.endif
+
 .macro TEST_SETUP
     .if CASE == 9
         lis 11, 0xCC00
@@ -29,15 +33,15 @@
         .endr
     .elseif CASE == 12
         li 12, 0x0100
-        sth 12, 0x28(3)
-        li 12, 0
         sth 12, 0x2A(3)
         li 12, 0
-        sth 12, 0x2C(3)
-        li 12, 0x0040
+        sth 12, 0x28(3)
+        li 12, 0
         sth 12, 0x2E(3)
+        li 12, 0x0040
+        sth 12, 0x2C(3)
     .elseif CASE == 13
-        li 12, 0x000F
+        li 12, 0x000C
         sth 12, 0x02(3)
         li 12, 3
         sth 12, 0x04(3)

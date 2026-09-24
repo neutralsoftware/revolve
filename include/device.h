@@ -3,6 +3,7 @@
 
 #include "core/memory.h"
 #include "core/time.h"
+#include "core/system_hardware.h"
 #include "cpu/broadway.h"
 #include "cpu/interface.h"
 #include "cpu/memory_interface.h"
@@ -38,6 +39,10 @@ class HollywoodInterruptController {
         updatePI();
     }
 
+    uint32_t getFlags() const { return flags; }
+    uint32_t getMask() const { return mask; }
+    void acknowledge(uint32_t value) { flags &= ~value; updatePI(); }
+
     inline void setMask(uint32_t value) {
         mask = value;
         updatePI();
@@ -47,7 +52,7 @@ class HollywoodInterruptController {
 
   private:
     uint32_t flags = 0;
-    uint32_t mask = 0;
+    uint32_t mask = 1u << static_cast<uint32_t>(HollywoodIRQ::IPC);
 
     ProcessorInterface *pi = nullptr;
 
@@ -85,9 +90,14 @@ class Device {
     std::shared_ptr<IPC> ipc = std::make_shared<IPC>();
     std::shared_ptr<DiscImage> disc = std::make_shared<DiscImage>();
     std::shared_ptr<VideoInterface> vi = std::make_shared<VideoInterface>();
+    std::shared_ptr<PixelEngine> pe = std::make_shared<PixelEngine>();
     std::shared_ptr<CommandProcessor> cp = std::make_shared<CommandProcessor>();
     std::shared_ptr<WriteGatherPipe> wgpipe =
         std::make_shared<WriteGatherPipe>();
+    std::shared_ptr<DSPInterface> dsp = std::make_shared<DSPInterface>();
+    std::shared_ptr<SerialInterface> si = std::make_shared<SerialInterface>();
+    std::shared_ptr<ExpansionInterface> exi =
+        std::make_shared<ExpansionInterface>();
 };
 
 #endif

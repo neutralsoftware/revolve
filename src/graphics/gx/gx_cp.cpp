@@ -45,7 +45,7 @@ void GXCommandProcessorState::write(uint8_t reg, uint32_t value) {
     }
 
     if (reg >= 0xB0 && reg <= 0xBF) {
-        arrayStrides[reg - 0xB0] = value;
+        arrayStrides[reg - 0xB0] = value & 0xFF;
         return;
     }
 }
@@ -107,7 +107,11 @@ uint32_t GXCommandProcessorState::getVertexSize(uint8_t vatIndex) const {
     size +=
         getAttributeIndexSize(vcd.position, getDirectPositionSize(vatIndex));
 
-    size += getAttributeIndexSize(vcd.normal, getDirectNormalSize(vatIndex));
+    const auto normal = getNormalFormat(vatIndex);
+    const uint32_t normalIndices = normal.vectors == 3 && normal.index3 ? 3 : 1;
+    size += vcd.normal == GXVertexAttributeMode::Direct
+                ? getDirectNormalSize(vatIndex)
+                : normalIndices * getAttributeIndexSize(vcd.normal, 0);
 
     size += getAttributeIndexSize(vcd.color0, getDirectColorSize(vatIndex, 0));
 

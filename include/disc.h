@@ -34,6 +34,7 @@ class DiscImage {
     bool readPartition(const DiscPartition &partition, uint64_t offset,
                        std::span<uint8_t> output);
     Executable getExecutable();
+    void prepareBoot(const Executable &executable);
     std::string log();
 
     const std::string &getGameID() const { return gameID; }

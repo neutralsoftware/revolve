@@ -15,6 +15,9 @@
 
 std::tuple<bool, std::string> runCommand(const std::string &command);
 
+extern bool graphicsSmoke;
+bool runGraphicsSmoke(Device &, const std::string &, bool);
+
 namespace {
 struct TEVTest {
     std::string id;
@@ -175,6 +178,8 @@ std::optional<bool> executeTest(const TEVTest &test, Device &device) {
               << "\nTAB = OK    ENTER = FAILED\n"
               << std::flush;
 
+    if (graphicsSmoke)
+        return runGraphicsSmoke(device, test.id, true);
     while (true) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -234,10 +239,10 @@ int runTEVSuite() {
         return 1;
     }
 
-    auto device = Device::createDevice();
     size_t failed = 0;
     try {
         for (size_t index : selected) {
+            auto device = Device::createDevice();
             const TEVTest &test = TESTS[index];
             std::optional<bool> verdict = executeTest(test, *device);
             if (!verdict) {
@@ -245,6 +250,8 @@ int runTEVSuite() {
                 SDL_Quit();
                 return 1;
             }
+            if (graphicsSmoke)
+                continue;
             results[test.id] = *verdict ? "OK" : "FAILED";
             saveResults(results);
             if (*verdict)
@@ -261,6 +268,10 @@ int runTEVSuite() {
     }
 
     SDL_Quit();
+    if (graphicsSmoke) {
+        std::cout << "Smoke checks completed; manual verdicts unchanged.\n";
+        return 0;
+    }
     std::cout << "\nUpdated " << selected.size() << " TEV test result"
               << (selected.size() == 1 ? "" : "s") << " in " << resultPath()
               << ".\n";

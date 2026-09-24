@@ -1,4 +1,5 @@
 #include "debugger.h"
+#include "SDL3/SDL_events.h"
 #include "core/memory.h"
 #include "core/utils.h"
 #include "device.h"
@@ -1070,9 +1071,13 @@ bool Debugger::checkWatchpoints() {
 }
 
 bool Debugger::executeOne(bool display) {
+    if (!display) {
+        Device::globalDevice->step();
+        return cpu.state.exceptionTaken;
+    }
     BroadwayState before = cpu.state;
     auto instruction = inspectInstruction(before.cia);
-    cpu.executeInstruction();
+    Device::globalDevice->step();
     if (display) {
         std::cout << color("1;35", "executed") << "  "
                   << formatAddress(before.cia) << "  ";
@@ -1190,11 +1195,18 @@ void Debugger::stepFrame() {
     }
 
     const uint64_t startingFrame = vi->getFrameCounter();
+    uint32_t steps = 0;
 
     interrupted = false;
     bool first = true;
 
     while (vi->getFrameCounter() == startingFrame) {
+        if ((steps++ & 4095) == 0) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event))
+                if (event.type == SDL_EVENT_QUIT)
+                    interrupted = true;
+        }
         if (interrupted) {
             std::cout << color("1;33", "interrupted") << "  "
                       << formatAddress(cpu.state.cia) << '\n';

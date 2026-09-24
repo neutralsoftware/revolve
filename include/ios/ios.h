@@ -142,6 +142,7 @@ class IOS {
     IOSRequest parseRequest(uint32_t address);
 
     void init();
+    void prepareDiscBoot(uint64_t partitionOffset);
 
     void submitRequest(uint32_t address);
 
@@ -283,6 +284,10 @@ class DIDevice : public IOSDevice {
   public:
     DIDevice(Memory &memory, std::shared_ptr<DiscImage> disc)
         : memory(memory), disc(std::move(disc)) {}
+    void prepareBoot(uint64_t partitionOffset) {
+        currentPartition = partitionOffset;
+        discIDRead = true;
+    }
     int32_t ioctl(const IOSIoctlRequest &request) override;
 
     int32_t ioctlv(const IOSIoctlvRequest &request,

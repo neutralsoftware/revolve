@@ -57,7 +57,7 @@ CP_LOAD 0x70, 0x00014009
     XF_IDENTITY_ORTHO
     CP_LOAD 0x30, 12
     .byte 0x10
-    .long 0x000B000C
+    .long 0x000B0030
     .long 0x3F000000, 0, 0, 0
     .long 0, 0x3F000000, 0, 0
     .long 0, 0, 0x3F800000, 0
