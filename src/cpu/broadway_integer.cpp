@@ -59,10 +59,17 @@ void Broadway::executeXOType(uint32_t instruction) {
     case 11:
         result = (static_cast<uint64_t>(a) * b) >> 32;
         break;
-    case 491:
+    case 491: {
         overflow = b == 0 || (a == 0x80000000u && b == 0xFFFFFFFFu);
-        result = overflow ? 0 : static_cast<uint32_t>(sa / sb);
+
+        if (overflow) {
+            result = static_cast<int32_t>(a) < 0 ? 0xFFFFFFFFu : 0u;
+        } else {
+            result = static_cast<uint32_t>(static_cast<int32_t>(a) /
+                                           static_cast<int32_t>(b));
+        }
         break;
+    }
     case 459:
         overflow = b == 0;
         result = overflow ? 0 : a / b;

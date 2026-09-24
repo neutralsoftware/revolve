@@ -9,7 +9,7 @@ void Broadway::reset(uint32_t entryPoint) {
     state.cia = entryPoint;
     state.nia = entryPoint + 4;
     state.spr[SPR::DEC] = 0xFFFFFFFF;
-    state.spr[SPR::PVR] = 0x00087200;
+    setupWiiHLEBootState();
 }
 
 std::string BroadwayState::log() const {
@@ -290,6 +290,14 @@ void Broadway::executeIType(uint32_t instruction) {
 }
 
 void Broadway::raiseException(uint32_t vector, uint32_t cause) {
+    Logger::log("CPU", LogLevel::Error,
+                "Exception vector=" + utils::toHexString(vector) +
+                    " cause=" + utils::toHexString(cause) +
+                    " CIA=" + utils::toHexString(state.cia) +
+                    " NIA=" + utils::toHexString(state.nia) +
+                    " LR=" + utils::toHexString(state.spr[SPR::LR]) +
+                    " MSR=" + utils::toHexString(state.msr));
+
     state.spr[SPR::SRR0] = state.cia;
     state.spr[SPR::SRR1] = (state.msr & 0x87C0FFFFu) | cause;
     state.nia = ((state.msr & 0x40) ? 0xFFF00000u : 0) | vector;
@@ -577,6 +585,14 @@ uint32_t Broadway::executeInstruction() {
     try {
         instruction = Bus::fetch32(state.cia);
     } catch (const MemoryAccessException &) {
+        if (!state.exceptionTaken) {
+            Logger::log(
+                "CPU", LogLevel::Error,
+                "MemoryAccessException without PPC exception at CIA=0x" +
+                    utils::toHexString(state.cia));
+
+            throw;
+        }
         state.cia = state.nia;
         return 0;
     }
@@ -647,6 +663,14 @@ uint32_t Broadway::executeInstruction() {
             break;
         }
     } catch (const MemoryAccessException &) {
+        if (!state.exceptionTaken) {
+            Logger::log(
+                "CPU", LogLevel::Error,
+                "MemoryAccessException without PPC exception at CIA=0x" +
+                    utils::toHexString(state.cia));
+
+            throw;
+        }
     }
 
     if (!state.exceptionTaken && (state.msr & 0x400)) {
@@ -681,15 +705,21 @@ void Broadway::setupWiiBATs() {
 }
 
 void Broadway::advanceTime(uint64_t cycles) {
-    state.timeBase += cycles;
+    timeBaseRemainder += cycles;
 
-    uint32_t oldDecrementer = state.spr[SPR::DEC];
+    const uint64_t ticks = timeBaseRemainder / 12;
+    timeBaseRemainder %= 12;
 
-    state.spr[SPR::DEC] -= static_cast<uint32_t>(cycles);
+    if (ticks == 0)
+        return;
 
-    if (cycles > static_cast<uint64_t>(oldDecrementer)) {
+    state.timeBase += ticks;
+
+    const uint32_t oldDec = state.spr[SPR::DEC];
+    state.spr[SPR::DEC] -= static_cast<uint32_t>(ticks);
+
+    if (ticks > oldDec)
         state.decrementerPending = true;
-    }
 }
 
 uint32_t Broadway::readSPR(uint32_t spr) {
@@ -701,4 +731,19 @@ uint32_t Broadway::readSPR(uint32_t spr) {
     default:
         return state.spr[spr];
     }
+}
+
+void Broadway::setupWiiHLEBootState() {
+    state.spr[SPR::PVR] = 0x00087102;
+
+    state.spr[SPR::HID0] = 0x0011C664;
+    state.spr[SPR::HID1] = 0x80000000;
+    state.spr[SPR::HID2] = 0xE0000000;
+    state.spr[SPR::HID4] = 0x83900000;
+
+    state.msr = 0x00002032;
+
+    setupWiiBATs();
+
+    state.gpr[1] = 0x816FFFF0;
 }

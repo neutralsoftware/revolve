@@ -368,6 +368,8 @@ class Broadway {
 
     void executeADD(uint32_t rt, uint32_t ra, uint32_t rb, bool oe, bool rc);
 
+    void setupWiiHLEBootState();
+
   private:
     bool deliverPendingException();
     bool translateBAT(uint32_t address, MemoryAccess access,
@@ -379,6 +381,8 @@ class Broadway {
     void executeQuantized(uint32_t instruction, bool indexed);
 
     uint32_t readSPR(uint32_t spr);
+
+    uint32_t timeBaseRemainder = 0;
 };
 
 #endif

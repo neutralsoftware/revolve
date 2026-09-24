@@ -38,6 +38,23 @@ std::shared_ptr<Device> Device::createDevice() {
 
     globalDevice->gx.initialize();
 
+    Bus::writePhysical32(0x0020, 0x0D15EA5E);
+    Bus::writePhysical32(0x0024, 0x00000001);
+    Bus::writePhysical32(0x0028, 0x01800000);
+    Bus::writePhysical32(0x0034, 0x817FEC60);
+
+    Bus::writePhysical32(0x00F0, 0x01800000);
+    Bus::writePhysical32(0x00F8, 0x0E7BE2C0);
+    Bus::writePhysical32(0x00FC, 0x2B73A840);
+
+    Bus::writePhysical32(0x30D8, 0xFFFFFFFF);
+    Bus::writePhysical32(0x30DC, 0);
+
+    Bus::writePhysical8(0x315C, 0x80);
+
+    Bus::writePhysical8(0x30E0, 0);
+    Bus::writePhysical32(0x3184, 0x80000000);
+
     return globalDevice;
 }
 
