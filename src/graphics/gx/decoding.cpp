@@ -814,7 +814,10 @@ void GX::writeXF(uint16_t address, uint32_t value) {
 GXMatrix3x4 GX::getPositionMatrix(uint32_t matrixIndex) const {
     GXMatrix3x4 result{};
 
-    const uint32_t base = matrixIndex;
+    const uint32_t base = matrixIndex * 4;
+
+    if (base + 11 >= state.xf.matrixMemory.size())
+        return result;
 
     for (uint32_t row = 0; row < 3; ++row) {
         for (uint32_t col = 0; col < 4; ++col) {
@@ -826,9 +829,8 @@ GXMatrix3x4 GX::getPositionMatrix(uint32_t matrixIndex) const {
 }
 
 uint32_t GX::getVertexPositionMatrixIndex(const GXVertex &vertex) const {
-
     if (state.cp.getVCD().positionMatrixIndex)
-        return vertex.positionMatrixIndex;
+        return vertex.positionMatrixIndex & 0x3F;
 
     return state.cp.getPositionMatrixIndex();
 }
@@ -937,7 +939,6 @@ GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
     singleUvParsing(0, out.u0, out.v0);
     singleUvParsing(1, out.u1, out.v1);
     singleUvParsing(2, out.u2, out.v2);
-    singleUvParsing(3, out.u3, out.v3);
     singleUvParsing(3, out.u3, out.v3);
     singleUvParsing(4, out.u4, out.v4);
     singleUvParsing(5, out.u5, out.v5);
@@ -1325,8 +1326,11 @@ opal::CompareOp GX::decodeGXCompare(uint32_t value) const {
 
 uint32_t GX::getTextureMatrixIndex(const GXVertex &vertex,
                                    uint32_t texGen) const {
+    if (texGen >= 8)
+        return 0;
+
     if (state.cp.getVCD().texMatrixIndex[texGen]) {
-        return vertex.texMatrixIndices[texGen];
+        return vertex.texMatrixIndices[texGen] & 0x3F;
     }
 
     return state.cp.getTextureMatrixIndex(texGen);
@@ -1365,25 +1369,27 @@ GXVec4 GX::getTexGenSource(const GXVertex &vertex, GXTexSource source) const {
 
 GXVec3 GX::applyTextureMatrix(const GXVec4 &v, uint32_t matrixIndex,
                               GXTexProjection projection) const {
+
     GXVec3 out{};
 
-    const uint32_t base = matrixIndex;
+    const uint32_t base = matrixIndex * 4;
 
     auto dotRow = [&](uint32_t row) -> float {
-        return state.xf.matrixMemory[base + row * 4 + 0] * v.x +
-               state.xf.matrixMemory[base + row * 4 + 1] * v.y +
-               state.xf.matrixMemory[base + row * 4 + 2] * v.z +
-               state.xf.matrixMemory[base + row * 4 + 3] * v.w;
+        const uint32_t offset = base + row * 4;
+
+        return state.xf.matrixMemory[offset + 0] * v.x +
+               state.xf.matrixMemory[offset + 1] * v.y +
+               state.xf.matrixMemory[offset + 2] * v.z +
+               state.xf.matrixMemory[offset + 3] * v.w;
     };
 
     out.x = dotRow(0);
     out.y = dotRow(1);
 
-    if (projection == GXTexProjection::STQ) {
+    if (projection == GXTexProjection::STQ)
         out.z = dotRow(2);
-    } else {
+    else
         out.z = 1.0f;
-    }
 
     return out;
 }

@@ -469,16 +469,6 @@ class GXCommandProcessorState {
         }
     }
 
-    inline uint32_t getTextureMatrixIndex(uint32_t texGen) const {
-        if (texGen >= vcd.texMatrixIndex.size())
-            return 0;
-
-        if (vcd.texMatrixIndex[texGen])
-            return 1;
-
-        return 0;
-    }
-
     GXPositionFormat getPositionFormat(uint8_t vatIndex) const;
     uint32_t getDirectPositionSize(uint8_t vatIndex) const;
 
@@ -499,9 +489,19 @@ class GXCommandProcessorState {
         return positionMatrixIndex;
     }
 
+    inline uint32_t getTextureMatrixIndex(uint32_t texGen) const {
+        if (texGen >= textureMatrixIndices.size())
+            return 0;
+
+        return textureMatrixIndices[texGen];
+    }
+
   private:
     void decodeVCDLo(uint32_t value);
     void decodeVCDHi(uint32_t value);
+
+    void decodeMatrixIndexA(uint32_t value);
+    void decodeMatrixIndexB(uint32_t value);
 
     std::array<uint32_t, 256> registers{};
 
@@ -513,6 +513,7 @@ class GXCommandProcessorState {
     std::array<uint32_t, 16> arrayStrides{};
 
     uint32_t positionMatrixIndex = 0;
+    std::array<uint8_t, 8> textureMatrixIndices{};
 };
 
 struct GXXFState {

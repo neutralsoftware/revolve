@@ -15,7 +15,12 @@ void GXCommandProcessorState::write(uint8_t reg, uint32_t value) {
     }
 
     if (reg == 0x30) {
-        positionMatrixIndex = value;
+        decodeMatrixIndexA(value);
+        return;
+    }
+
+    if (reg == 0x40) {
+        decodeMatrixIndexB(value);
         return;
     }
 
@@ -201,9 +206,12 @@ GXCommandProcessorState::getTexCoordFormat(uint8_t vatIndex,
         decode(v.b, 18, 19, 22);
         break;
 
-    case 4:
-        decode(v.b, 27, 28, 31);
+    case 4: {
+        uint32_t tex4 = ((v.b >> 27) & 0xF) | ((v.c & 0x1F) << 4);
+
+        decode(tex4, 0, 1, 4);
         break;
+    }
 
     case 5:
         decode(v.c, 5, 6, 9);
@@ -228,4 +236,20 @@ GXCommandProcessorState::getDirectTexCoordSize(uint8_t vatIndex,
     auto fmt = getTexCoordFormat(vatIndex, texIndex);
 
     return fmt.components * componentSize(fmt.format);
+}
+
+void GXCommandProcessorState::decodeMatrixIndexA(uint32_t value) {
+    positionMatrixIndex = static_cast<uint8_t>(value & 0x3F);
+
+    textureMatrixIndices[0] = static_cast<uint8_t>((value >> 6) & 0x3F);
+    textureMatrixIndices[1] = static_cast<uint8_t>((value >> 12) & 0x3F);
+    textureMatrixIndices[2] = static_cast<uint8_t>((value >> 18) & 0x3F);
+    textureMatrixIndices[3] = static_cast<uint8_t>((value >> 24) & 0x3F);
+}
+
+void GXCommandProcessorState::decodeMatrixIndexB(uint32_t value) {
+    textureMatrixIndices[4] = static_cast<uint8_t>((value >> 0) & 0x3F);
+    textureMatrixIndices[5] = static_cast<uint8_t>((value >> 6) & 0x3F);
+    textureMatrixIndices[6] = static_cast<uint8_t>((value >> 12) & 0x3F);
+    textureMatrixIndices[7] = static_cast<uint8_t>((value >> 18) & 0x3F);
 }

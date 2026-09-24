@@ -502,7 +502,7 @@ void GXRenderer::applyTevState(std::shared_ptr<opal::Pipeline> &pipeline,
     const std::string baseName = "tevStages[" + std::to_string(stage) + "]";
 
     pipeline->setUniform1i(baseName + ".texCoord", tevStage.order.texMap);
-    pipeline->setUniform1i(baseName + "texMap", tevStage.order.texCoord);
+    pipeline->setUniform1i(baseName + ".texMap", tevStage.order.texCoord);
     pipeline->setUniform1i(baseName + ".colorChannel",
                            tevStage.order.colorChannel);
     pipeline->setUniform1i(baseName + ".textureEnabled",
