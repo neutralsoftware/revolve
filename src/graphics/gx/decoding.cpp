@@ -1083,7 +1083,11 @@ GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
 
     out.x = clip.x;
     out.y = clip.y;
+#ifdef OPENGL
     out.z = clip.z;
+#else
+    out.z = (clip.z + clip.w) * 0.5f;
+#endif
     out.w = clip.w;
 
     out.r = vertex.color0.r;
@@ -1134,12 +1138,6 @@ GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
         v = tex.y;
         q = tex.z;
 
-        if (state.xf.texGens[index].projection == GXTexProjection::STQ &&
-            tex.z != 0.0f) {
-            u /= tex.z;
-            v /= tex.z;
-            q = 1.0f;
-        }
     };
 
     singleUvParsing(0, out.u0, out.v0, out.q0, generatedTexCoords);
@@ -1210,6 +1208,15 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
         renderer->flushEFB();
 
         decodeTevIndirect(reg - 0x10, value);
+
+        return;
+    }
+
+    if (reg == 0x42) {
+        renderer->flushEFB();
+
+        state.bp.destinationAlpha.alpha = static_cast<uint8_t>(value & 0xFF);
+        state.bp.destinationAlpha.enabled = ((value >> 8) & 1) != 0;
 
         return;
     }
@@ -1379,9 +1386,17 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
         r.srcBlend = decodeGXSrcBlendFactor(srcFactor);
         r.dstBlend = decodeGXDstBlendFactor(dstFactor);
 
+        r.dither = (value & (1u << 2)) != 0;
+
         renderer->setRasterState(r);
         break;
     }
+    case 0x43:
+        renderer->flushEFB();
+        state.bp.raster.pixelFormat = static_cast<uint8_t>(value & 0x7);
+        state.bp.raster.zCompareBeforeTexture = (value & (1u << 6)) != 0;
+        renderer->setRasterState(state.bp.raster);
+        break;
     case 0x49:
         state.bp.copy.sourceX = value & 0x3FF;
         state.bp.copy.sourceY = (value >> 10) & 0x3FF;
@@ -1394,7 +1409,10 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
         state.bp.copy.xfbAddress = (value & 0x00FFFFFF) << 5;
         break;
     case 0x4D:
-        state.bp.copy.xfbStride = value & 0x3FF;
+        state.bp.copy.xfbStride = (value & 0x3FF) << 5;
+        break;
+    case 0x4E:
+        state.bp.copy.yScale = value & 0x1FF;
         break;
     case 0x4F: {
         uint8_t a = static_cast<uint8_t>(value & 0xFF);
@@ -1425,7 +1443,12 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
         break;
 
     case 0x52:
+        state.bp.copy.clampTop = (value & (1u << 0)) != 0;
+        state.bp.copy.clampBottom = (value & (1u << 1)) != 0;
+        state.bp.copy.gamma = static_cast<uint8_t>((value >> 7) & 0x3);
+        state.bp.copy.scaleInverted = (value & (1u << 10)) != 0;
         state.bp.copy.clearAfterCopy = (value & BP_COPY_CLEAR_MASK) != 0;
+        state.bp.copy.frameToField = static_cast<uint8_t>((value >> 12) & 0x3);
         state.bp.copy.copyToXfb = (value & BP_COPY_TO_XFB_MASK) != 0;
 
         executeEfbCopy();
@@ -1434,9 +1457,9 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
     case 0x59: {
         renderer->flushEFB();
 
-        state.bp.scissor.offsetXHalf = static_cast<uint16_t>(value & 0x3FF);
+        state.bp.scissor.offsetXHalf = static_cast<uint16_t>(value & 0x1FF);
         state.bp.scissor.offsetYHalf =
-            static_cast<uint16_t>((value >> 10) & 0x3FF);
+            static_cast<uint16_t>((value >> 10) & 0x1FF);
 
         updateScissorState();
 
@@ -1453,6 +1476,77 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
         a.logic = static_cast<GXAlphaLogic>((value >> 22) & 0x3);
 
         renderer->setAlphaTestState(a);
+
+        break;
+    }
+    case 0xE8:
+        renderer->flushEFB();
+        state.bp.fog.rangeCenter = static_cast<uint16_t>(value & 0x3FF);
+        state.bp.fog.rangeAdjustmentEnabled = (value & (1u << 10)) != 0;
+        break;
+    case 0xE9:
+    case 0xEA:
+    case 0xEB:
+    case 0xEC:
+    case 0xED: {
+        renderer->flushEFB();
+        const size_t index = static_cast<size_t>(reg - 0xE9) * 2;
+        state.bp.fog.rangeK[index] = static_cast<uint16_t>(value & 0xFFF);
+        state.bp.fog.rangeK[index + 1] =
+            static_cast<uint16_t>((value >> 12) & 0xFFF);
+        break;
+    }
+    case 0xEE:
+        renderer->flushEFB();
+        state.bp.fog.a = gx::decodeFogFloat(value);
+        break;
+    case 0xEF:
+        renderer->flushEFB();
+        state.bp.fog.bMagnitude = value & 0xFFFFFF;
+        break;
+    case 0xF0:
+        renderer->flushEFB();
+        state.bp.fog.bShift = static_cast<uint8_t>(value & 0x1F);
+        break;
+    case 0xF1: {
+        renderer->flushEFB();
+
+        const uint32_t type = ((value >> 21) & 0x7) |
+                              (((value >> 20) & 0x1) << 3);
+
+        state.bp.fog.type = static_cast<GXFogType>(type);
+        state.bp.fog.enabled = type != 0;
+
+        state.bp.fog.c = gx::decodeFogFloat(value);
+        break;
+    }
+    case 0xF2: {
+        renderer->flushEFB();
+
+        state.bp.fog.color.r =
+            static_cast<float>((value >> 16) & 0xFF) / 255.0f;
+        state.bp.fog.color.g = static_cast<float>((value >> 8) & 0xFF) / 255.0f;
+        state.bp.fog.color.b = static_cast<float>(value & 0xFF) / 255.0f;
+        state.bp.fog.color.a = 1.0f;
+
+        return;
+    }
+    case 0xF4: {
+        renderer->flushEFB();
+
+        state.bp.zTexture.bias = value & 0x00FFFFFF;
+
+        break;
+    }
+    case 0xF5: {
+        renderer->flushEFB();
+
+        state.bp.zTexture.format = static_cast<GXZTextureFormat>(value & 0x3);
+        state.bp.zTexture.op = static_cast<GXZTextureOp>((value >> 2) & 0x3);
+
+        if (static_cast<uint8_t>(state.bp.zTexture.op) > 2) {
+            state.bp.zTexture.op = GXZTextureOp::Disabled;
+        }
 
         break;
     }
@@ -1474,7 +1568,6 @@ void GX::executeEfbCopy() {
         renderer->clearEFB(state.bp.copy.clearColor, state.bp.copy.clearDepth);
     }
 
-    renderer->presentXFB();
 }
 
 void GX::updateScissorState() {
@@ -1621,7 +1714,7 @@ GXVec3 GX::applyTextureMatrix(const GXVec4 &v, uint32_t matrixIndex,
 
     GXVec3 out{};
 
-    const uint32_t base = matrixIndex * 4;
+    const uint32_t base = matrixIndex;
 
     auto dotRow = [&](uint32_t row) -> float {
         const uint32_t offset = base + row * 4;

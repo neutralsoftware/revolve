@@ -124,6 +124,30 @@ struct Uniforms {
 
     float4 indirectMatrix2A;
     float4 indirectMatrix2B;
+
+    int destinationAlphaEnabled;
+    float destinationAlpha;
+
+    int enableDither;
+    int efbPixelFormat;
+
+    int zTextureOp;
+    int zTextureFormat;
+    int zTextureBias;
+
+    int fogType;
+
+    float fogA;
+    int fogBMagnitude;
+    int fogBShift;
+    float fogC;
+
+    float3 fogColor;
+
+    int fogRangeEnabled;
+    float fogRangeCenter;
+    float fogViewportWidth;
+    float fogRangeK[10];
 };
 
 struct TevRegisters {
@@ -202,6 +226,112 @@ VertexOut vertexMain(VertexIn input) {
     output.uv7 = input.uv7;
 
     return output;
+}
+
+float calculateFog(float depth, float2 fragCoord) {
+    if (uniforms.fogType == 0)
+        return 0.0;
+
+    uint z = min(uint(round(saturate(depth) * 16777216.0)), 0xFFFFFFu);
+    float ze;
+
+    if ((uniforms.fogType & 8) != 0) {
+        ze = uniforms.fogA * float(z) / 16777216.0;
+    } else {
+        int denominator = uniforms.fogBMagnitude - int(z >> uniforms.fogBShift);
+        ze = denominator == 0
+                 ? (uniforms.fogA < 0.0 ? -1e30 : 1e30)
+                 : uniforms.fogA * 16777216.0 / float(denominator);
+    }
+
+    if (uniforms.fogRangeEnabled != 0) {
+        float offset = 2.0 * fragCoord.x / uniforms.fogViewportWidth - 1.0 -
+                       uniforms.fogRangeCenter;
+        float index = clamp(9.0 - abs(offset) * 9.0, 0.0, 9.0);
+        uint lower = uint(index);
+        uint upper = min(lower + 1u, 9u);
+        float k = lerp(uniforms.fogRangeK[lower],
+                       uniforms.fogRangeK[upper], frac(index));
+        ze *= sqrt(offset * offset + k * k) / max(k, 1e-6);
+    }
+
+    float fog = saturate(ze - uniforms.fogC);
+
+    int fn = uniforms.fogType & 7;
+
+    switch (fn) {
+    case 2:
+        break;
+
+    case 4:
+        fog = 1.0 - exp2(-8.0 * fog);
+        break;
+
+    case 5:
+        fog = 1.0 - exp2(-8.0 * fog * fog);
+        break;
+
+    case 6:
+        fog = exp2(-8.0 * (1.0 - fog));
+        break;
+
+    case 7: {
+        float r = 1.0 - fog;
+        fog = exp2(-8.0 * r * r);
+        break;
+    }
+    }
+
+    return saturate(fog);
+}
+
+uint decodeZTextureValue(float4 textureValue, int format) {
+    uint4 value = uint4(round(saturate(textureValue) * 255.0));
+
+    switch (format) {
+    case 0:
+        return value.a;
+
+    case 1:
+        return value.r | (value.a << 8u);
+
+    case 2:
+        return (value.r << 16u) | (value.g << 8u) | value.b;
+    }
+
+    return 0;
+}
+
+float3 applyDither(float3 color, float2 fragCoord) {
+    int x = int(fragCoord.x) & 1;
+    int y = int(fragCoord.y) & 1;
+
+    int index = x | (y << 1);
+
+    static const uint dither[4] = { 0u, 2u, 3u, 1u };
+    uint3 value = uint3(round(saturate(color) * 255.0));
+    value = value - (value >> 6u) + dither[index];
+    return float3(min(value, uint3(255u))) / 255.0;
+}
+
+float4 applyEFBFormat(float4 color) {
+    if (uniforms.efbPixelFormat == 1) {
+        uint4 value = uint4(round(saturate(color) * 63.0));
+        return float4(value) / 63.0;
+    }
+
+    if (uniforms.efbPixelFormat == 2) {
+        uint r = uint(round(saturate(color.r) * 31.0));
+        uint g = uint(round(saturate(color.g) * 63.0));
+        uint b = uint(round(saturate(color.b) * 31.0));
+        return float4(float(r) / 31.0, float(g) / 63.0, float(b) / 31.0,
+                      1.0);
+    }
+
+    if (uniforms.efbPixelFormat == 0)
+        color.a = 1.0;
+
+    return color;
 }
 
 uint tev8(float value) { return (uint)round(saturate(value) * 255.0); }
@@ -307,21 +437,24 @@ float3 getGXTexCoord(int index, VertexOut input) {
 }
 
 bool alphaCompare(float alpha, float ref, int op) {
+    uint alphaValue = tev8(alpha);
+    uint referenceValue = tev8(ref);
+
     switch (op) {
     case 0:
         return false;
     case 1:
-        return alpha < ref;
+        return alphaValue < referenceValue;
     case 2:
-        return alpha == ref;
+        return alphaValue == referenceValue;
     case 3:
-        return alpha <= ref;
+        return alphaValue <= referenceValue;
     case 4:
-        return alpha > ref;
+        return alphaValue > referenceValue;
     case 5:
-        return alpha != ref;
+        return alphaValue != referenceValue;
     case 6:
-        return alpha >= ref;
+        return alphaValue >= referenceValue;
     case 7:
         return true;
     }
@@ -389,9 +522,11 @@ float3 applyIndirectBias(float3 value, int biasMask, int format) {
 
 float4 getIndirectMatrixRow(int index, bool secondRow) {
     if (index == 0)
-        return secondRow ? uniforms.indirectMatrix0B : uniforms.indirectMatrix0A;
+        return secondRow ? uniforms.indirectMatrix0B
+                         : uniforms.indirectMatrix0A;
     if (index == 1)
-        return secondRow ? uniforms.indirectMatrix1B : uniforms.indirectMatrix1A;
+        return secondRow ? uniforms.indirectMatrix1B
+                         : uniforms.indirectMatrix1A;
     return secondRow ? uniforms.indirectMatrix2B : uniforms.indirectMatrix2A;
 }
 
@@ -856,7 +991,7 @@ void writeTevAlpha(int output, float value, inout TevRegisters regs) {
 
 void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs,
                      inout float2 previousIndirectCoord,
-                     inout float bumpAlpha) {
+                     inout float bumpAlpha, inout float4 lastTexture) {
     float3 baseCoord = getGXTexCoord(stage.texCoord, input);
     float2 baseUV = baseCoord.xy;
 
@@ -865,8 +1000,7 @@ void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs,
 
     float4 textureSize = uniforms.textureSizes[stage.texMap];
     float3 indirectSample = float3(0.0, 0.0, 0.0);
-    bool validIndirectStage =
-        stage.indirectStage < uniforms.indirectStageCount;
+    bool validIndirectStage = stage.indirectStage < uniforms.indirectStageCount;
 
     if (validIndirectStage &&
         (stage.indirectMatrix != 0 || stage.indirectAlpha != 0)) {
@@ -875,17 +1009,16 @@ void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs,
 
     if (validIndirectStage && stage.indirectAlpha != 0) {
         float component = indirectSample[stage.indirectAlpha - 1];
-        float shift = stage.indirectFormat == 0
-                          ? 0.0
-                          : 6.0 - float(stage.indirectFormat);
+        float shift =
+            stage.indirectFormat == 0 ? 0.0 : 6.0 - float(stage.indirectFormat);
         bumpAlpha = positiveMod(component * exp2(shift), 256.0);
         bumpAlpha = floor(bumpAlpha / 8.0) * 8.0 / 255.0;
     }
 
     float3 formattedIndirect =
         formatIndirect(indirectSample, stage.indirectFormat);
-    formattedIndirect = applyIndirectBias(
-        formattedIndirect, stage.indirectBias, stage.indirectFormat);
+    formattedIndirect = applyIndirectBias(formattedIndirect, stage.indirectBias,
+                                          stage.indirectFormat);
 
     float2 offset = float2(0.0, 0.0);
     if (validIndirectStage) {
@@ -894,10 +1027,8 @@ void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs,
     }
 
     float2 finalUV;
-    finalUV.x =
-        wrapIndirectCoord(baseUV.x, stage.indirectWrapS, textureSize.z);
-    finalUV.y =
-        wrapIndirectCoord(baseUV.y, stage.indirectWrapT, textureSize.w);
+    finalUV.x = wrapIndirectCoord(baseUV.x, stage.indirectWrapS, textureSize.z);
+    finalUV.y = wrapIndirectCoord(baseUV.y, stage.indirectWrapT, textureSize.w);
     finalUV += offset;
 
     if (stage.indirectAddPrevious != 0)
@@ -916,6 +1047,7 @@ void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs,
         } else {
             tex = sampleGXTexture(stage.texMap, finalUV);
         }
+        lastTexture = tex;
     }
     tex = applySwap(tex, stage.textureSwap);
 
@@ -939,8 +1071,15 @@ void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs,
     writeTevAlpha(stage.alphaOutput, alpha, regs);
 }
 
+struct FragmentOut {
+    float4 color : SV_TARGET;
+    float depth : SV_DEPTH;
+};
+
 [shader("fragment")]
-float4 fragmentMain(VertexOut input) : SV_TARGET {
+FragmentOut fragmentMain(VertexOut input) {
+    FragmentOut out;
+
     TevRegisters registers;
     registers.prev = uniforms.tevRegister0;
     registers.reg0 = uniforms.tevRegister1;
@@ -949,17 +1088,52 @@ float4 fragmentMain(VertexOut input) : SV_TARGET {
 
     float2 indirectCoord = float2(0.0, 0.0);
     float bumpAlpha = 0.0;
+    float4 lastTexture = float4(0.0, 0.0, 0.0, 0.0);
 
     for (int i = 0; i < uniforms.tevStageCount; i++) {
         executeTevStage(uniforms.tevStages[i], input, registers, indirectCoord,
-                        bumpAlpha);
+                        bumpAlpha, lastTexture);
     }
 
     float4 color = registers.prev;
+    float depth = input.position.z;
 
     if (!alphaTest(color.a)) {
         discard;
     }
 
-    return color;
+    if (uniforms.destinationAlphaEnabled != 0) {
+        color.a = uniforms.destinationAlpha;
+    }
+
+    if (uniforms.enableDither != 0) {
+        color.rgb = applyDither(color.rgb, input.position.xy);
+    }
+
+    if (uniforms.zTextureOp != 0) {
+        uint zTex = decodeZTextureValue(lastTexture, uniforms.zTextureFormat);
+        uint bias = uint(uniforms.zTextureBias);
+
+        uint finalZ;
+
+        if (uniforms.zTextureOp == 1) {
+            uint originalZ = uint(saturate(depth) * 16777215.0);
+
+            finalZ = originalZ + zTex + bias;
+        } else {
+            finalZ = zTex + bias;
+        }
+
+        finalZ &= 0xFFFFFFu;
+        depth = float(finalZ) / 16777215.0;
+    }
+
+    float fog = calculateFog(depth, input.position.xy);
+
+    color.rgb = lerp(color.rgb, uniforms.fogColor, fog);
+    color = applyEFBFormat(color);
+
+    out.color = color;
+    out.depth = depth;
+    return out;
 }

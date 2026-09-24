@@ -53,7 +53,7 @@ gx_stream:
     .byte 0x61
     .long 0x4B000800
     .byte 0x61
-    .long 0x4D000280
+    .long 0x4D000028
     .byte 0x61
     .long 0x52004800
     .balign 32, 0

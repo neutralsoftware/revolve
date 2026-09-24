@@ -51,6 +51,7 @@ class Debugger {
     bool executeCommand(const std::string &line);
     bool executeOne(bool display);
     bool checkWatchpoints();
+    void stepFrame();
 
     std::vector<std::string> tokenize(const std::string &line) const;
     std::optional<uint64_t> parseValue(const std::string &text) const;

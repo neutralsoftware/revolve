@@ -1,9 +1,9 @@
-#include "SDL3/SDL_video.h"
 #include "device.h"
 #include "graphics/gx.h"
 #include "graphics/shader.h"
 #include "opal/opal.h"
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -296,6 +296,45 @@ void GXRenderer::flushEFB() {
     gxPipeline->setUniform1i("indirectStageCount",
                              static_cast<int>(bp.indirectStageCount));
 
+    gxPipeline->setUniform1i("destinationAlphaEnabled",
+                             static_cast<int>(bp.destinationAlpha.enabled));
+    gxPipeline->setUniform1f("destinationAlpha",
+                             bp.destinationAlpha.alpha / 255.0f);
+
+    gxPipeline->setUniform1i(
+        "enableDither",
+        static_cast<int>(bp.raster.dither && bp.raster.pixelFormat == 1));
+    gxPipeline->setUniform1i("efbPixelFormat", bp.raster.pixelFormat);
+
+    gxPipeline->setUniform1i("zTextureOp", static_cast<int>(bp.zTexture.op));
+    gxPipeline->setUniform1i("zTextureFormat",
+                             static_cast<int>(bp.zTexture.format));
+    gxPipeline->setUniform1i("zTextureBias",
+                             static_cast<int>(bp.zTexture.bias));
+
+    gxPipeline->setUniform1i("fogType", static_cast<int>(bp.fog.type));
+    gxPipeline->setUniform1f("fogA", bp.fog.a);
+    gxPipeline->setUniform1i("fogBMagnitude",
+                             static_cast<int>(bp.fog.bMagnitude));
+    gxPipeline->setUniform1i("fogBShift", static_cast<int>(bp.fog.bShift));
+    gxPipeline->setUniform1f("fogC", bp.fog.c);
+
+    gxPipeline->setUniform3f("fogColor", bp.fog.color.r, bp.fog.color.g,
+                             bp.fog.color.b);
+    gxPipeline->setUniform1i("fogRangeEnabled",
+                             static_cast<int>(bp.fog.rangeAdjustmentEnabled));
+    const float viewportHalfWidth = std::max(
+        std::abs(Device::globalDevice->gx.state.xf.viewport.xScale), 0.5f);
+    gxPipeline->setUniform1f("fogRangeCenter",
+                             (static_cast<float>(bp.fog.rangeCenter) - 342.0f) /
+                                     viewportHalfWidth -
+                                 1.0f);
+    gxPipeline->setUniform1f("fogViewportWidth", viewportHalfWidth * 2.0f);
+    for (size_t i = 0; i < bp.fog.rangeK.size(); ++i) {
+        gxPipeline->setUniform1f("fogRangeK[" + std::to_string(i) + "]",
+                                 bp.fog.rangeK[i] / 64.0f);
+    }
+
     for (uint32_t i = 0; i < 4; ++i) {
         const auto &r = bp.tevRegisters[i];
 
@@ -340,20 +379,17 @@ void GXRenderer::flushEFB() {
     for (uint32_t i = 0; i < bp.indirectMatrices.size(); ++i) {
         const auto &matrix = bp.indirectMatrices[i];
         const std::string prefix = "indirectMatrix" + std::to_string(i);
-        gxPipeline->setUniform4f(prefix + "A", matrix.m[0][0],
-                                 matrix.m[0][1], matrix.m[0][2],
-                                 matrix.exponent);
-        gxPipeline->setUniform4f(prefix + "B", matrix.m[1][0],
-                                 matrix.m[1][1], matrix.m[1][2],
-                                 matrix.exponent);
+        gxPipeline->setUniform4f(prefix + "A", matrix.m[0][0], matrix.m[0][1],
+                                 matrix.m[0][2], matrix.exponent);
+        gxPipeline->setUniform4f(prefix + "B", matrix.m[1][0], matrix.m[1][1],
+                                 matrix.m[1][2], matrix.exponent);
     }
 
     static constexpr const char *textureNames[8] = {
         "tex0", "tex1", "tex2", "tex3", "tex4", "tex5", "tex6", "tex7"};
 
     for (uint32_t i = 0; i < 8; ++i) {
-        const std::string sizeName =
-            "textureSizes[" + std::to_string(i) + "]";
+        const std::string sizeName = "textureSizes[" + std::to_string(i) + "]";
         const float width = boundTextures[i] ? boundTextures[i]->width : 1.0f;
         const float height = boundTextures[i] ? boundTextures[i]->height : 1.0f;
         gxPipeline->setUniform4f(sizeName, width, height, 1.0f / width,
@@ -377,7 +413,7 @@ void GXRenderer::flushEFB() {
 
 void GXRenderer::ensureXFB(uint32_t width, uint32_t height) {
     width = std::clamp(width, 1u, EFB_WIDTH);
-    height = std::clamp(height, 1u, EFB_HEIGHT);
+    height = std::clamp(height, 1u, XFB_MAX_HEIGHT);
 
     if (xfb.texture && xfb.width == width && xfb.height == height)
         return;
@@ -408,15 +444,21 @@ void GXRenderer::copyEFBToXFB(const GXBPCopyState &copy) {
         copy.sourceHeight == 0 ? EFB_HEIGHT : copy.sourceHeight;
     const uint32_t width =
         std::min<uint32_t>(requestedWidth, EFB_WIDTH - sourceX);
-    const uint32_t height =
+    const uint32_t sourceHeight =
         std::min<uint32_t>(requestedHeight, EFB_HEIGHT - sourceY);
+    const float yScale = copy.scaleInverted
+                             ? 256.0f / std::max<uint16_t>(copy.yScale, 1)
+                             : static_cast<float>(copy.yScale) / 256.0f;
+    const uint32_t height = std::clamp<uint32_t>(
+        static_cast<uint32_t>(1.0f + (sourceHeight - 1) * yScale), 1,
+        XFB_MAX_HEIGHT);
     ensureXFB(width, height);
 
     xfb.address = copy.xfbAddress;
     xfb.stride = copy.xfbStride;
 
     if (sourceX == 0 && sourceY == 0 && width == EFB_WIDTH &&
-        height == EFB_HEIGHT) {
+        sourceHeight == EFB_HEIGHT && height == EFB_HEIGHT) {
         auto resolve = opal::ResolveAction::createForColorAttachment(
             efbFramebuffer, xfb.framebuffer, 0);
         auto commandBuffer = device->acquireCommandBuffer();
@@ -424,32 +466,113 @@ void GXRenderer::copyEFBToXFB(const GXBPCopyState &copy) {
         commandBuffer->performResolve(resolve);
         commandBuffer->commit();
         device->submitCommandBuffer(commandBuffer);
+        commandBuffer->waitForSubmittedWork();
         xfb.valid = true;
-        return;
+    } else {
+        presentPipeline->bindTexture("xfbTexture", efbColor, 0);
+
+        const auto copyVertices = makeFullscreenVertices(
+            static_cast<float>(sourceX) / EFB_WIDTH,
+            static_cast<float>(sourceY) / EFB_HEIGHT,
+            static_cast<float>(width) / EFB_WIDTH,
+            static_cast<float>(sourceHeight) / EFB_HEIGHT);
+        auto copyBuffer = opal::Buffer::create(
+            opal::BufferUsage::VertexBuffer, sizeof(copyVertices),
+            copyVertices.data(), opal::MemoryUsageType::CPUToGPU);
+        auto copyDrawingState = opal::DrawingState::create(copyBuffer);
+
+        auto commandBuffer = device->acquireCommandBuffer();
+        commandBuffer->start();
+        commandBuffer->beginPass(xfb.renderPass);
+        commandBuffer->bindPipeline(presentPipeline);
+        commandBuffer->bindDrawingState(copyDrawingState);
+        commandBuffer->draw(6);
+        commandBuffer->endPass();
+        commandBuffer->commit();
+        device->submitCommandBuffer(commandBuffer);
+        commandBuffer->waitForSubmittedWork();
+        xfb.valid = true;
     }
 
-    presentPipeline->bindTexture("xfbTexture", efbColor, 0);
+    writeXFBToMemory(copy);
+}
 
-    const auto copyVertices =
-        makeFullscreenVertices(static_cast<float>(sourceX) / EFB_WIDTH,
-                               static_cast<float>(sourceY) / EFB_HEIGHT,
-                               static_cast<float>(width) / EFB_WIDTH,
-                               static_cast<float>(height) / EFB_HEIGHT);
-    auto copyBuffer = opal::Buffer::create(
-        opal::BufferUsage::VertexBuffer, sizeof(copyVertices),
-        copyVertices.data(), opal::MemoryUsageType::CPUToGPU);
-    auto copyDrawingState = opal::DrawingState::create(copyBuffer);
+void GXRenderer::writeXFBToMemory(const GXBPCopyState &copy) {
+    if (!xfb.valid || copy.xfbStride == 0 || xfb.width == 0 || xfb.height == 0)
+        return;
 
-    auto commandBuffer = device->acquireCommandBuffer();
-    commandBuffer->start();
-    commandBuffer->beginPass(xfb.renderPass);
-    commandBuffer->bindPipeline(presentPipeline);
-    commandBuffer->bindDrawingState(copyDrawingState);
-    commandBuffer->draw(6);
-    commandBuffer->endPass();
-    commandBuffer->commit();
-    device->submitCommandBuffer(commandBuffer);
-    xfb.valid = true;
+    std::vector<uint8_t> rgba(static_cast<size_t>(xfb.width) * xfb.height * 4);
+    xfb.texture->readData(rgba.data(), opal::TextureDataFormat::Rgba);
+
+    const uint32_t rowBytes = ((xfb.width + 1) & ~1u) * 2;
+    const size_t outputSize =
+        static_cast<size_t>(xfb.height - 1) * copy.xfbStride + rowBytes;
+    const ResolvedAddress first = Bus::resolveAddress(copy.xfbAddress);
+    const ResolvedAddress last = Bus::resolveAddress(
+        copy.xfbAddress + static_cast<uint32_t>(outputSize - 1));
+    if (first.region == MemoryRegion::Invalid || first.region != last.region)
+        return;
+    std::vector<uint8_t> encoded(outputSize, 0);
+    std::vector<uint8_t> scanout(rgba.size(), 255);
+    static constexpr float gammaValues[] = {1.0f, 1.7f, 2.2f, 2.2f};
+    const float gammaReciprocal = 1.0f / gammaValues[copy.gamma & 3u];
+
+    const auto corrected = [&](uint8_t value) {
+        return static_cast<int>(
+            std::lround(std::pow(value / 255.0f, gammaReciprocal) * 255.0f));
+    };
+    const auto clampByte = [](int value) {
+        return static_cast<uint8_t>(std::clamp(value, 0, 255));
+    };
+
+    for (uint32_t y = 0; y < xfb.height; ++y) {
+        const size_t sourceRow = static_cast<size_t>(y) * xfb.width * 4;
+        const size_t destinationRow = static_cast<size_t>(y) * copy.xfbStride;
+        for (uint32_t x = 0; x < xfb.width; x += 2) {
+            const uint32_t secondX = std::min(x + 1, xfb.width - 1);
+            const size_t first = sourceRow + static_cast<size_t>(x) * 4;
+            const size_t second = sourceRow + static_cast<size_t>(secondX) * 4;
+            const int r0 = corrected(rgba[first]);
+            const int g0 = corrected(rgba[first + 1]);
+            const int b0 = corrected(rgba[first + 2]);
+            const int r1 = corrected(rgba[second]);
+            const int g1 = corrected(rgba[second + 1]);
+            const int b1 = corrected(rgba[second + 2]);
+            const int y0 = (66 * r0 + 129 * g0 + 25 * b0 + 4096 + 128) >> 8;
+            const int y1 = (66 * r1 + 129 * g1 + 25 * b1 + 4096 + 128) >> 8;
+            const int r = (r0 + r1) / 2;
+            const int g = (g0 + g1) / 2;
+            const int b = (b0 + b1) / 2;
+            const int u = (-38 * r - 74 * g + 112 * b + 32768 + 128) >> 8;
+            const int v = (112 * r - 94 * g - 18 * b + 32768 + 128) >> 8;
+            const size_t destination =
+                destinationRow + static_cast<size_t>(x) * 2;
+            encoded[destination] = clampByte(y0);
+            encoded[destination + 1] = clampByte(u);
+            encoded[destination + 2] = clampByte(y1);
+            encoded[destination + 3] = clampByte(v);
+
+            const auto decode = [&](uint32_t pixelX, int luminance) {
+                const int c = luminance - 16;
+                const int d = u - 128;
+                const int e = v - 128;
+                const size_t pixel =
+                    (static_cast<size_t>(y) * xfb.width + pixelX) * 4;
+                scanout[pixel] = clampByte((298 * c + 409 * e + 128) >> 8);
+                scanout[pixel + 1] =
+                    clampByte((298 * c - 100 * d - 208 * e + 128) >> 8);
+                scanout[pixel + 2] = clampByte((298 * c + 516 * d + 128) >> 8);
+            };
+            decode(x, y0);
+            if (secondX != x)
+                decode(secondX, y1);
+        }
+    }
+
+    Bus::writeBlock(copy.xfbAddress, encoded);
+    xfb.texture->updateData(scanout.data(), static_cast<int>(xfb.width),
+                            static_cast<int>(xfb.height),
+                            opal::TextureDataFormat::Rgba);
 }
 
 void GXRenderer::clearEFB(const GXColor &color, uint32_t depth) {
@@ -465,6 +588,60 @@ void GXRenderer::clearEFB(const GXColor &color, uint32_t depth) {
     device->submitCommandBuffer(commandBuffer);
 }
 
+void GXRenderer::readXFBFromMemory() {
+    if (!xfb.valid || xfb.stride == 0 || xfb.width == 0 || xfb.height == 0)
+        return;
+
+    const uint32_t rowBytes = ((xfb.width + 1) & ~1u) * 2;
+    const size_t inputSize =
+        static_cast<size_t>(xfb.height - 1) * xfb.stride + rowBytes;
+    const ResolvedAddress first = Bus::resolveAddress(xfb.address);
+    const ResolvedAddress last =
+        Bus::resolveAddress(xfb.address + static_cast<uint32_t>(inputSize - 1));
+    if (first.region == MemoryRegion::Invalid || first.region != last.region)
+        return;
+
+    std::vector<uint8_t> encoded(inputSize);
+    std::vector<uint8_t> rgba(static_cast<size_t>(xfb.width) * xfb.height * 4,
+                              255);
+    Bus::readBlock(xfb.address, encoded);
+
+    const auto clampByte = [](int value) {
+        return static_cast<uint8_t>(std::clamp(value, 0, 255));
+    };
+
+    for (uint32_t y = 0; y < xfb.height; ++y) {
+        const size_t sourceRow = static_cast<size_t>(y) * xfb.stride;
+        for (uint32_t x = 0; x < xfb.width; x += 2) {
+            const size_t source = sourceRow + static_cast<size_t>(x) * 2;
+            const int y0 = encoded[source];
+            const int u = encoded[source + 1];
+            const int y1 = encoded[source + 2];
+            const int v = encoded[source + 3];
+
+            const auto decode = [&](uint32_t pixelX, int luminance) {
+                const int c = luminance - 16;
+                const int d = u - 128;
+                const int e = v - 128;
+                const size_t pixel =
+                    (static_cast<size_t>(y) * xfb.width + pixelX) * 4;
+                rgba[pixel] = clampByte((298 * c + 409 * e + 128) >> 8);
+                rgba[pixel + 1] =
+                    clampByte((298 * c - 100 * d - 208 * e + 128) >> 8);
+                rgba[pixel + 2] = clampByte((298 * c + 516 * d + 128) >> 8);
+            };
+
+            decode(x, y0);
+            if (x + 1 < xfb.width)
+                decode(x + 1, y1);
+        }
+    }
+
+    xfb.texture->updateData(rgba.data(), static_cast<int>(xfb.width),
+                            static_cast<int>(xfb.height),
+                            opal::TextureDataFormat::Rgba);
+}
+
 void GXRenderer::presentXFB() {
     flushEFB();
 
@@ -474,6 +651,8 @@ void GXRenderer::presentXFB() {
         copy.sourceHeight = EFB_HEIGHT;
         copyEFBToXFB(copy);
     }
+
+    readXFBFromMemory();
 
     presentPipeline->bindTexture("xfbTexture", xfb.texture, 0);
 
@@ -510,6 +689,9 @@ void GXRenderer::rebuildGXPipeline() {
     gxPipeline->setBlendEquation(currentRasterState.subtractBlend
                                      ? opal::BlendEquation::Subtract
                                      : opal::BlendEquation::Add);
+    gxPipeline->enableLogicOp(currentRasterState.logicOpEnabled &&
+                              !currentRasterState.blendEnabled);
+    gxPipeline->setLogicOp(decodeLogicOp(currentRasterState.logicOp));
 
     gxPipeline->setColorWriteMask(
         currentRasterState.colorWrite, currentRasterState.colorWrite,
@@ -621,13 +803,11 @@ void GXRenderer::applyTevState(std::shared_ptr<opal::Pipeline> &pipeline,
     pipeline->setUniform1i(baseName + ".konstAlphaSel",
                            static_cast<int>(tevStage.konstAlphaSel));
 
-    const auto &indirect =
-        Device::globalDevice->gx.state.bp.tevIndirect[stage];
+    const auto &indirect = Device::globalDevice->gx.state.bp.tevIndirect[stage];
     pipeline->setUniform1i(baseName + ".indirectStage", indirect.stage);
     pipeline->setUniform1i(baseName + ".indirectFormat", indirect.format);
     pipeline->setUniform1i(baseName + ".indirectBias", indirect.bias);
-    pipeline->setUniform1i(baseName + ".indirectAlpha",
-                           indirect.alphaSelect);
+    pipeline->setUniform1i(baseName + ".indirectAlpha", indirect.alphaSelect);
     pipeline->setUniform1i(baseName + ".indirectMatrix", indirect.matrix);
     pipeline->setUniform1i(baseName + ".indirectWrapS", indirect.wrapS);
     pipeline->setUniform1i(baseName + ".indirectWrapT", indirect.wrapT);

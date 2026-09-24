@@ -5,6 +5,7 @@
 #include "core/memory.h"
 #include "opal/opal.h"
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -612,7 +613,15 @@ struct GXBPCopyState {
     uint16_t sourceHeight = 0;
 
     uint32_t xfbAddress = 0;
-    uint16_t xfbStride = 0;
+    uint32_t xfbStride = 0;
+
+    uint16_t yScale = 256;
+    uint8_t gamma = 0;
+    uint8_t frameToField = 0;
+
+    bool clampTop = false;
+    bool clampBottom = false;
+    bool scaleInverted = false;
 
     GXColor clearColor{};
     uint32_t clearDepth = 0xFFFFFF;
@@ -662,6 +671,10 @@ struct GXRasterState {
     uint16_t scissorY = 0;
     uint16_t scissorWidth = 640;
     uint16_t scissorHeight = 528;
+
+    bool dither = false;
+    bool zCompareBeforeTexture = false;
+    uint8_t pixelFormat = 0;
 };
 
 struct GXScissorState {
@@ -718,6 +731,60 @@ struct GXTevIndirect {
     bool addPrevious = false;
 };
 
+enum class GXFogType : uint8_t {
+    None = 0,
+
+    PerspectiveLinear = 2,
+
+    PerspectiveExp = 4,
+    PerspectiveExp2 = 5,
+    PerspectiveRevExp = 6,
+    PerspectiveRevExp2 = 7,
+
+    OrthographicLinear = 10,
+
+    OrthographicExp = 12,
+    OrthographicExp2 = 13,
+    OrthographicRevExp = 14,
+    OrthographicRevExp2 = 15
+};
+
+struct GXFogState {
+    bool enabled = false;
+
+    GXFogType type = GXFogType::None;
+
+    float a = 0.0f;
+    uint32_t bMagnitude = 0;
+    uint8_t bShift = 0;
+
+    float c = 0.0f;
+
+    GXColor color{};
+
+    bool rangeAdjustmentEnabled = false;
+
+    uint16_t rangeCenter = 0;
+    std::array<uint16_t, 10> rangeK{};
+};
+
+enum class GXZTextureOp : uint8_t { Disabled = 0, Add = 1, Replace = 2 };
+
+enum class GXZTextureFormat : uint8_t { Z8 = 0, Z16 = 1, Z24X8 = 2 };
+
+struct GXZTextureState {
+    uint32_t bias = 0;
+
+    GXZTextureOp op = GXZTextureOp::Disabled;
+
+    GXZTextureFormat format = GXZTextureFormat::Z8;
+};
+
+struct GXDestinationAlphaState {
+    uint8_t alpha = 0;
+    bool enabled = false;
+};
+
 struct GXBPState {
     std::array<uint32_t, 256> registers{};
     GXBPCopyState copy{};
@@ -747,6 +814,10 @@ struct GXBPState {
     std::array<GXIndirectMatrix, 3> indirectMatrices{};
     std::array<GXTevIndirect, 16> tevIndirect{};
     uint8_t indirectStageCount = 0;
+
+    GXFogState fog{};
+    GXZTextureState zTexture{};
+    GXDestinationAlphaState destinationAlpha{};
 };
 
 struct GXState {
@@ -778,6 +849,7 @@ struct GXLine {
 
 static constexpr uint32_t EFB_WIDTH = 640;
 static constexpr uint32_t EFB_HEIGHT = 528;
+static constexpr uint32_t XFB_MAX_HEIGHT = 1024;
 
 struct GXXFB {
     std::shared_ptr<opal::Texture> texture;
@@ -863,6 +935,13 @@ static int16_t signExtend11Indirect(uint32_t value) {
 
     return static_cast<int16_t>(value);
 }
+
+static float decodeFogFloat(uint32_t value) {
+    const uint32_t bits = ((value >> 19) & 1u) << 31 |
+                          ((value >> 11) & 0xFFu) << 23 |
+                          (value & 0x7FFu) << 12;
+    return std::bit_cast<float>(bits);
+}
 } // namespace gx
 
 class GXRenderer {
@@ -896,6 +975,8 @@ class GXRenderer {
     void createPresentPipeline();
 
     void ensureXFB(uint32_t width, uint32_t height);
+    void writeXFBToMemory(const GXBPCopyState &copy);
+    void readXFBFromMemory();
 
     std::shared_ptr<opal::Device> device;
 
@@ -962,6 +1043,45 @@ class GXRenderer {
             return opal::TextureFilterMode::LinearMipmapLinear;
         default:
             return opal::TextureFilterMode::Linear;
+        }
+    }
+
+    opal::LogicOp decodeLogicOp(uint8_t op) const {
+        switch (op) {
+        case 0:
+            return opal::LogicOp::Clear;
+        case 1:
+            return opal::LogicOp::And;
+        case 2:
+            return opal::LogicOp::AndReverse;
+        case 3:
+            return opal::LogicOp::Copy;
+        case 4:
+            return opal::LogicOp::AndInverted;
+        case 5:
+            return opal::LogicOp::NoOp;
+        case 6:
+            return opal::LogicOp::Xor;
+        case 7:
+            return opal::LogicOp::Or;
+        case 8:
+            return opal::LogicOp::Nor;
+        case 9:
+            return opal::LogicOp::Equivalent;
+        case 10:
+            return opal::LogicOp::Invert;
+        case 11:
+            return opal::LogicOp::OrReverse;
+        case 12:
+            return opal::LogicOp::CopyInverted;
+        case 13:
+            return opal::LogicOp::OrInverted;
+        case 14:
+            return opal::LogicOp::Nand;
+        case 15:
+            return opal::LogicOp::Set;
+        default:
+            return opal::LogicOp::Copy;
         }
     }
 

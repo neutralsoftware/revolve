@@ -71,6 +71,8 @@ class VideoInterface : public MMIODevice {
 
     void onFrame();
 
+    [[nodiscard]] uint64_t getFrameCounter() const { return frameCounter; }
+
   private:
     void decodeRegisterWrite(uint32_t offset, uint32_t value, AccessSize size);
 
@@ -81,6 +83,8 @@ class VideoInterface : public MMIODevice {
 
     VIState state{};
     std::array<uint16_t, VI_SIZE / 2> registers{};
+
+    uint32_t frameCounter = 0;
 };
 
 #endif

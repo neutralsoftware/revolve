@@ -193,6 +193,8 @@ void VideoInterface::checkInterrupts() {
 }
 
 void VideoInterface::onFrame() {
+    ++frameCounter;
+
     auto &renderer = Device::globalDevice->gx.renderer;
     renderer->presentXFB();
 }
