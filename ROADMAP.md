@@ -96,6 +96,7 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 - [ ] Add Wii Remote accelerometer support
 - [ ] Add Wii Remote IR support
 - [ ] Add Nunchuk support
+- [ ] Add Bluetooth support for Wii Remotes
 
 ## Audio / DSP
 
