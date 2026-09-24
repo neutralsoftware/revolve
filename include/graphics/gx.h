@@ -35,18 +35,17 @@ struct GXColor {
 };
 
 struct GXRenderVertex {
-    float x;
-    float y;
-    float z;
-    float w;
+    float x, y, z, w;
+    float r, g, b, a;
 
-    float r;
-    float g;
-    float b;
-    float a;
-
-    float u;
-    float v;
+    float u0, v0;
+    float u1, v1;
+    float u2, v2;
+    float u3, v3;
+    float u4, v4;
+    float u5, v5;
+    float u6, v6;
+    float u7, v7;
 };
 
 struct GXMatrix3x4 {

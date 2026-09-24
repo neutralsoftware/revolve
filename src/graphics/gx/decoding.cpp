@@ -878,8 +878,23 @@ GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
     out.b = vertex.color0.b;
     out.a = vertex.color0.a;
 
-    out.u = vertex.texCoords[0].x;
-    out.v = vertex.texCoords[0].y;
+    out.u0 = vertex.texCoords[0].x;
+    out.v0 = vertex.texCoords[0].y;
+
+    out.u1 = vertex.texCoords[1].x;
+    out.v1 = vertex.texCoords[1].y;
+    out.u2 = vertex.texCoords[2].x;
+    out.v2 = vertex.texCoords[2].y;
+    out.u3 = vertex.texCoords[3].x;
+    out.v3 = vertex.texCoords[3].y;
+    out.u4 = vertex.texCoords[4].x;
+    out.v4 = vertex.texCoords[4].y;
+    out.u5 = vertex.texCoords[5].x;
+    out.v5 = vertex.texCoords[5].y;
+    out.u6 = vertex.texCoords[6].x;
+    out.v6 = vertex.texCoords[6].y;
+    out.u7 = vertex.texCoords[7].x;
+    out.v7 = vertex.texCoords[7].y;
 
     return out;
 }

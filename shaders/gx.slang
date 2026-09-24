@@ -2,13 +2,29 @@
 struct VertexIn {
     float4 position : POSITION;
     float4 color : COLOR0;
-    float2 uv : TEXCOORD0;
+
+    float2 uv0 : TEXCOORD0;
+    float2 uv1 : TEXCOORD1;
+    float2 uv2 : TEXCOORD2;
+    float2 uv3 : TEXCOORD3;
+    float2 uv4 : TEXCOORD4;
+    float2 uv5 : TEXCOORD5;
+    float2 uv6 : TEXCOORD6;
+    float2 uv7 : TEXCOORD7;
 };
 
 struct VertexOut {
     float4 position : SV_POSITION;
     float4 color : COLOR0;
-    float2 uv : TEXCOORD0;
+
+    float2 uv0 : TEXCOORD0;
+    float2 uv1 : TEXCOORD1;
+    float2 uv2 : TEXCOORD2;
+    float2 uv3 : TEXCOORD3;
+    float2 uv4 : TEXCOORD4;
+    float2 uv5 : TEXCOORD5;
+    float2 uv6 : TEXCOORD6;
+    float2 uv7 : TEXCOORD7;
 };
 
 struct TevStage {
@@ -123,8 +139,40 @@ VertexOut vertexMain(VertexIn input) {
     VertexOut output;
     output.position = input.position;
     output.color = input.color;
-    output.uv = input.uv;
+
+    output.uv0 = input.uv0;
+    output.uv1 = input.uv1;
+    output.uv2 = input.uv2;
+    output.uv3 = input.uv3;
+    output.uv4 = input.uv4;
+    output.uv5 = input.uv5;
+    output.uv6 = input.uv6;
+    output.uv7 = input.uv7;
+
     return output;
+}
+
+float2 getGXTexCoord(int index, VertexOut input) {
+    switch (index) {
+    case 0:
+        return input.uv0;
+    case 1:
+        return input.uv1;
+    case 2:
+        return input.uv2;
+    case 3:
+        return input.uv3;
+    case 4:
+        return input.uv4;
+    case 5:
+        return input.uv5;
+    case 6:
+        return input.uv6;
+    case 7:
+        return input.uv7;
+    }
+
+    return float2(0.0, 0.0);
 }
 
 bool alphaCompare(float alpha, float ref, int op) {
@@ -378,7 +426,9 @@ void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs) {
     float4 tex = float4(1, 1, 1, 1);
 
     if (stage.textureEnabled != 0) {
-        tex = sampleGXTexture(stage.texMap, input.uv);
+        float2 uv = getGXTexCoord(stage.texCoord, input);
+
+        tex = sampleGXTexture(stage.texMap, uv);
     }
 
     float3 A = getTevColorArg(stage.colorA, regs, tex, ras);
