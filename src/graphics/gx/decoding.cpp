@@ -6,13 +6,28 @@
 #include <cstdint>
 
 uint8_t GX::read8() {
+    if (commandSource == GXCommandSource::DisplayList) {
+        if (displayListReader.remaining == 0) {
+            Logger::log("GX", LogLevel::Error,
+                        "Attempted to read past end of GX display list");
+
+            return 0;
+        }
+
+        uint8_t value = Bus::readPhysical8(displayListReader.address);
+
+        displayListReader.address++;
+        displayListReader.remaining--;
+
+        return value;
+    }
+
     if (reader.availableBytes == 0) {
-        Logger::log("GX", LogLevel::Error,
-                    "Attempted FIFO read with no data available");
         return 0;
     }
 
     uint8_t value = Bus::readPhysical8(reader.cursor);
+
     const auto &fifo = Device::globalDevice->cp->getFifo();
 
     reader.cursor++;
@@ -24,6 +39,7 @@ uint8_t GX::read8() {
 
     if (reader.bytesIntoBlock == 32) {
         reader.bytesIntoBlock = 0;
+
         Device::globalDevice->cp->onFifoBlockConsumed();
     }
 
@@ -55,6 +71,21 @@ void GX::processCommand() {
     case GXCommand::XFLoad:
         processXFLoad();
         return;
+
+    case GXCommand::XFIndexedLoadA:
+    case GXCommand::XFIndexedLoadB:
+    case GXCommand::XFIndexedLoadC:
+    case GXCommand::XFIndexedLoadD:
+        processIndexedXF(command);
+        return;
+
+    case GXCommand::CallDisplayList:
+        processCallDisplayList();
+        return;
+
+    case GXCommand::InvalidateVertexCache:
+        return;
+
     case GXCommand::BPLoad:
         processBPLoad();
         return;
@@ -1452,4 +1483,89 @@ GXVec3 GX::applyPostTextureMatrix(GXVec3 tex, uint32_t texGen) const {
     out.z = row(2);
 
     return out;
+}
+
+void GX::processIndexedXF(uint8_t command) {
+    const uint16_t index = read16();
+    const uint16_t control = read16();
+
+    const uint32_t xfAddress = control & 0x0FFF;
+
+    const uint32_t length = ((control >> 12) & 0xF) + 1;
+
+    uint32_t arrayIndex;
+
+    switch (command) {
+    case static_cast<uint8_t>(GXCommand::XFIndexedLoadA):
+        arrayIndex = 12;
+        break;
+
+    case static_cast<uint8_t>(GXCommand::XFIndexedLoadB):
+        arrayIndex = 13;
+        break;
+
+    case static_cast<uint8_t>(GXCommand::XFIndexedLoadC):
+        arrayIndex = 14;
+        break;
+
+    case static_cast<uint8_t>(GXCommand::XFIndexedLoadD):
+        arrayIndex = 15;
+        break;
+
+    default:
+        Logger::log("GX", LogLevel::Error, "Invalid indexed XF command");
+
+        return;
+    }
+
+    const uint32_t base = state.cp.getArrayBase(arrayIndex);
+    const uint32_t stride = state.cp.getArrayStride(arrayIndex);
+
+    uint32_t sourceAddress = base + static_cast<uint32_t>(index) * stride;
+
+    for (uint32_t i = 0; i < length; ++i) {
+        uint32_t value = readMemory32(sourceAddress);
+
+        writeXF(static_cast<uint16_t>(xfAddress + i), value);
+    }
+}
+
+void GX::processCallDisplayList() {
+    const uint32_t address = read32();
+    const uint32_t size = read32();
+
+    if (size == 0)
+        return;
+
+    processDisplayList(address, size);
+}
+
+void GX::processDisplayList(uint32_t address, uint32_t size) {
+    constexpr uint32_t MAX_DISPLAY_LIST_DEPTH = 32;
+
+    if (displayListDepth >= MAX_DISPLAY_LIST_DEPTH) {
+        Logger::log("GX", LogLevel::Error,
+                    "GX display-list recursion limit reached");
+
+        return;
+    }
+
+    const GXCommandSource previousSource = commandSource;
+    const GXDisplayListReader previousReader = displayListReader;
+
+    commandSource = GXCommandSource::DisplayList;
+
+    displayListReader.address = address;
+    displayListReader.remaining = size;
+
+    displayListDepth++;
+
+    while (displayListReader.remaining > 0) {
+        processCommand();
+    }
+
+    displayListDepth--;
+
+    commandSource = previousSource;
+    displayListReader = previousReader;
 }

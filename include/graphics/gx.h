@@ -314,7 +314,23 @@ enum class GXCommand : uint8_t {
     NOP = 0x00,
     CPLoad = 0x08,
     XFLoad = 0x10,
-    BPLoad = 0x61
+
+    XFIndexedLoadA = 0x20,
+    XFIndexedLoadB = 0x28,
+    XFIndexedLoadC = 0x30,
+    XFIndexedLoadD = 0x38,
+
+    CallDisplayList = 0x40,
+    InvalidateVertexCache = 0x48,
+
+    BPLoad = 0x61,
+};
+
+enum class GXCommandSource { FIFO, DisplayList };
+
+struct GXDisplayListReader {
+    uint32_t address = 0;
+    uint32_t remaining = 0;
 };
 
 enum class GXCPRegister : uint8_t {
@@ -966,7 +982,18 @@ class GX {
 
     GXVec3 generateTexCoord(const GXVertex &vertex, uint32_t index) const;
 
+    void processIndexedXF(uint8_t command);
+
+    void processCallDisplayList();
+    void processDisplayList(uint32_t address, uint32_t size);
+
     GXFifoReader reader{};
+
+    GXCommandSource commandSource = GXCommandSource::FIFO;
+    GXDisplayListReader displayListReader{};
+
+    uint32_t displayListDepth = 0;
+
     GXState state{};
 
     friend class GXRenderer;

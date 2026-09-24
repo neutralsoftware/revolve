@@ -42,7 +42,7 @@ const std::vector<AdvancedTEVTest> TESTS = {
     {"ATV-PROJECT-LIGHT", "advanced_projection.s", 7, "Projected light texture - position-based STQ mapping acts as a light cookie"},
     {"ATV-PROJECT-TWO", "advanced_projection.s", 8, "Two projections - base texture and projected texture use independent matrices"},
     {"ATV-TEXMTX-INDEX", "advanced_projection.s", 9, "Indexed texture matrix - per-vertex matrix indices select projection transforms"},
-    {"ATV-TEXGEN-CHAIN", "advanced_projection.s", 10, "Texgen chain - a generated coordinate feeds a second texture generator"},
+    {"ATV-TEXGEN-SOURCE", "advanced_projection.s", 10, "Texgen source selection - the second generator consumes a separate vertex coordinate"},
     {"ATV-TEV-LIGHTMAP", "advanced_combiner.s", 1, "Lightmap TEV - base texture multiplies a second lighting texture"},
     {"ATV-TEV-DETAIL", "advanced_combiner.s", 2, "Detail TEV - repeated detail texture modulates the base texture"},
     {"ATV-TEV-THREE", "advanced_combiner.s", 3, "Three TEV stages - base, lightmap and vertex tint combine in sequence"},
@@ -204,11 +204,11 @@ int runAdvancedTEVSuite() {
         std::cerr << "SDL initialization failed: " << SDL_GetError() << '\n';
         return 1;
     }
-    auto device = Device::createDevice();
     size_t failed = 0;
     try {
         for (size_t index : selected) {
             const auto &test = TESTS[index];
+            auto device = Device::createDevice();
             std::optional<bool> verdict = executeTest(test, *device);
             if (!verdict) {
                 std::cout << "Advanced TEV test run stopped; existing results were kept.\n";
