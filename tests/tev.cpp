@@ -125,7 +125,7 @@ void printTests(const std::map<std::string, std::string> &results) {
                   << std::left << std::setw(20) << test.id << color << '['
                   << status << "]\033[0m  " << test.title << '\n';
     }
-    std::cout << "\nType a number, or 'all': " << std::flush;
+    std::cout << "\nType numbers separated by commas, or 'all': " << std::flush;
 }
 
 std::string compileTest(const TEVTest &test) {
@@ -207,12 +207,22 @@ int runTEVSuite() {
             selected.push_back(index);
     } else {
         try {
-            size_t consumed = 0;
-            unsigned long number = std::stoul(selection, &consumed);
-            if (consumed != selection.size() || number == 0 ||
-                number > TESTS.size())
+            size_t start = 0;
+            while (start < selection.size()) {
+                const size_t end = selection.find(',', start);
+                const std::string item = selection.substr(start, end - start);
+                size_t consumed = 0;
+                unsigned long number = std::stoul(item, &consumed);
+                if (consumed != item.size() || number == 0 ||
+                    number > TESTS.size())
+                    throw std::out_of_range("selection");
+                selected.push_back(number - 1);
+                if (end == std::string::npos)
+                    break;
+                start = end + 1;
+            }
+            if (selected.empty() || selection.back() == ',')
                 throw std::out_of_range("selection");
-            selected.push_back(number - 1);
         } catch (const std::exception &) {
             std::cerr << "Invalid TEV test selection: " << selection << '\n';
             return 1;

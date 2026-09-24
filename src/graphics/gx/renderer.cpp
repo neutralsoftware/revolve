@@ -293,6 +293,8 @@ void GXRenderer::flushEFB() {
     const auto &bp = Device::globalDevice->gx.state.bp;
     gxPipeline->setUniform1i("tevStageCount",
                              static_cast<int>(bp.tevStageCount));
+    gxPipeline->setUniform1i("indirectStageCount",
+                             static_cast<int>(bp.indirectStageCount));
 
     for (uint32_t i = 0; i < 4; ++i) {
         const auto &r = bp.tevRegisters[i];
@@ -326,10 +328,37 @@ void GXRenderer::flushEFB() {
         applyTevState(gxPipeline, i);
     }
 
+    for (uint32_t i = 0; i < bp.indirectStages.size(); ++i) {
+        const auto &stage = bp.indirectStages[i];
+        const std::string name = "indirectStages[" + std::to_string(i) + "]";
+        gxPipeline->setUniform1i(name + ".texCoord", stage.texCoord);
+        gxPipeline->setUniform1i(name + ".texMap", stage.texMap);
+        gxPipeline->setUniform1i(name + ".scaleS", stage.scaleS);
+        gxPipeline->setUniform1i(name + ".scaleT", stage.scaleT);
+    }
+
+    for (uint32_t i = 0; i < bp.indirectMatrices.size(); ++i) {
+        const auto &matrix = bp.indirectMatrices[i];
+        const std::string prefix = "indirectMatrix" + std::to_string(i);
+        gxPipeline->setUniform4f(prefix + "A", matrix.m[0][0],
+                                 matrix.m[0][1], matrix.m[0][2],
+                                 matrix.exponent);
+        gxPipeline->setUniform4f(prefix + "B", matrix.m[1][0],
+                                 matrix.m[1][1], matrix.m[1][2],
+                                 matrix.exponent);
+    }
+
     static constexpr const char *textureNames[8] = {
         "tex0", "tex1", "tex2", "tex3", "tex4", "tex5", "tex6", "tex7"};
 
     for (uint32_t i = 0; i < 8; ++i) {
+        const std::string sizeName =
+            "textureSizes[" + std::to_string(i) + "]";
+        const float width = boundTextures[i] ? boundTextures[i]->width : 1.0f;
+        const float height = boundTextures[i] ? boundTextures[i]->height : 1.0f;
+        gxPipeline->setUniform4f(sizeName, width, height, 1.0f / width,
+                                 1.0f / height);
+
         if (!textureValid[i])
             continue;
         if (!boundTextures[i])
@@ -536,8 +565,8 @@ void GXRenderer::applyTevState(std::shared_ptr<opal::Pipeline> &pipeline,
 
     const std::string baseName = "tevStages[" + std::to_string(stage) + "]";
 
-    pipeline->setUniform1i(baseName + ".texCoord", tevStage.order.texMap);
-    pipeline->setUniform1i(baseName + ".texMap", tevStage.order.texCoord);
+    pipeline->setUniform1i(baseName + ".texCoord", tevStage.order.texCoord);
+    pipeline->setUniform1i(baseName + ".texMap", tevStage.order.texMap);
     pipeline->setUniform1i(baseName + ".colorChannel",
                            tevStage.order.colorChannel);
     pipeline->setUniform1i(baseName + ".textureEnabled",
@@ -591,4 +620,19 @@ void GXRenderer::applyTevState(std::shared_ptr<opal::Pipeline> &pipeline,
                            static_cast<int>(tevStage.konstColorSel));
     pipeline->setUniform1i(baseName + ".konstAlphaSel",
                            static_cast<int>(tevStage.konstAlphaSel));
+
+    const auto &indirect =
+        Device::globalDevice->gx.state.bp.tevIndirect[stage];
+    pipeline->setUniform1i(baseName + ".indirectStage", indirect.stage);
+    pipeline->setUniform1i(baseName + ".indirectFormat", indirect.format);
+    pipeline->setUniform1i(baseName + ".indirectBias", indirect.bias);
+    pipeline->setUniform1i(baseName + ".indirectAlpha",
+                           indirect.alphaSelect);
+    pipeline->setUniform1i(baseName + ".indirectMatrix", indirect.matrix);
+    pipeline->setUniform1i(baseName + ".indirectWrapS", indirect.wrapS);
+    pipeline->setUniform1i(baseName + ".indirectWrapT", indirect.wrapT);
+    pipeline->setUniform1i(baseName + ".indirectUseOriginalLod",
+                           indirect.useOriginalLod ? 1 : 0);
+    pipeline->setUniform1i(baseName + ".indirectAddPrevious",
+                           indirect.addPrevious ? 1 : 0);
 }

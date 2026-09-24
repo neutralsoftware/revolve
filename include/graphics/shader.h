@@ -64,14 +64,14 @@ struct main0_out
 {
     float4 entryPointParam_vertexMain_color0 [[user(locn0)]];
     float4 entryPointParam_vertexMain_color1 [[user(locn1)]];
-    float2 entryPointParam_vertexMain_uv0 [[user(locn2)]];
-    float2 entryPointParam_vertexMain_uv1 [[user(locn3)]];
-    float2 entryPointParam_vertexMain_uv2 [[user(locn4)]];
-    float2 entryPointParam_vertexMain_uv3 [[user(locn5)]];
-    float2 entryPointParam_vertexMain_uv4 [[user(locn6)]];
-    float2 entryPointParam_vertexMain_uv5 [[user(locn7)]];
-    float2 entryPointParam_vertexMain_uv6 [[user(locn8)]];
-    float2 entryPointParam_vertexMain_uv7 [[user(locn9)]];
+    float3 entryPointParam_vertexMain_uv0 [[user(locn2)]];
+    float3 entryPointParam_vertexMain_uv1 [[user(locn3)]];
+    float3 entryPointParam_vertexMain_uv2 [[user(locn4)]];
+    float3 entryPointParam_vertexMain_uv3 [[user(locn5)]];
+    float3 entryPointParam_vertexMain_uv4 [[user(locn6)]];
+    float3 entryPointParam_vertexMain_uv5 [[user(locn7)]];
+    float3 entryPointParam_vertexMain_uv6 [[user(locn8)]];
+    float3 entryPointParam_vertexMain_uv7 [[user(locn9)]];
     float4 gl_Position [[position]];
 };
 
@@ -80,14 +80,14 @@ struct main0_in
     float4 input_position [[attribute(0)]];
     float4 input_color0 [[attribute(1)]];
     float4 input_color1 [[attribute(2)]];
-    float2 input_uv0 [[attribute(3)]];
-    float2 input_uv1 [[attribute(4)]];
-    float2 input_uv2 [[attribute(5)]];
-    float2 input_uv3 [[attribute(6)]];
-    float2 input_uv4 [[attribute(7)]];
-    float2 input_uv5 [[attribute(8)]];
-    float2 input_uv6 [[attribute(9)]];
-    float2 input_uv7 [[attribute(10)]];
+    float3 input_uv0 [[attribute(3)]];
+    float3 input_uv1 [[attribute(4)]];
+    float3 input_uv2 [[attribute(5)]];
+    float3 input_uv3 [[attribute(6)]];
+    float3 input_uv4 [[attribute(7)]];
+    float3 input_uv5 [[attribute(8)]];
+    float3 input_uv6 [[attribute(9)]];
+    float3 input_uv7 [[attribute(10)]];
 };
 
 vertex main0_out main0(main0_in in [[stage_in]])
@@ -114,6 +114,11 @@ inline constexpr const char *GX_FRAGMENT_SHADER = R"SHDR3(
 #include <simd/simd.h>
 
 using namespace metal;
+
+struct _Array_std140_vector_float_4_8
+{
+    float4 data[8];
+};
 
 struct TevStage_std140
 {
@@ -143,12 +148,34 @@ struct TevStage_std140
     int textureSwap;
     int konstColorSel;
     int konstAlphaSel;
-    char _m0_final_padding[8];
+    int indirectStage;
+    int indirectFormat;
+    int indirectBias;
+    int indirectAlpha;
+    int indirectMatrix;
+    int indirectWrapS;
+    int indirectWrapT;
+    int indirectUseOriginalLod;
+    int indirectAddPrevious;
+    char _m0_final_padding[4];
 };
 
 struct _Array_std140_TevStage16
 {
     TevStage_std140 data[16];
+};
+
+struct IndirectStage_std140
+{
+    int texCoord;
+    int texMap;
+    int scaleS;
+    int scaleT;
+};
+
+struct _Array_std140_IndirectStage4
+{
+    IndirectStage_std140 data[4];
 };
 
 struct Uniforms_std140
@@ -159,8 +186,8 @@ struct Uniforms_std140
     int alphaComp1;
     int alphaLogic;
     int tevStageCount;
+    int indirectStageCount;
     int pad0;
-    int pad1;
     float4 tevRegister0;
     float4 tevRegister1;
     float4 tevRegister2;
@@ -173,7 +200,15 @@ struct Uniforms_std140
     float4 swapTable1;
     float4 swapTable2;
     float4 swapTable3;
+    _Array_std140_vector_float_4_8 textureSizes;
     _Array_std140_TevStage16 tevStages;
+    _Array_std140_IndirectStage4 indirectStages;
+    float4 indirectMatrix0A;
+    float4 indirectMatrix0B;
+    float4 indirectMatrix1A;
+    float4 indirectMatrix1B;
+    float4 indirectMatrix2A;
+    float4 indirectMatrix2B;
 };
 
 struct main0_out
@@ -185,153 +220,860 @@ struct main0_in
 {
     float4 input_color0 [[user(locn0)]];
     float4 input_color1 [[user(locn1)]];
-    float2 input_uv0 [[user(locn2)]];
-    float2 input_uv1 [[user(locn3)]];
-    float2 input_uv2 [[user(locn4)]];
-    float2 input_uv3 [[user(locn5)]];
-    float2 input_uv4 [[user(locn6)]];
-    float2 input_uv5 [[user(locn7)]];
-    float2 input_uv6 [[user(locn8)]];
-    float2 input_uv7 [[user(locn9)]];
+    float3 input_uv0 [[user(locn2)]];
+    float3 input_uv1 [[user(locn3)]];
+    float3 input_uv2 [[user(locn4)]];
+    float3 input_uv3 [[user(locn5)]];
+    float3 input_uv4 [[user(locn6)]];
+    float3 input_uv5 [[user(locn7)]];
+    float3 input_uv6 [[user(locn8)]];
+    float3 input_uv7 [[user(locn9)]];
 };
 
 fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uniforms [[buffer(0)]], texture2d<float> tex0 [[texture(0)]], texture2d<float> tex1 [[texture(1)]], texture2d<float> tex2 [[texture(2)]], texture2d<float> tex3 [[texture(3)]], texture2d<float> tex4 [[texture(4)]], texture2d<float> tex5 [[texture(5)]], texture2d<float> tex6 [[texture(6)]], texture2d<float> tex7 [[texture(7)]], sampler samp0 [[sampler(0)]], sampler samp1 [[sampler(1)]], sampler samp2 [[sampler(2)]], sampler samp3 [[sampler(3)]], sampler samp4 [[sampler(4)]], sampler samp5 [[sampler(5)]], sampler samp6 [[sampler(6)]], sampler samp7 [[sampler(7)]])
 {
-    bool _2753 = false;
-    bool _2728 = false;
-    bool _2690 = false;
-    bool _2250 = false;
-    bool _2221 = false;
-    bool _2192 = false;
-    bool _2163 = false;
-    bool _2116 = false;
-    bool _2069 = false;
-    bool _2022 = false;
-    bool _1975 = false;
-    bool _1952 = false;
-    bool _1917 = false;
-    bool _1894 = false;
-    bool _1842 = false;
-    bool _1783 = false;
-    bool _1756 = false;
-    bool _1737 = false;
-    bool _1718 = false;
-    bool _1699 = false;
-    bool _1680 = false;
-    bool _1653 = false;
-    bool _1622 = false;
-    bool _1603 = false;
-    bool _1584 = false;
-    bool _1565 = false;
-    bool _1538 = false;
-    bool _1511 = false;
+    bool _4142 = false;
+    bool _4117 = false;
+    bool _4079 = false;
+    bool _3639 = false;
+    bool _3610 = false;
+    bool _3581 = false;
+    bool _3552 = false;
+    bool _3505 = false;
+    bool _3458 = false;
+    bool _3411 = false;
+    bool _3364 = false;
+    bool _3341 = false;
+    bool _3306 = false;
+    bool _3283 = false;
+    bool _3231 = false;
+    bool _3212 = false;
+    bool _3193 = false;
+    bool _3174 = false;
+    bool _3155 = false;
+    bool _3128 = false;
+    bool _3057 = false;
+    bool _2992 = false;
+    bool _2973 = false;
+    bool _2954 = false;
+    bool _2935 = false;
+    bool _2916 = false;
+    bool _2889 = false;
+    bool _2853 = false;
+    bool _2795 = false;
+    bool _2737 = false;
+    bool _2397 = false;
+    bool _2360 = false;
+    bool _2289 = false;
     main0_out out = {};
-    float4 _2857 = uniforms.tevRegister0;
-    float4 _2858 = uniforms.tevRegister1;
-    float4 _2859 = uniforms.tevRegister2;
-    float4 _2860 = uniforms.tevRegister3;
+    float4 _4286 = uniforms.tevRegister0;
+    float4 _4287 = uniforms.tevRegister1;
+    float4 _4288 = uniforms.tevRegister2;
+    float4 _4289 = uniforms.tevRegister3;
+    float2 indirectCoord = float2(0.0);
+    float bumpAlpha = 0.0;
     int i = 0;
-    float4 _1452;
-    float4 _1512;
-    int4 _1539;
-    float _1566;
-    float _1585;
-    float _1604;
-    float _1623;
-    int4 _1654;
-    float _1681;
-    float _1700;
-    float _1719;
-    float _1738;
-    float2 _1757;
-    float4 _1784;
-    float3 _1843;
-    float _1844;
-    float4 _1895;
-    float _1918;
-    float4 _1953;
-    float3 _1976;
-    float3 _2023;
-    float3 _2070;
-    float3 _2117;
-    float _2164;
-    float _2193;
-    float _2222;
-    float _2251;
-    float3 _2280;
-    float3 _2281;
-    float _2282;
-    float _2283;
-    float _2284;
-    float3 _2285;
-    bool _2454;
-    bool _2455;
-    float _2556;
-    float _2557;
-    bool _2558;
+    float2 _2123;
+    bool _2124;
+    float3 _2125;
+    float _2127;
+    float2 _2128;
+    float2 _2129;
+    float4 _2130;
+    float3 _2290;
+    float3 _2361;
+    float4 _2398;
+    float3 _2463;
+    float _2488;
+    float2 _2521;
+    bool _2522;
+    float4 _2586;
+    float4 _2587;
+    float4 _2624;
+    float4 _2625;
+    float4 _2662;
+    float4 _2663;
+    float4 _2700;
+    float4 _2701;
+    float _2738;
+    float _2796;
+    float4 _2854;
+    int4 _2890;
+    float _2917;
+    float _2936;
+    float _2955;
+    float _2974;
+    float4 _2993;
+    float4 _3058;
+    int4 _3129;
+    float _3156;
+    float _3175;
+    float _3194;
+    float _3213;
+    float3 _3232;
+    float _3233;
+    float4 _3284;
+    float _3307;
+    float4 _3342;
+    float3 _3365;
+    float3 _3412;
+    float3 _3459;
+    float3 _3506;
+    float _3553;
+    float _3582;
+    float _3611;
+    float _3640;
+    float3 _3669;
+    float3 _3670;
+    float _3671;
+    float _3672;
+    float _3673;
+    float3 _3674;
+    bool _3843;
+    bool _3844;
+    float _3945;
+    float _3946;
+    bool _3947;
     for (;;)
     {
         if (!(i < uniforms.tevStageCount))
         {
             break;
         }
-        _1511 = false;
+        _2289 = false;
+        do
+        {
+            switch (uniforms.tevStages.data[i].texCoord)
+            {
+                case 0:
+                {
+                    _2289 = true;
+                    _2290 = in.input_uv0;
+                    break;
+                }
+                case 1:
+                {
+                    _2289 = true;
+                    _2290 = in.input_uv1;
+                    break;
+                }
+                case 2:
+                {
+                    _2289 = true;
+                    _2290 = in.input_uv2;
+                    break;
+                }
+                case 3:
+                {
+                    _2289 = true;
+                    _2290 = in.input_uv3;
+                    break;
+                }
+                case 4:
+                {
+                    _2289 = true;
+                    _2290 = in.input_uv4;
+                    break;
+                }
+                case 5:
+                {
+                    _2289 = true;
+                    _2290 = in.input_uv5;
+                    break;
+                }
+                case 6:
+                {
+                    _2289 = true;
+                    _2290 = in.input_uv6;
+                    break;
+                }
+                case 7:
+                {
+                    _2289 = true;
+                    _2290 = in.input_uv7;
+                    break;
+                }
+                default:
+                {
+                    break;
+                }
+            }
+            if (_2289)
+            {
+                break;
+            }
+            _2289 = true;
+            _2290 = float3(0.0);
+            break;
+        } while(false);
+        if (_2290.z != 0.0)
+        {
+            _2123 = _2290.xy / float2(_2290.z);
+        }
+        else
+        {
+            _2123 = _2290.xy;
+        }
+        bool _2150 = uniforms.tevStages.data[i].indirectStage < uniforms.indirectStageCount;
+        if (_2150)
+        {
+            if (uniforms.tevStages.data[i].indirectMatrix != 0)
+            {
+                _2124 = true;
+            }
+            else
+            {
+                _2124 = uniforms.tevStages.data[i].indirectAlpha != 0;
+            }
+        }
+        else
+        {
+            _2124 = false;
+        }
+        if (_2124)
+        {
+            _2360 = false;
+            do
+            {
+                switch (uniforms.indirectStages.data[uniforms.tevStages.data[i].indirectStage].texCoord)
+                {
+                    case 0:
+                    {
+                        _2360 = true;
+                        _2361 = in.input_uv0;
+                        break;
+                    }
+                    case 1:
+                    {
+                        _2360 = true;
+                        _2361 = in.input_uv1;
+                        break;
+                    }
+                    case 2:
+                    {
+                        _2360 = true;
+                        _2361 = in.input_uv2;
+                        break;
+                    }
+                    case 3:
+                    {
+                        _2360 = true;
+                        _2361 = in.input_uv3;
+                        break;
+                    }
+                    case 4:
+                    {
+                        _2360 = true;
+                        _2361 = in.input_uv4;
+                        break;
+                    }
+                    case 5:
+                    {
+                        _2360 = true;
+                        _2361 = in.input_uv5;
+                        break;
+                    }
+                    case 6:
+                    {
+                        _2360 = true;
+                        _2361 = in.input_uv6;
+                        break;
+                    }
+                    case 7:
+                    {
+                        _2360 = true;
+                        _2361 = in.input_uv7;
+                        break;
+                    }
+                    default:
+                    {
+                        break;
+                    }
+                }
+                if (_2360)
+                {
+                    break;
+                }
+                _2360 = true;
+                _2361 = float3(0.0);
+                break;
+            } while(false);
+            float2 _2316 = _2361.xy;
+            if (_2361.z != 0.0)
+            {
+                _2316 /= float2(_2361.z);
+            }
+            float2 _4343 = _2316;
+            _4343.x = _4343.x * exp2(-float(uniforms.indirectStages.data[uniforms.tevStages.data[i].indirectStage].scaleS));
+            _4343.y = _4343.y * exp2(-float(uniforms.indirectStages.data[uniforms.tevStages.data[i].indirectStage].scaleT));
+            _2316 = _4343;
+            _2397 = false;
+            do
+            {
+                switch (uniforms.indirectStages.data[uniforms.tevStages.data[i].indirectStage].texMap)
+                {
+                    case 0:
+                    {
+                        _2397 = true;
+                        _2398 = tex0.sample(samp0, _4343);
+                        break;
+                    }
+                    case 1:
+                    {
+                        _2397 = true;
+                        _2398 = tex1.sample(samp1, _4343);
+                        break;
+                    }
+                    case 2:
+                    {
+                        _2397 = true;
+                        _2398 = tex2.sample(samp2, _4343);
+                        break;
+                    }
+                    case 3:
+                    {
+                        _2397 = true;
+                        _2398 = tex3.sample(samp3, _4343);
+                        break;
+                    }
+                    case 4:
+                    {
+                        _2397 = true;
+                        _2398 = tex4.sample(samp4, _4343);
+                        break;
+                    }
+                    case 5:
+                    {
+                        _2397 = true;
+                        _2398 = tex5.sample(samp5, _4343);
+                        break;
+                    }
+                    case 6:
+                    {
+                        _2397 = true;
+                        _2398 = tex6.sample(samp6, _4343);
+                        break;
+                    }
+                    case 7:
+                    {
+                        _2397 = true;
+                        _2398 = tex7.sample(samp7, _4343);
+                        break;
+                    }
+                    default:
+                    {
+                        break;
+                    }
+                }
+                if (_2397)
+                {
+                    break;
+                }
+                _2397 = true;
+                _2398 = float4(1.0);
+                break;
+            } while(false);
+            _2125 = floor((_2398.wzy * 255.0) + float3(0.5));
+        }
+        else
+        {
+            _2125 = float3(0.0);
+        }
+        if (_2150)
+        {
+            _2124 = uniforms.tevStages.data[i].indirectAlpha != 0;
+        }
+        else
+        {
+            _2124 = false;
+        }
+        if (_2124)
+        {
+            float3 _2126 = _2125;
+            if (uniforms.tevStages.data[i].indirectFormat == 0)
+            {
+                _2127 = 0.0;
+            }
+            else
+            {
+                _2127 = 6.0 - float(uniforms.tevStages.data[i].indirectFormat);
+            }
+            float _2187 = _2126[uniforms.tevStages.data[i].indirectAlpha - 1] * exp2(_2127);
+            bumpAlpha = floor((_2187 - (256.0 * floor(_2187 * 0.00390625))) * 0.125) * 0.0313725508749485015869140625;
+        }
+        do
+        {
+            if (uniforms.tevStages.data[i].indirectFormat == 0)
+            {
+                _2463 = _2125;
+                break;
+            }
+            if (uniforms.tevStages.data[i].indirectFormat == 1)
+            {
+                _2463 = floor(_2125 * float3(0.125));
+                break;
+            }
+            if (uniforms.tevStages.data[i].indirectFormat == 2)
+            {
+                _2463 = floor(_2125 * float3(0.0625));
+                break;
+            }
+            _2463 = floor(_2125 * float3(0.03125));
+            break;
+        } while(false);
+        float3 _2487 = _2463;
+        if (uniforms.tevStages.data[i].indirectFormat == 0)
+        {
+            _2488 = -128.0;
+        }
+        else
+        {
+            _2488 = 1.0;
+        }
+        if ((uniforms.tevStages.data[i].indirectBias & 1) != 0)
+        {
+            float3 _4349 = _2487;
+            _4349.x = _4349.x + _2488;
+            _2487 = _4349;
+        }
+        if ((uniforms.tevStages.data[i].indirectBias & 2) != 0)
+        {
+            float3 _4352 = _2487;
+            _4352.y = _4352.y + _2488;
+            _2487 = _4352;
+        }
+        if ((uniforms.tevStages.data[i].indirectBias & 4) != 0)
+        {
+            float3 _4355 = _2487;
+            _4355.z = _4355.z + _2488;
+            _2487 = _4355;
+        }
+        if (_2150)
+        {
+            do
+            {
+                if (uniforms.tevStages.data[i].indirectMatrix == 0)
+                {
+                    _2521 = float2(0.0);
+                    break;
+                }
+                if (uniforms.tevStages.data[i].indirectMatrix >= 1)
+                {
+                    _2522 = uniforms.tevStages.data[i].indirectMatrix <= 3;
+                }
+                else
+                {
+                    _2522 = false;
+                }
+                if (_2522)
+                {
+                    int _2536 = uniforms.tevStages.data[i].indirectMatrix - 1;
+                    do
+                    {
+                        if (_2536 == 0)
+                        {
+                            if (false)
+                            {
+                                _2587 = uniforms.indirectMatrix0B;
+                            }
+                            else
+                            {
+                                _2587 = uniforms.indirectMatrix0A;
+                            }
+                            _2586 = _2587;
+                            break;
+                        }
+                        if (_2536 == 1)
+                        {
+                            if (false)
+                            {
+                                _2587 = uniforms.indirectMatrix1B;
+                            }
+                            else
+                            {
+                                _2587 = uniforms.indirectMatrix1A;
+                            }
+                            _2586 = _2587;
+                            break;
+                        }
+                        if (false)
+                        {
+                            _2587 = uniforms.indirectMatrix2B;
+                        }
+                        else
+                        {
+                            _2587 = uniforms.indirectMatrix2A;
+                        }
+                        _2586 = _2587;
+                        break;
+                    } while(false);
+                    do
+                    {
+                        if (_2536 == 0)
+                        {
+                            if (true)
+                            {
+                                _2625 = uniforms.indirectMatrix0B;
+                            }
+                            else
+                            {
+                                _2625 = uniforms.indirectMatrix0A;
+                            }
+                            _2624 = _2625;
+                            break;
+                        }
+                        if (_2536 == 1)
+                        {
+                            if (true)
+                            {
+                                _2625 = uniforms.indirectMatrix1B;
+                            }
+                            else
+                            {
+                                _2625 = uniforms.indirectMatrix1A;
+                            }
+                            _2624 = _2625;
+                            break;
+                        }
+                        if (true)
+                        {
+                            _2625 = uniforms.indirectMatrix2B;
+                        }
+                        else
+                        {
+                            _2625 = uniforms.indirectMatrix2A;
+                        }
+                        _2624 = _2625;
+                        break;
+                    } while(false);
+                    _2521 = (float2(dot(_2586.xyz, _2487), dot(_2624.xyz, _2487)) * exp2(_2586.w)) * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].zw;
+                    break;
+                }
+                if (uniforms.tevStages.data[i].indirectMatrix >= 5)
+                {
+                    _2522 = uniforms.tevStages.data[i].indirectMatrix <= 7;
+                }
+                else
+                {
+                    _2522 = false;
+                }
+                if (_2522)
+                {
+                    int _2556 = uniforms.tevStages.data[i].indirectMatrix - 5;
+                    do
+                    {
+                        if (_2556 == 0)
+                        {
+                            if (false)
+                            {
+                                _2663 = uniforms.indirectMatrix0B;
+                            }
+                            else
+                            {
+                                _2663 = uniforms.indirectMatrix0A;
+                            }
+                            _2662 = _2663;
+                            break;
+                        }
+                        if (_2556 == 1)
+                        {
+                            if (false)
+                            {
+                                _2663 = uniforms.indirectMatrix1B;
+                            }
+                            else
+                            {
+                                _2663 = uniforms.indirectMatrix1A;
+                            }
+                            _2662 = _2663;
+                            break;
+                        }
+                        if (false)
+                        {
+                            _2663 = uniforms.indirectMatrix2B;
+                        }
+                        else
+                        {
+                            _2663 = uniforms.indirectMatrix2A;
+                        }
+                        _2662 = _2663;
+                        break;
+                    } while(false);
+                    _2521 = ((_2123 * _2487.x) * exp2(_2662.w)) * float2(0.00390625);
+                    break;
+                }
+                if (uniforms.tevStages.data[i].indirectMatrix >= 9)
+                {
+                    _2522 = uniforms.tevStages.data[i].indirectMatrix <= 11;
+                }
+                else
+                {
+                    _2522 = false;
+                }
+                if (_2522)
+                {
+                    int _2573 = uniforms.tevStages.data[i].indirectMatrix - 9;
+                    do
+                    {
+                        if (_2573 == 0)
+                        {
+                            if (false)
+                            {
+                                _2701 = uniforms.indirectMatrix0B;
+                            }
+                            else
+                            {
+                                _2701 = uniforms.indirectMatrix0A;
+                            }
+                            _2700 = _2701;
+                            break;
+                        }
+                        if (_2573 == 1)
+                        {
+                            if (false)
+                            {
+                                _2701 = uniforms.indirectMatrix1B;
+                            }
+                            else
+                            {
+                                _2701 = uniforms.indirectMatrix1A;
+                            }
+                            _2700 = _2701;
+                            break;
+                        }
+                        if (false)
+                        {
+                            _2701 = uniforms.indirectMatrix2B;
+                        }
+                        else
+                        {
+                            _2701 = uniforms.indirectMatrix2A;
+                        }
+                        _2700 = _2701;
+                        break;
+                    } while(false);
+                    _2521 = ((_2123 * _2487.y) * exp2(_2700.w)) * float2(0.00390625);
+                    break;
+                }
+                _2521 = float2(0.0);
+                break;
+            } while(false);
+            _2128 = _2521;
+        }
+        else
+        {
+            _2128 = float2(0.0);
+        }
+        _2737 = false;
+        do
+        {
+            switch (uniforms.tevStages.data[i].indirectWrapS)
+            {
+                case 0:
+                {
+                    _2737 = true;
+                    _2738 = _2123.x;
+                    break;
+                }
+                case 1:
+                {
+                    float _2756 = 256.0 * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].z;
+                    _2737 = true;
+                    _2738 = _2123.x - (_2756 * floor(_2123.x / _2756));
+                    break;
+                }
+                case 2:
+                {
+                    float _2753 = 128.0 * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].z;
+                    _2737 = true;
+                    _2738 = _2123.x - (_2753 * floor(_2123.x / _2753));
+                    break;
+                }
+                case 3:
+                {
+                    float _2750 = 64.0 * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].z;
+                    _2737 = true;
+                    _2738 = _2123.x - (_2750 * floor(_2123.x / _2750));
+                    break;
+                }
+                case 4:
+                {
+                    float _2747 = 32.0 * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].z;
+                    _2737 = true;
+                    _2738 = _2123.x - (_2747 * floor(_2123.x / _2747));
+                    break;
+                }
+                case 5:
+                {
+                    float _2744 = 16.0 * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].z;
+                    _2737 = true;
+                    _2738 = _2123.x - (_2744 * floor(_2123.x / _2744));
+                    break;
+                }
+                case 6:
+                {
+                    _2737 = true;
+                    _2738 = 0.0;
+                    break;
+                }
+                default:
+                {
+                    break;
+                }
+            }
+            if (_2737)
+            {
+                break;
+            }
+            _2737 = true;
+            _2738 = _2123.x;
+            break;
+        } while(false);
+        float2 _4358 = _2129;
+        _4358.x = _2738;
+        _2129 = _4358;
+        _2795 = false;
+        do
+        {
+            switch (uniforms.tevStages.data[i].indirectWrapT)
+            {
+                case 0:
+                {
+                    _2795 = true;
+                    _2796 = _2123.y;
+                    break;
+                }
+                case 1:
+                {
+                    float _2814 = 256.0 * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].w;
+                    _2795 = true;
+                    _2796 = _2123.y - (_2814 * floor(_2123.y / _2814));
+                    break;
+                }
+                case 2:
+                {
+                    float _2811 = 128.0 * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].w;
+                    _2795 = true;
+                    _2796 = _2123.y - (_2811 * floor(_2123.y / _2811));
+                    break;
+                }
+                case 3:
+                {
+                    float _2808 = 64.0 * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].w;
+                    _2795 = true;
+                    _2796 = _2123.y - (_2808 * floor(_2123.y / _2808));
+                    break;
+                }
+                case 4:
+                {
+                    float _2805 = 32.0 * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].w;
+                    _2795 = true;
+                    _2796 = _2123.y - (_2805 * floor(_2123.y / _2805));
+                    break;
+                }
+                case 5:
+                {
+                    float _2802 = 16.0 * uniforms.textureSizes.data[uniforms.tevStages.data[i].texMap].w;
+                    _2795 = true;
+                    _2796 = _2123.y - (_2802 * floor(_2123.y / _2802));
+                    break;
+                }
+                case 6:
+                {
+                    _2795 = true;
+                    _2796 = 0.0;
+                    break;
+                }
+                default:
+                {
+                    break;
+                }
+            }
+            if (_2795)
+            {
+                break;
+            }
+            _2795 = true;
+            _2796 = _2123.y;
+            break;
+        } while(false);
+        float2 _4360 = _2129;
+        _4360.y = _2796;
+        _2129 = _4360 + _2128;
+        if (uniforms.tevStages.data[i].indirectAddPrevious != 0)
+        {
+            _2129 += indirectCoord;
+        }
+        indirectCoord = _2129;
+        _2853 = false;
         do
         {
             switch (uniforms.tevStages.data[i].colorChannel)
             {
                 case 0:
                 {
-                    _1511 = true;
-                    _1512 = in.input_color0;
+                    _2853 = true;
+                    _2854 = in.input_color0;
                     break;
                 }
                 case 1:
                 {
-                    _1511 = true;
-                    _1512 = in.input_color1;
+                    _2853 = true;
+                    _2854 = in.input_color1;
+                    break;
+                }
+                case 5:
+                {
+                    _2853 = true;
+                    _2854 = float4(bumpAlpha);
+                    break;
+                }
+                case 6:
+                {
+                    _2853 = true;
+                    _2854 = float4(((bumpAlpha * 255.0) + floor(bumpAlpha * 7.96875)) * 0.0039215688593685626983642578125);
                     break;
                 }
                 default:
                 {
-                    _1511 = true;
-                    _1512 = float4(0.0);
+                    _2853 = true;
+                    _2854 = float4(0.0);
                     break;
                 }
             }
-            if (_1511)
+            if (_2853)
             {
                 break;
             }
             break;
         } while(false);
-        _1538 = false;
+        _2889 = false;
         do
         {
             switch (uniforms.tevStages.data[i].rasterSwap)
             {
                 case 0:
                 {
-                    _1538 = true;
-                    _1539 = int4(uniforms.swapTable0);
+                    _2889 = true;
+                    _2890 = int4(uniforms.swapTable0);
                     break;
                 }
                 case 1:
                 {
-                    _1538 = true;
-                    _1539 = int4(uniforms.swapTable1);
+                    _2889 = true;
+                    _2890 = int4(uniforms.swapTable1);
                     break;
                 }
                 case 2:
                 {
-                    _1538 = true;
-                    _1539 = int4(uniforms.swapTable2);
+                    _2889 = true;
+                    _2890 = int4(uniforms.swapTable2);
                     break;
                 }
                 case 3:
                 {
-                    _1538 = true;
-                    _1539 = int4(uniforms.swapTable3);
+                    _2889 = true;
+                    _2890 = int4(uniforms.swapTable3);
                     break;
                 }
                 default:
@@ -339,41 +1081,41 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1538)
+            if (_2889)
             {
                 break;
             }
-            _1538 = true;
-            _1539 = int4(0, 1, 2, 3);
+            _2889 = true;
+            _2890 = int4(0, 1, 2, 3);
             break;
         } while(false);
-        _1565 = false;
+        _2916 = false;
         do
         {
-            switch (_1539.x)
+            switch (_2890.x)
             {
                 case 0:
                 {
-                    _1565 = true;
-                    _1566 = _1512.x;
+                    _2916 = true;
+                    _2917 = _2854.x;
                     break;
                 }
                 case 1:
                 {
-                    _1565 = true;
-                    _1566 = _1512.y;
+                    _2916 = true;
+                    _2917 = _2854.y;
                     break;
                 }
                 case 2:
                 {
-                    _1565 = true;
-                    _1566 = _1512.z;
+                    _2916 = true;
+                    _2917 = _2854.z;
                     break;
                 }
                 case 3:
                 {
-                    _1565 = true;
-                    _1566 = _1512.w;
+                    _2916 = true;
+                    _2917 = _2854.w;
                     break;
                 }
                 default:
@@ -381,41 +1123,41 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1565)
+            if (_2916)
             {
                 break;
             }
-            _1565 = true;
-            _1566 = 0.0;
+            _2916 = true;
+            _2917 = 0.0;
             break;
         } while(false);
-        _1584 = false;
+        _2935 = false;
         do
         {
-            switch (_1539.y)
+            switch (_2890.y)
             {
                 case 0:
                 {
-                    _1584 = true;
-                    _1585 = _1512.x;
+                    _2935 = true;
+                    _2936 = _2854.x;
                     break;
                 }
                 case 1:
                 {
-                    _1584 = true;
-                    _1585 = _1512.y;
+                    _2935 = true;
+                    _2936 = _2854.y;
                     break;
                 }
                 case 2:
                 {
-                    _1584 = true;
-                    _1585 = _1512.z;
+                    _2935 = true;
+                    _2936 = _2854.z;
                     break;
                 }
                 case 3:
                 {
-                    _1584 = true;
-                    _1585 = _1512.w;
+                    _2935 = true;
+                    _2936 = _2854.w;
                     break;
                 }
                 default:
@@ -423,41 +1165,41 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1584)
+            if (_2935)
             {
                 break;
             }
-            _1584 = true;
-            _1585 = 0.0;
+            _2935 = true;
+            _2936 = 0.0;
             break;
         } while(false);
-        _1603 = false;
+        _2954 = false;
         do
         {
-            switch (_1539.z)
+            switch (_2890.z)
             {
                 case 0:
                 {
-                    _1603 = true;
-                    _1604 = _1512.x;
+                    _2954 = true;
+                    _2955 = _2854.x;
                     break;
                 }
                 case 1:
                 {
-                    _1603 = true;
-                    _1604 = _1512.y;
+                    _2954 = true;
+                    _2955 = _2854.y;
                     break;
                 }
                 case 2:
                 {
-                    _1603 = true;
-                    _1604 = _1512.z;
+                    _2954 = true;
+                    _2955 = _2854.z;
                     break;
                 }
                 case 3:
                 {
-                    _1603 = true;
-                    _1604 = _1512.w;
+                    _2954 = true;
+                    _2955 = _2854.w;
                     break;
                 }
                 default:
@@ -465,41 +1207,41 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1603)
+            if (_2954)
             {
                 break;
             }
-            _1603 = true;
-            _1604 = 0.0;
+            _2954 = true;
+            _2955 = 0.0;
             break;
         } while(false);
-        _1622 = false;
+        _2973 = false;
         do
         {
-            switch (_1539.w)
+            switch (_2890.w)
             {
                 case 0:
                 {
-                    _1622 = true;
-                    _1623 = _1512.x;
+                    _2973 = true;
+                    _2974 = _2854.x;
                     break;
                 }
                 case 1:
                 {
-                    _1622 = true;
-                    _1623 = _1512.y;
+                    _2973 = true;
+                    _2974 = _2854.y;
                     break;
                 }
                 case 2:
                 {
-                    _1622 = true;
-                    _1623 = _1512.z;
+                    _2973 = true;
+                    _2974 = _2854.z;
                     break;
                 }
                 case 3:
                 {
-                    _1622 = true;
-                    _1623 = _1512.w;
+                    _2973 = true;
+                    _2974 = _2854.w;
                     break;
                 }
                 default:
@@ -507,42 +1249,191 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1622)
+            if (_2973)
             {
                 break;
             }
-            _1622 = true;
-            _1623 = 0.0;
+            _2973 = true;
+            _2974 = 0.0;
             break;
         } while(false);
-        float4 _1537 = float4(_1566, _1585, _1604, _1623);
-        _1653 = false;
+        float4 _2888 = float4(_2917, _2936, _2955, _2974);
+        if (uniforms.tevStages.data[i].textureEnabled != 0)
+        {
+            if (uniforms.tevStages.data[i].indirectUseOriginalLod != 0)
+            {
+                float2 _3053 = dfdx(_2123);
+                float2 _3056 = dfdy(_2123);
+                _3057 = false;
+                do
+                {
+                    switch (uniforms.tevStages.data[i].texMap)
+                    {
+                        case 0:
+                        {
+                            _3057 = true;
+                            _3058 = tex0.sample(samp0, _2129, gradient2d(_3053, _3056));
+                            break;
+                        }
+                        case 1:
+                        {
+                            _3057 = true;
+                            _3058 = tex1.sample(samp1, _2129, gradient2d(_3053, _3056));
+                            break;
+                        }
+                        case 2:
+                        {
+                            _3057 = true;
+                            _3058 = tex2.sample(samp2, _2129, gradient2d(_3053, _3056));
+                            break;
+                        }
+                        case 3:
+                        {
+                            _3057 = true;
+                            _3058 = tex3.sample(samp3, _2129, gradient2d(_3053, _3056));
+                            break;
+                        }
+                        case 4:
+                        {
+                            _3057 = true;
+                            _3058 = tex4.sample(samp4, _2129, gradient2d(_3053, _3056));
+                            break;
+                        }
+                        case 5:
+                        {
+                            _3057 = true;
+                            _3058 = tex5.sample(samp5, _2129, gradient2d(_3053, _3056));
+                            break;
+                        }
+                        case 6:
+                        {
+                            _3057 = true;
+                            _3058 = tex6.sample(samp6, _2129, gradient2d(_3053, _3056));
+                            break;
+                        }
+                        case 7:
+                        {
+                            _3057 = true;
+                            _3058 = tex7.sample(samp7, _2129, gradient2d(_3053, _3056));
+                            break;
+                        }
+                        default:
+                        {
+                            break;
+                        }
+                    }
+                    if (_3057)
+                    {
+                        break;
+                    }
+                    _3057 = true;
+                    _3058 = float4(1.0);
+                    break;
+                } while(false);
+                _2130 = _3058;
+            }
+            else
+            {
+                _2992 = false;
+                do
+                {
+                    switch (uniforms.tevStages.data[i].texMap)
+                    {
+                        case 0:
+                        {
+                            _2992 = true;
+                            _2993 = tex0.sample(samp0, _2129);
+                            break;
+                        }
+                        case 1:
+                        {
+                            _2992 = true;
+                            _2993 = tex1.sample(samp1, _2129);
+                            break;
+                        }
+                        case 2:
+                        {
+                            _2992 = true;
+                            _2993 = tex2.sample(samp2, _2129);
+                            break;
+                        }
+                        case 3:
+                        {
+                            _2992 = true;
+                            _2993 = tex3.sample(samp3, _2129);
+                            break;
+                        }
+                        case 4:
+                        {
+                            _2992 = true;
+                            _2993 = tex4.sample(samp4, _2129);
+                            break;
+                        }
+                        case 5:
+                        {
+                            _2992 = true;
+                            _2993 = tex5.sample(samp5, _2129);
+                            break;
+                        }
+                        case 6:
+                        {
+                            _2992 = true;
+                            _2993 = tex6.sample(samp6, _2129);
+                            break;
+                        }
+                        case 7:
+                        {
+                            _2992 = true;
+                            _2993 = tex7.sample(samp7, _2129);
+                            break;
+                        }
+                        default:
+                        {
+                            break;
+                        }
+                    }
+                    if (_2992)
+                    {
+                        break;
+                    }
+                    _2992 = true;
+                    _2993 = float4(1.0);
+                    break;
+                } while(false);
+                _2130 = _2993;
+            }
+        }
+        else
+        {
+            _2130 = float4(1.0);
+        }
+        _3128 = false;
         do
         {
             switch (uniforms.tevStages.data[i].textureSwap)
             {
                 case 0:
                 {
-                    _1653 = true;
-                    _1654 = int4(uniforms.swapTable0);
+                    _3128 = true;
+                    _3129 = int4(uniforms.swapTable0);
                     break;
                 }
                 case 1:
                 {
-                    _1653 = true;
-                    _1654 = int4(uniforms.swapTable1);
+                    _3128 = true;
+                    _3129 = int4(uniforms.swapTable1);
                     break;
                 }
                 case 2:
                 {
-                    _1653 = true;
-                    _1654 = int4(uniforms.swapTable2);
+                    _3128 = true;
+                    _3129 = int4(uniforms.swapTable2);
                     break;
                 }
                 case 3:
                 {
-                    _1653 = true;
-                    _1654 = int4(uniforms.swapTable3);
+                    _3128 = true;
+                    _3129 = int4(uniforms.swapTable3);
                     break;
                 }
                 default:
@@ -550,41 +1441,41 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1653)
+            if (_3128)
             {
                 break;
             }
-            _1653 = true;
-            _1654 = int4(0, 1, 2, 3);
+            _3128 = true;
+            _3129 = int4(0, 1, 2, 3);
             break;
         } while(false);
-        _1680 = false;
+        _3155 = false;
         do
         {
-            switch (_1654.x)
+            switch (_3129.x)
             {
                 case 0:
                 {
-                    _1680 = true;
-                    _1681 = 1.0;
+                    _3155 = true;
+                    _3156 = _2130.x;
                     break;
                 }
                 case 1:
                 {
-                    _1680 = true;
-                    _1681 = 1.0;
+                    _3155 = true;
+                    _3156 = _2130.y;
                     break;
                 }
                 case 2:
                 {
-                    _1680 = true;
-                    _1681 = 1.0;
+                    _3155 = true;
+                    _3156 = _2130.z;
                     break;
                 }
                 case 3:
                 {
-                    _1680 = true;
-                    _1681 = 1.0;
+                    _3155 = true;
+                    _3156 = _2130.w;
                     break;
                 }
                 default:
@@ -592,41 +1483,41 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1680)
+            if (_3155)
             {
                 break;
             }
-            _1680 = true;
-            _1681 = 0.0;
+            _3155 = true;
+            _3156 = 0.0;
             break;
         } while(false);
-        _1699 = false;
+        _3174 = false;
         do
         {
-            switch (_1654.y)
+            switch (_3129.y)
             {
                 case 0:
                 {
-                    _1699 = true;
-                    _1700 = 1.0;
+                    _3174 = true;
+                    _3175 = _2130.x;
                     break;
                 }
                 case 1:
                 {
-                    _1699 = true;
-                    _1700 = 1.0;
+                    _3174 = true;
+                    _3175 = _2130.y;
                     break;
                 }
                 case 2:
                 {
-                    _1699 = true;
-                    _1700 = 1.0;
+                    _3174 = true;
+                    _3175 = _2130.z;
                     break;
                 }
                 case 3:
                 {
-                    _1699 = true;
-                    _1700 = 1.0;
+                    _3174 = true;
+                    _3175 = _2130.w;
                     break;
                 }
                 default:
@@ -634,41 +1525,41 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1699)
+            if (_3174)
             {
                 break;
             }
-            _1699 = true;
-            _1700 = 0.0;
+            _3174 = true;
+            _3175 = 0.0;
             break;
         } while(false);
-        _1718 = false;
+        _3193 = false;
         do
         {
-            switch (_1654.z)
+            switch (_3129.z)
             {
                 case 0:
                 {
-                    _1718 = true;
-                    _1719 = 1.0;
+                    _3193 = true;
+                    _3194 = _2130.x;
                     break;
                 }
                 case 1:
                 {
-                    _1718 = true;
-                    _1719 = 1.0;
+                    _3193 = true;
+                    _3194 = _2130.y;
                     break;
                 }
                 case 2:
                 {
-                    _1718 = true;
-                    _1719 = 1.0;
+                    _3193 = true;
+                    _3194 = _2130.z;
                     break;
                 }
                 case 3:
                 {
-                    _1718 = true;
-                    _1719 = 1.0;
+                    _3193 = true;
+                    _3194 = _2130.w;
                     break;
                 }
                 default:
@@ -676,41 +1567,41 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1718)
+            if (_3193)
             {
                 break;
             }
-            _1718 = true;
-            _1719 = 0.0;
+            _3193 = true;
+            _3194 = 0.0;
             break;
         } while(false);
-        _1737 = false;
+        _3212 = false;
         do
         {
-            switch (_1654.w)
+            switch (_3129.w)
             {
                 case 0:
                 {
-                    _1737 = true;
-                    _1738 = 1.0;
+                    _3212 = true;
+                    _3213 = _2130.x;
                     break;
                 }
                 case 1:
                 {
-                    _1737 = true;
-                    _1738 = 1.0;
+                    _3212 = true;
+                    _3213 = _2130.y;
                     break;
                 }
                 case 2:
                 {
-                    _1737 = true;
-                    _1738 = 1.0;
+                    _3212 = true;
+                    _3213 = _2130.z;
                     break;
                 }
                 case 3:
                 {
-                    _1737 = true;
-                    _1738 = 1.0;
+                    _3212 = true;
+                    _3213 = _2130.w;
                     break;
                 }
                 default:
@@ -718,205 +1609,66 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1737)
+            if (_3212)
             {
                 break;
             }
-            _1737 = true;
-            _1738 = 0.0;
+            _3212 = true;
+            _3213 = 0.0;
             break;
         } while(false);
-        if (uniforms.tevStages.data[i].textureEnabled != 0)
-        {
-            _1756 = false;
-            do
-            {
-                switch (uniforms.tevStages.data[i].texCoord)
-                {
-                    case 0:
-                    {
-                        _1756 = true;
-                        _1757 = in.input_uv0;
-                        break;
-                    }
-                    case 1:
-                    {
-                        _1756 = true;
-                        _1757 = in.input_uv1;
-                        break;
-                    }
-                    case 2:
-                    {
-                        _1756 = true;
-                        _1757 = in.input_uv2;
-                        break;
-                    }
-                    case 3:
-                    {
-                        _1756 = true;
-                        _1757 = in.input_uv3;
-                        break;
-                    }
-                    case 4:
-                    {
-                        _1756 = true;
-                        _1757 = in.input_uv4;
-                        break;
-                    }
-                    case 5:
-                    {
-                        _1756 = true;
-                        _1757 = in.input_uv5;
-                        break;
-                    }
-                    case 6:
-                    {
-                        _1756 = true;
-                        _1757 = in.input_uv6;
-                        break;
-                    }
-                    case 7:
-                    {
-                        _1756 = true;
-                        _1757 = in.input_uv7;
-                        break;
-                    }
-                    default:
-                    {
-                        break;
-                    }
-                }
-                if (_1756)
-                {
-                    break;
-                }
-                _1756 = true;
-                _1757 = float2(0.0);
-                break;
-            } while(false);
-            _1783 = false;
-            do
-            {
-                switch (uniforms.tevStages.data[i].texMap)
-                {
-                    case 0:
-                    {
-                        _1783 = true;
-                        _1784 = tex0.sample(samp0, _1757);
-                        break;
-                    }
-                    case 1:
-                    {
-                        _1783 = true;
-                        _1784 = tex1.sample(samp1, _1757);
-                        break;
-                    }
-                    case 2:
-                    {
-                        _1783 = true;
-                        _1784 = tex2.sample(samp2, _1757);
-                        break;
-                    }
-                    case 3:
-                    {
-                        _1783 = true;
-                        _1784 = tex3.sample(samp3, _1757);
-                        break;
-                    }
-                    case 4:
-                    {
-                        _1783 = true;
-                        _1784 = tex4.sample(samp4, _1757);
-                        break;
-                    }
-                    case 5:
-                    {
-                        _1783 = true;
-                        _1784 = tex5.sample(samp5, _1757);
-                        break;
-                    }
-                    case 6:
-                    {
-                        _1783 = true;
-                        _1784 = tex6.sample(samp6, _1757);
-                        break;
-                    }
-                    case 7:
-                    {
-                        _1783 = true;
-                        _1784 = tex7.sample(samp7, _1757);
-                        break;
-                    }
-                    default:
-                    {
-                        break;
-                    }
-                }
-                if (_1783)
-                {
-                    break;
-                }
-                _1783 = true;
-                _1784 = float4(1.0);
-                break;
-            } while(false);
-            _1452 = _1784;
-        }
-        else
-        {
-            _1452 = float4(_1681, _1700, _1719, _1738);
-        }
-        _1842 = false;
+        float4 _3127 = float4(_3156, _3175, _3194, _3213);
+        _3231 = false;
         do
         {
             switch (uniforms.tevStages.data[i].konstColorSel)
             {
                 case 0:
                 {
-                    _1842 = true;
-                    _1843 = float3(1.0);
+                    _3231 = true;
+                    _3232 = float3(1.0);
                     break;
                 }
                 case 1:
                 {
-                    _1842 = true;
-                    _1843 = float3(0.875);
+                    _3231 = true;
+                    _3232 = float3(0.875);
                     break;
                 }
                 case 2:
                 {
-                    _1842 = true;
-                    _1843 = float3(0.75);
+                    _3231 = true;
+                    _3232 = float3(0.75);
                     break;
                 }
                 case 3:
                 {
-                    _1842 = true;
-                    _1843 = float3(0.625);
+                    _3231 = true;
+                    _3232 = float3(0.625);
                     break;
                 }
                 case 4:
                 {
-                    _1842 = true;
-                    _1843 = float3(0.5);
+                    _3231 = true;
+                    _3232 = float3(0.5);
                     break;
                 }
                 case 5:
                 {
-                    _1842 = true;
-                    _1843 = float3(0.375);
+                    _3231 = true;
+                    _3232 = float3(0.375);
                     break;
                 }
                 case 6:
                 {
-                    _1842 = true;
-                    _1843 = float3(0.25);
+                    _3231 = true;
+                    _3232 = float3(0.25);
                     break;
                 }
                 case 7:
                 {
-                    _1842 = true;
-                    _1843 = float3(0.125);
+                    _3231 = true;
+                    _3232 = float3(0.125);
                     break;
                 }
                 case 8:
@@ -924,32 +1676,32 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                 case 10:
                 case 11:
                 {
-                    _1842 = true;
-                    _1843 = float3(0.0);
+                    _3231 = true;
+                    _3232 = float3(0.0);
                     break;
                 }
                 case 12:
                 {
-                    _1842 = true;
-                    _1843 = uniforms.konst0.xyz;
+                    _3231 = true;
+                    _3232 = uniforms.konst0.xyz;
                     break;
                 }
                 case 13:
                 {
-                    _1842 = true;
-                    _1843 = uniforms.konst1.xyz;
+                    _3231 = true;
+                    _3232 = uniforms.konst1.xyz;
                     break;
                 }
                 case 14:
                 {
-                    _1842 = true;
-                    _1843 = uniforms.konst2.xyz;
+                    _3231 = true;
+                    _3232 = uniforms.konst2.xyz;
                     break;
                 }
                 case 15:
                 {
-                    _1842 = true;
-                    _1843 = uniforms.konst3.xyz;
+                    _3231 = true;
+                    _3232 = uniforms.konst3.xyz;
                     break;
                 }
                 default:
@@ -957,38 +1709,38 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1842)
+            if (_3231)
             {
                 break;
             }
-            int _1877 = uniforms.tevStages.data[i].konstColorSel - 16;
-            _1894 = false;
+            int _3266 = uniforms.tevStages.data[i].konstColorSel - 16;
+            _3283 = false;
             do
             {
-                switch (_1877 - 4 * (_1877 / 4))
+                switch (_3266 - 4 * (_3266 / 4))
                 {
                     case 0:
                     {
-                        _1894 = true;
-                        _1895 = uniforms.konst0;
+                        _3283 = true;
+                        _3284 = uniforms.konst0;
                         break;
                     }
                     case 1:
                     {
-                        _1894 = true;
-                        _1895 = uniforms.konst1;
+                        _3283 = true;
+                        _3284 = uniforms.konst1;
                         break;
                     }
                     case 2:
                     {
-                        _1894 = true;
-                        _1895 = uniforms.konst2;
+                        _3283 = true;
+                        _3284 = uniforms.konst2;
                         break;
                     }
                     case 3:
                     {
-                        _1894 = true;
-                        _1895 = uniforms.konst3;
+                        _3283 = true;
+                        _3284 = uniforms.konst3;
                         break;
                     }
                     default:
@@ -996,92 +1748,92 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                         break;
                     }
                 }
-                if (_1894)
+                if (_3283)
                 {
                     break;
                 }
-                _1894 = true;
-                _1895 = float4(0.0);
+                _3283 = true;
+                _3284 = float4(0.0);
                 break;
             } while(false);
-            switch (_1877 / 4)
+            switch (_3266 / 4)
             {
                 case 0:
                 {
-                    _1844 = _1895.x;
+                    _3233 = _3284.x;
                     break;
                 }
                 case 1:
                 {
-                    _1844 = _1895.y;
+                    _3233 = _3284.y;
                     break;
                 }
                 case 2:
                 {
-                    _1844 = _1895.z;
+                    _3233 = _3284.z;
                     break;
                 }
                 default:
                 {
-                    _1844 = _1895.w;
+                    _3233 = _3284.w;
                     break;
                 }
             }
-            _1842 = true;
-            _1843 = float3(_1844);
+            _3231 = true;
+            _3232 = float3(_3233);
             break;
         } while(false);
-        _1917 = false;
+        _3306 = false;
         do
         {
             switch (uniforms.tevStages.data[i].konstAlphaSel)
             {
                 case 0:
                 {
-                    _1917 = true;
-                    _1918 = 1.0;
+                    _3306 = true;
+                    _3307 = 1.0;
                     break;
                 }
                 case 1:
                 {
-                    _1917 = true;
-                    _1918 = 0.875;
+                    _3306 = true;
+                    _3307 = 0.875;
                     break;
                 }
                 case 2:
                 {
-                    _1917 = true;
-                    _1918 = 0.75;
+                    _3306 = true;
+                    _3307 = 0.75;
                     break;
                 }
                 case 3:
                 {
-                    _1917 = true;
-                    _1918 = 0.625;
+                    _3306 = true;
+                    _3307 = 0.625;
                     break;
                 }
                 case 4:
                 {
-                    _1917 = true;
-                    _1918 = 0.5;
+                    _3306 = true;
+                    _3307 = 0.5;
                     break;
                 }
                 case 5:
                 {
-                    _1917 = true;
-                    _1918 = 0.375;
+                    _3306 = true;
+                    _3307 = 0.375;
                     break;
                 }
                 case 6:
                 {
-                    _1917 = true;
-                    _1918 = 0.25;
+                    _3306 = true;
+                    _3307 = 0.25;
                     break;
                 }
                 case 7:
                 {
-                    _1917 = true;
-                    _1918 = 0.125;
+                    _3306 = true;
+                    _3307 = 0.125;
                     break;
                 }
                 case 8:
@@ -1093,8 +1845,8 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                 case 14:
                 case 15:
                 {
-                    _1917 = true;
-                    _1918 = 0.0;
+                    _3306 = true;
+                    _3307 = 0.0;
                     break;
                 }
                 default:
@@ -1102,38 +1854,38 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1917)
+            if (_3306)
             {
                 break;
             }
-            int _1935 = uniforms.tevStages.data[i].konstAlphaSel - 16;
-            _1952 = false;
+            int _3324 = uniforms.tevStages.data[i].konstAlphaSel - 16;
+            _3341 = false;
             do
             {
-                switch (_1935 - 4 * (_1935 / 4))
+                switch (_3324 - 4 * (_3324 / 4))
                 {
                     case 0:
                     {
-                        _1952 = true;
-                        _1953 = uniforms.konst0;
+                        _3341 = true;
+                        _3342 = uniforms.konst0;
                         break;
                     }
                     case 1:
                     {
-                        _1952 = true;
-                        _1953 = uniforms.konst1;
+                        _3341 = true;
+                        _3342 = uniforms.konst1;
                         break;
                     }
                     case 2:
                     {
-                        _1952 = true;
-                        _1953 = uniforms.konst2;
+                        _3341 = true;
+                        _3342 = uniforms.konst2;
                         break;
                     }
                     case 3:
                     {
-                        _1952 = true;
-                        _1953 = uniforms.konst3;
+                        _3341 = true;
+                        _3342 = uniforms.konst3;
                         break;
                     }
                     default:
@@ -1141,146 +1893,146 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                         break;
                     }
                 }
-                if (_1952)
+                if (_3341)
                 {
                     break;
                 }
-                _1952 = true;
-                _1953 = float4(0.0);
+                _3341 = true;
+                _3342 = float4(0.0);
                 break;
             } while(false);
-            switch (_1935 / 4)
+            switch (_3324 / 4)
             {
                 case 0:
                 {
-                    _1917 = true;
-                    _1918 = _1953.x;
+                    _3306 = true;
+                    _3307 = _3342.x;
                     break;
                 }
                 case 1:
                 {
-                    _1917 = true;
-                    _1918 = _1953.y;
+                    _3306 = true;
+                    _3307 = _3342.y;
                     break;
                 }
                 case 2:
                 {
-                    _1917 = true;
-                    _1918 = _1953.z;
+                    _3306 = true;
+                    _3307 = _3342.z;
                     break;
                 }
                 default:
                 {
-                    _1917 = true;
-                    _1918 = _1953.w;
+                    _3306 = true;
+                    _3307 = _3342.w;
                     break;
                 }
             }
-            if (_1917)
+            if (_3306)
             {
                 break;
             }
             break;
         } while(false);
-        _1975 = false;
+        _3364 = false;
         do
         {
             switch (uniforms.tevStages.data[i].colorA)
             {
                 case 0:
                 {
-                    _1975 = true;
-                    _1976 = _2857.xyz;
+                    _3364 = true;
+                    _3365 = _4286.xyz;
                     break;
                 }
                 case 1:
                 {
-                    _1975 = true;
-                    _1976 = _2857.www;
+                    _3364 = true;
+                    _3365 = _4286.www;
                     break;
                 }
                 case 2:
                 {
-                    _1975 = true;
-                    _1976 = _2858.xyz;
+                    _3364 = true;
+                    _3365 = _4287.xyz;
                     break;
                 }
                 case 3:
                 {
-                    _1975 = true;
-                    _1976 = _2858.www;
+                    _3364 = true;
+                    _3365 = _4287.www;
                     break;
                 }
                 case 4:
                 {
-                    _1975 = true;
-                    _1976 = _2859.xyz;
+                    _3364 = true;
+                    _3365 = _4288.xyz;
                     break;
                 }
                 case 5:
                 {
-                    _1975 = true;
-                    _1976 = _2859.www;
+                    _3364 = true;
+                    _3365 = _4288.www;
                     break;
                 }
                 case 6:
                 {
-                    _1975 = true;
-                    _1976 = _2860.xyz;
+                    _3364 = true;
+                    _3365 = _4289.xyz;
                     break;
                 }
                 case 7:
                 {
-                    _1975 = true;
-                    _1976 = _2860.www;
+                    _3364 = true;
+                    _3365 = _4289.www;
                     break;
                 }
                 case 8:
                 {
-                    _1975 = true;
-                    _1976 = _1452.xyz;
+                    _3364 = true;
+                    _3365 = _3127.xyz;
                     break;
                 }
                 case 9:
                 {
-                    _1975 = true;
-                    _1976 = _1452.www;
+                    _3364 = true;
+                    _3365 = _3127.www;
                     break;
                 }
                 case 10:
                 {
-                    _1975 = true;
-                    _1976 = _1537.xyz;
+                    _3364 = true;
+                    _3365 = _2888.xyz;
                     break;
                 }
                 case 11:
                 {
-                    _1975 = true;
-                    _1976 = _1537.www;
+                    _3364 = true;
+                    _3365 = _2888.www;
                     break;
                 }
                 case 12:
                 {
-                    _1975 = true;
-                    _1976 = float3(1.0);
+                    _3364 = true;
+                    _3365 = float3(1.0);
                     break;
                 }
                 case 13:
                 {
-                    _1975 = true;
-                    _1976 = float3(0.5);
+                    _3364 = true;
+                    _3365 = float3(0.5);
                     break;
                 }
                 case 14:
                 {
-                    _1975 = true;
-                    _1976 = _1843;
+                    _3364 = true;
+                    _3365 = _3232;
                     break;
                 }
                 case 15:
                 {
-                    _1975 = true;
-                    _1976 = float3(0.0);
+                    _3364 = true;
+                    _3365 = float3(0.0);
                     break;
                 }
                 default:
@@ -1288,113 +2040,113 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_1975)
+            if (_3364)
             {
                 break;
             }
-            _1975 = true;
-            _1976 = float3(0.0);
+            _3364 = true;
+            _3365 = float3(0.0);
             break;
         } while(false);
-        _2022 = false;
+        _3411 = false;
         do
         {
             switch (uniforms.tevStages.data[i].colorB)
             {
                 case 0:
                 {
-                    _2022 = true;
-                    _2023 = _2857.xyz;
+                    _3411 = true;
+                    _3412 = _4286.xyz;
                     break;
                 }
                 case 1:
                 {
-                    _2022 = true;
-                    _2023 = _2857.www;
+                    _3411 = true;
+                    _3412 = _4286.www;
                     break;
                 }
                 case 2:
                 {
-                    _2022 = true;
-                    _2023 = _2858.xyz;
+                    _3411 = true;
+                    _3412 = _4287.xyz;
                     break;
                 }
                 case 3:
                 {
-                    _2022 = true;
-                    _2023 = _2858.www;
+                    _3411 = true;
+                    _3412 = _4287.www;
                     break;
                 }
                 case 4:
                 {
-                    _2022 = true;
-                    _2023 = _2859.xyz;
+                    _3411 = true;
+                    _3412 = _4288.xyz;
                     break;
                 }
                 case 5:
                 {
-                    _2022 = true;
-                    _2023 = _2859.www;
+                    _3411 = true;
+                    _3412 = _4288.www;
                     break;
                 }
                 case 6:
                 {
-                    _2022 = true;
-                    _2023 = _2860.xyz;
+                    _3411 = true;
+                    _3412 = _4289.xyz;
                     break;
                 }
                 case 7:
                 {
-                    _2022 = true;
-                    _2023 = _2860.www;
+                    _3411 = true;
+                    _3412 = _4289.www;
                     break;
                 }
                 case 8:
                 {
-                    _2022 = true;
-                    _2023 = _1452.xyz;
+                    _3411 = true;
+                    _3412 = _3127.xyz;
                     break;
                 }
                 case 9:
                 {
-                    _2022 = true;
-                    _2023 = _1452.www;
+                    _3411 = true;
+                    _3412 = _3127.www;
                     break;
                 }
                 case 10:
                 {
-                    _2022 = true;
-                    _2023 = _1537.xyz;
+                    _3411 = true;
+                    _3412 = _2888.xyz;
                     break;
                 }
                 case 11:
                 {
-                    _2022 = true;
-                    _2023 = _1537.www;
+                    _3411 = true;
+                    _3412 = _2888.www;
                     break;
                 }
                 case 12:
                 {
-                    _2022 = true;
-                    _2023 = float3(1.0);
+                    _3411 = true;
+                    _3412 = float3(1.0);
                     break;
                 }
                 case 13:
                 {
-                    _2022 = true;
-                    _2023 = float3(0.5);
+                    _3411 = true;
+                    _3412 = float3(0.5);
                     break;
                 }
                 case 14:
                 {
-                    _2022 = true;
-                    _2023 = _1843;
+                    _3411 = true;
+                    _3412 = _3232;
                     break;
                 }
                 case 15:
                 {
-                    _2022 = true;
-                    _2023 = float3(0.0);
+                    _3411 = true;
+                    _3412 = float3(0.0);
                     break;
                 }
                 default:
@@ -1402,113 +2154,113 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_2022)
+            if (_3411)
             {
                 break;
             }
-            _2022 = true;
-            _2023 = float3(0.0);
+            _3411 = true;
+            _3412 = float3(0.0);
             break;
         } while(false);
-        _2069 = false;
+        _3458 = false;
         do
         {
             switch (uniforms.tevStages.data[i].colorC)
             {
                 case 0:
                 {
-                    _2069 = true;
-                    _2070 = _2857.xyz;
+                    _3458 = true;
+                    _3459 = _4286.xyz;
                     break;
                 }
                 case 1:
                 {
-                    _2069 = true;
-                    _2070 = _2857.www;
+                    _3458 = true;
+                    _3459 = _4286.www;
                     break;
                 }
                 case 2:
                 {
-                    _2069 = true;
-                    _2070 = _2858.xyz;
+                    _3458 = true;
+                    _3459 = _4287.xyz;
                     break;
                 }
                 case 3:
                 {
-                    _2069 = true;
-                    _2070 = _2858.www;
+                    _3458 = true;
+                    _3459 = _4287.www;
                     break;
                 }
                 case 4:
                 {
-                    _2069 = true;
-                    _2070 = _2859.xyz;
+                    _3458 = true;
+                    _3459 = _4288.xyz;
                     break;
                 }
                 case 5:
                 {
-                    _2069 = true;
-                    _2070 = _2859.www;
+                    _3458 = true;
+                    _3459 = _4288.www;
                     break;
                 }
                 case 6:
                 {
-                    _2069 = true;
-                    _2070 = _2860.xyz;
+                    _3458 = true;
+                    _3459 = _4289.xyz;
                     break;
                 }
                 case 7:
                 {
-                    _2069 = true;
-                    _2070 = _2860.www;
+                    _3458 = true;
+                    _3459 = _4289.www;
                     break;
                 }
                 case 8:
                 {
-                    _2069 = true;
-                    _2070 = _1452.xyz;
+                    _3458 = true;
+                    _3459 = _3127.xyz;
                     break;
                 }
                 case 9:
                 {
-                    _2069 = true;
-                    _2070 = _1452.www;
+                    _3458 = true;
+                    _3459 = _3127.www;
                     break;
                 }
                 case 10:
                 {
-                    _2069 = true;
-                    _2070 = _1537.xyz;
+                    _3458 = true;
+                    _3459 = _2888.xyz;
                     break;
                 }
                 case 11:
                 {
-                    _2069 = true;
-                    _2070 = _1537.www;
+                    _3458 = true;
+                    _3459 = _2888.www;
                     break;
                 }
                 case 12:
                 {
-                    _2069 = true;
-                    _2070 = float3(1.0);
+                    _3458 = true;
+                    _3459 = float3(1.0);
                     break;
                 }
                 case 13:
                 {
-                    _2069 = true;
-                    _2070 = float3(0.5);
+                    _3458 = true;
+                    _3459 = float3(0.5);
                     break;
                 }
                 case 14:
                 {
-                    _2069 = true;
-                    _2070 = _1843;
+                    _3458 = true;
+                    _3459 = _3232;
                     break;
                 }
                 case 15:
                 {
-                    _2069 = true;
-                    _2070 = float3(0.0);
+                    _3458 = true;
+                    _3459 = float3(0.0);
                     break;
                 }
                 default:
@@ -1516,113 +2268,113 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_2069)
+            if (_3458)
             {
                 break;
             }
-            _2069 = true;
-            _2070 = float3(0.0);
+            _3458 = true;
+            _3459 = float3(0.0);
             break;
         } while(false);
-        _2116 = false;
+        _3505 = false;
         do
         {
             switch (uniforms.tevStages.data[i].colorD)
             {
                 case 0:
                 {
-                    _2116 = true;
-                    _2117 = _2857.xyz;
+                    _3505 = true;
+                    _3506 = _4286.xyz;
                     break;
                 }
                 case 1:
                 {
-                    _2116 = true;
-                    _2117 = _2857.www;
+                    _3505 = true;
+                    _3506 = _4286.www;
                     break;
                 }
                 case 2:
                 {
-                    _2116 = true;
-                    _2117 = _2858.xyz;
+                    _3505 = true;
+                    _3506 = _4287.xyz;
                     break;
                 }
                 case 3:
                 {
-                    _2116 = true;
-                    _2117 = _2858.www;
+                    _3505 = true;
+                    _3506 = _4287.www;
                     break;
                 }
                 case 4:
                 {
-                    _2116 = true;
-                    _2117 = _2859.xyz;
+                    _3505 = true;
+                    _3506 = _4288.xyz;
                     break;
                 }
                 case 5:
                 {
-                    _2116 = true;
-                    _2117 = _2859.www;
+                    _3505 = true;
+                    _3506 = _4288.www;
                     break;
                 }
                 case 6:
                 {
-                    _2116 = true;
-                    _2117 = _2860.xyz;
+                    _3505 = true;
+                    _3506 = _4289.xyz;
                     break;
                 }
                 case 7:
                 {
-                    _2116 = true;
-                    _2117 = _2860.www;
+                    _3505 = true;
+                    _3506 = _4289.www;
                     break;
                 }
                 case 8:
                 {
-                    _2116 = true;
-                    _2117 = _1452.xyz;
+                    _3505 = true;
+                    _3506 = _3127.xyz;
                     break;
                 }
                 case 9:
                 {
-                    _2116 = true;
-                    _2117 = _1452.www;
+                    _3505 = true;
+                    _3506 = _3127.www;
                     break;
                 }
                 case 10:
                 {
-                    _2116 = true;
-                    _2117 = _1537.xyz;
+                    _3505 = true;
+                    _3506 = _2888.xyz;
                     break;
                 }
                 case 11:
                 {
-                    _2116 = true;
-                    _2117 = _1537.www;
+                    _3505 = true;
+                    _3506 = _2888.www;
                     break;
                 }
                 case 12:
                 {
-                    _2116 = true;
-                    _2117 = float3(1.0);
+                    _3505 = true;
+                    _3506 = float3(1.0);
                     break;
                 }
                 case 13:
                 {
-                    _2116 = true;
-                    _2117 = float3(0.5);
+                    _3505 = true;
+                    _3506 = float3(0.5);
                     break;
                 }
                 case 14:
                 {
-                    _2116 = true;
-                    _2117 = _1843;
+                    _3505 = true;
+                    _3506 = _3232;
                     break;
                 }
                 case 15:
                 {
-                    _2116 = true;
-                    _2117 = float3(0.0);
+                    _3505 = true;
+                    _3506 = float3(0.0);
                     break;
                 }
                 default:
@@ -1630,65 +2382,65 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_2116)
+            if (_3505)
             {
                 break;
             }
-            _2116 = true;
-            _2117 = float3(0.0);
+            _3505 = true;
+            _3506 = float3(0.0);
             break;
         } while(false);
-        _2163 = false;
+        _3552 = false;
         do
         {
             switch (uniforms.tevStages.data[i].alphaA)
             {
                 case 0:
                 {
-                    _2163 = true;
-                    _2164 = _2857.w;
+                    _3552 = true;
+                    _3553 = _4286.w;
                     break;
                 }
                 case 1:
                 {
-                    _2163 = true;
-                    _2164 = _2858.w;
+                    _3552 = true;
+                    _3553 = _4287.w;
                     break;
                 }
                 case 2:
                 {
-                    _2163 = true;
-                    _2164 = _2859.w;
+                    _3552 = true;
+                    _3553 = _4288.w;
                     break;
                 }
                 case 3:
                 {
-                    _2163 = true;
-                    _2164 = _2860.w;
+                    _3552 = true;
+                    _3553 = _4289.w;
                     break;
                 }
                 case 4:
                 {
-                    _2163 = true;
-                    _2164 = _1452.w;
+                    _3552 = true;
+                    _3553 = _3127.w;
                     break;
                 }
                 case 5:
                 {
-                    _2163 = true;
-                    _2164 = _1537.w;
+                    _3552 = true;
+                    _3553 = _2888.w;
                     break;
                 }
                 case 6:
                 {
-                    _2163 = true;
-                    _2164 = _1918;
+                    _3552 = true;
+                    _3553 = _3307;
                     break;
                 }
                 case 7:
                 {
-                    _2163 = true;
-                    _2164 = 0.0;
+                    _3552 = true;
+                    _3553 = 0.0;
                     break;
                 }
                 default:
@@ -1696,65 +2448,65 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_2163)
+            if (_3552)
             {
                 break;
             }
-            _2163 = true;
-            _2164 = 0.0;
+            _3552 = true;
+            _3553 = 0.0;
             break;
         } while(false);
-        _2192 = false;
+        _3581 = false;
         do
         {
             switch (uniforms.tevStages.data[i].alphaB)
             {
                 case 0:
                 {
-                    _2192 = true;
-                    _2193 = _2857.w;
+                    _3581 = true;
+                    _3582 = _4286.w;
                     break;
                 }
                 case 1:
                 {
-                    _2192 = true;
-                    _2193 = _2858.w;
+                    _3581 = true;
+                    _3582 = _4287.w;
                     break;
                 }
                 case 2:
                 {
-                    _2192 = true;
-                    _2193 = _2859.w;
+                    _3581 = true;
+                    _3582 = _4288.w;
                     break;
                 }
                 case 3:
                 {
-                    _2192 = true;
-                    _2193 = _2860.w;
+                    _3581 = true;
+                    _3582 = _4289.w;
                     break;
                 }
                 case 4:
                 {
-                    _2192 = true;
-                    _2193 = _1452.w;
+                    _3581 = true;
+                    _3582 = _3127.w;
                     break;
                 }
                 case 5:
                 {
-                    _2192 = true;
-                    _2193 = _1537.w;
+                    _3581 = true;
+                    _3582 = _2888.w;
                     break;
                 }
                 case 6:
                 {
-                    _2192 = true;
-                    _2193 = _1918;
+                    _3581 = true;
+                    _3582 = _3307;
                     break;
                 }
                 case 7:
                 {
-                    _2192 = true;
-                    _2193 = 0.0;
+                    _3581 = true;
+                    _3582 = 0.0;
                     break;
                 }
                 default:
@@ -1762,65 +2514,65 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_2192)
+            if (_3581)
             {
                 break;
             }
-            _2192 = true;
-            _2193 = 0.0;
+            _3581 = true;
+            _3582 = 0.0;
             break;
         } while(false);
-        _2221 = false;
+        _3610 = false;
         do
         {
             switch (uniforms.tevStages.data[i].alphaC)
             {
                 case 0:
                 {
-                    _2221 = true;
-                    _2222 = _2857.w;
+                    _3610 = true;
+                    _3611 = _4286.w;
                     break;
                 }
                 case 1:
                 {
-                    _2221 = true;
-                    _2222 = _2858.w;
+                    _3610 = true;
+                    _3611 = _4287.w;
                     break;
                 }
                 case 2:
                 {
-                    _2221 = true;
-                    _2222 = _2859.w;
+                    _3610 = true;
+                    _3611 = _4288.w;
                     break;
                 }
                 case 3:
                 {
-                    _2221 = true;
-                    _2222 = _2860.w;
+                    _3610 = true;
+                    _3611 = _4289.w;
                     break;
                 }
                 case 4:
                 {
-                    _2221 = true;
-                    _2222 = _1452.w;
+                    _3610 = true;
+                    _3611 = _3127.w;
                     break;
                 }
                 case 5:
                 {
-                    _2221 = true;
-                    _2222 = _1537.w;
+                    _3610 = true;
+                    _3611 = _2888.w;
                     break;
                 }
                 case 6:
                 {
-                    _2221 = true;
-                    _2222 = _1918;
+                    _3610 = true;
+                    _3611 = _3307;
                     break;
                 }
                 case 7:
                 {
-                    _2221 = true;
-                    _2222 = 0.0;
+                    _3610 = true;
+                    _3611 = 0.0;
                     break;
                 }
                 default:
@@ -1828,65 +2580,65 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_2221)
+            if (_3610)
             {
                 break;
             }
-            _2221 = true;
-            _2222 = 0.0;
+            _3610 = true;
+            _3611 = 0.0;
             break;
         } while(false);
-        _2250 = false;
+        _3639 = false;
         do
         {
             switch (uniforms.tevStages.data[i].alphaD)
             {
                 case 0:
                 {
-                    _2250 = true;
-                    _2251 = _2857.w;
+                    _3639 = true;
+                    _3640 = _4286.w;
                     break;
                 }
                 case 1:
                 {
-                    _2250 = true;
-                    _2251 = _2858.w;
+                    _3639 = true;
+                    _3640 = _4287.w;
                     break;
                 }
                 case 2:
                 {
-                    _2250 = true;
-                    _2251 = _2859.w;
+                    _3639 = true;
+                    _3640 = _4288.w;
                     break;
                 }
                 case 3:
                 {
-                    _2250 = true;
-                    _2251 = _2860.w;
+                    _3639 = true;
+                    _3640 = _4289.w;
                     break;
                 }
                 case 4:
                 {
-                    _2250 = true;
-                    _2251 = _1452.w;
+                    _3639 = true;
+                    _3640 = _3127.w;
                     break;
                 }
                 case 5:
                 {
-                    _2250 = true;
-                    _2251 = _1537.w;
+                    _3639 = true;
+                    _3640 = _2888.w;
                     break;
                 }
                 case 6:
                 {
-                    _2250 = true;
-                    _2251 = _1918;
+                    _3639 = true;
+                    _3640 = _3307;
                     break;
                 }
                 case 7:
                 {
-                    _2250 = true;
-                    _2251 = 0.0;
+                    _3639 = true;
+                    _3640 = 0.0;
                     break;
                 }
                 default:
@@ -1894,12 +2646,12 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_2250)
+            if (_3639)
             {
                 break;
             }
-            _2250 = true;
-            _2251 = 0.0;
+            _3639 = true;
+            _3640 = 0.0;
             break;
         } while(false);
         do
@@ -1908,173 +2660,173 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
             {
                 if (uniforms.tevStages.data[i].colorScale == 3)
                 {
-                    uint _2419 = uint(round(fast::clamp(_1976.x, 0.0, 1.0) * 255.0));
-                    uint _2425 = uint(round(fast::clamp(_1976.y, 0.0, 1.0) * 255.0));
-                    uint _2431 = uint(round(fast::clamp(_1976.z, 0.0, 1.0) * 255.0));
-                    uint _2437 = uint(round(fast::clamp(_2023.x, 0.0, 1.0) * 255.0));
-                    uint _2443 = uint(round(fast::clamp(_2023.y, 0.0, 1.0) * 255.0));
-                    uint _2449 = uint(round(fast::clamp(_2023.z, 0.0, 1.0) * 255.0));
+                    uint _3808 = uint(round(fast::clamp(_3365.x, 0.0, 1.0) * 255.0));
+                    uint _3814 = uint(round(fast::clamp(_3365.y, 0.0, 1.0) * 255.0));
+                    uint _3820 = uint(round(fast::clamp(_3365.z, 0.0, 1.0) * 255.0));
+                    uint _3826 = uint(round(fast::clamp(_3412.x, 0.0, 1.0) * 255.0));
+                    uint _3832 = uint(round(fast::clamp(_3412.y, 0.0, 1.0) * 255.0));
+                    uint _3838 = uint(round(fast::clamp(_3412.z, 0.0, 1.0) * 255.0));
                     if (uniforms.tevStages.data[i].colorOp != 0)
                     {
-                        if (_2419 == _2437)
+                        if (_3808 == _3826)
                         {
-                            _2282 = 1.0;
+                            _3671 = 1.0;
                         }
                         else
                         {
-                            _2282 = 0.0;
+                            _3671 = 0.0;
                         }
-                        if (_2425 == _2443)
+                        if (_3814 == _3832)
                         {
-                            _2283 = 1.0;
+                            _3672 = 1.0;
                         }
                         else
                         {
-                            _2283 = 0.0;
+                            _3672 = 0.0;
                         }
-                        if (_2431 == _2449)
+                        if (_3820 == _3838)
                         {
-                            _2284 = 1.0;
+                            _3673 = 1.0;
                         }
                         else
                         {
-                            _2284 = 0.0;
+                            _3673 = 0.0;
                         }
-                        _2281 = float3(_2282, _2283, _2284);
+                        _3670 = float3(_3671, _3672, _3673);
                     }
                     else
                     {
-                        if (_2419 > _2437)
+                        if (_3808 > _3826)
                         {
-                            _2282 = 1.0;
+                            _3671 = 1.0;
                         }
                         else
                         {
-                            _2282 = 0.0;
+                            _3671 = 0.0;
                         }
-                        if (_2425 > _2443)
+                        if (_3814 > _3832)
                         {
-                            _2283 = 1.0;
+                            _3672 = 1.0;
                         }
                         else
                         {
-                            _2283 = 0.0;
+                            _3672 = 0.0;
                         }
-                        if (_2431 > _2449)
+                        if (_3820 > _3838)
                         {
-                            _2284 = 1.0;
+                            _3673 = 1.0;
                         }
                         else
                         {
-                            _2284 = 0.0;
+                            _3673 = 0.0;
                         }
-                        _2281 = float3(_2282, _2283, _2284);
+                        _3670 = float3(_3671, _3672, _3673);
                     }
-                    float3 _2346 = _2117 + (_2070 * _2281);
+                    float3 _3735 = _3506 + (_3459 * _3670);
                     if (uniforms.tevStages.data[i].colorClamp != 0)
                     {
-                        _2285 = fast::clamp(_2346, float3(0.0), float3(1.0));
+                        _3674 = fast::clamp(_3735, float3(0.0), float3(1.0));
                     }
                     else
                     {
-                        _2285 = _2346;
+                        _3674 = _3735;
                     }
-                    _2280 = _2285;
+                    _3669 = _3674;
                     break;
                 }
                 do
                 {
-                    uint _2518 = uint(round(fast::clamp(_1976.x, 0.0, 1.0) * 255.0));
-                    uint _2524 = uint(round(fast::clamp(_1976.y, 0.0, 1.0) * 255.0));
-                    uint _2536 = uint(round(fast::clamp(_2023.x, 0.0, 1.0) * 255.0));
-                    uint _2542 = uint(round(fast::clamp(_2023.y, 0.0, 1.0) * 255.0));
-                    bool _2471 = uniforms.tevStages.data[i].colorOp != 0;
+                    uint _3907 = uint(round(fast::clamp(_3365.x, 0.0, 1.0) * 255.0));
+                    uint _3913 = uint(round(fast::clamp(_3365.y, 0.0, 1.0) * 255.0));
+                    uint _3925 = uint(round(fast::clamp(_3412.x, 0.0, 1.0) * 255.0));
+                    uint _3931 = uint(round(fast::clamp(_3412.y, 0.0, 1.0) * 255.0));
+                    bool _3860 = uniforms.tevStages.data[i].colorOp != 0;
                     if (uniforms.tevStages.data[i].colorScale == 0)
                     {
-                        if (_2471)
+                        if (_3860)
                         {
-                            _2455 = _2518 == _2536;
+                            _3844 = _3907 == _3925;
                         }
                         else
                         {
-                            _2455 = _2518 > _2536;
+                            _3844 = _3907 > _3925;
                         }
-                        _2454 = _2455;
+                        _3843 = _3844;
                         break;
                     }
                     if (uniforms.tevStages.data[i].colorScale == 1)
                     {
-                        uint _2484 = (_2524 << uint(8)) | _2518;
-                        uint _2486 = (_2542 << uint(8)) | _2536;
-                        if (_2471)
+                        uint _3873 = (_3913 << uint(8)) | _3907;
+                        uint _3875 = (_3931 << uint(8)) | _3925;
+                        if (_3860)
                         {
-                            _2455 = _2484 == _2486;
+                            _3844 = _3873 == _3875;
                         }
                         else
                         {
-                            _2455 = _2484 > _2486;
+                            _3844 = _3873 > _3875;
                         }
-                        _2454 = _2455;
+                        _3843 = _3844;
                         break;
                     }
                     if (uniforms.tevStages.data[i].colorScale == 2)
                     {
-                        uint _2499 = ((uint(round(fast::clamp(_1976.z, 0.0, 1.0) * 255.0)) << uint(16)) | (_2524 << uint(8))) | _2518;
-                        uint _2503 = ((uint(round(fast::clamp(_2023.z, 0.0, 1.0) * 255.0)) << uint(16)) | (_2542 << uint(8))) | _2536;
-                        if (_2471)
+                        uint _3888 = ((uint(round(fast::clamp(_3365.z, 0.0, 1.0) * 255.0)) << uint(16)) | (_3913 << uint(8))) | _3907;
+                        uint _3892 = ((uint(round(fast::clamp(_3412.z, 0.0, 1.0) * 255.0)) << uint(16)) | (_3931 << uint(8))) | _3925;
+                        if (_3860)
                         {
-                            _2455 = _2499 == _2503;
+                            _3844 = _3888 == _3892;
                         }
                         else
                         {
-                            _2455 = _2499 > _2503;
+                            _3844 = _3888 > _3892;
                         }
-                        _2454 = _2455;
+                        _3843 = _3844;
                         break;
                     }
-                    _2454 = false;
+                    _3843 = false;
                     break;
                 } while(false);
-                if (_2454)
+                if (_3843)
                 {
-                    _2281 = _2070;
+                    _3670 = _3459;
                 }
                 else
                 {
-                    _2281 = float3(0.0);
+                    _3670 = float3(0.0);
                 }
-                float3 _2360 = _2281;
-                float3 _2361 = _2117 + _2360;
+                float3 _3749 = _3670;
+                float3 _3750 = _3506 + _3749;
                 if (uniforms.tevStages.data[i].colorClamp != 0)
                 {
-                    _2281 = fast::clamp(_2361, float3(0.0), float3(1.0));
+                    _3670 = fast::clamp(_3750, float3(0.0), float3(1.0));
                 }
                 else
                 {
-                    _2281 = _2361;
+                    _3670 = _3750;
                 }
-                _2280 = _2281;
+                _3669 = _3670;
                 break;
             }
-            float3 _2374 = (_1976 * (float3(1.0) - _2070)) + (_2023 * _2070);
+            float3 _3763 = (_3365 * (float3(1.0) - _3459)) + (_3412 * _3459);
             if (uniforms.tevStages.data[i].colorOp == 0)
             {
-                _2281 = _2117 + _2374;
+                _3670 = _3506 + _3763;
             }
             else
             {
-                _2281 = _2117 - _2374;
+                _3670 = _3506 - _3763;
             }
             switch (uniforms.tevStages.data[i].colorBias)
             {
                 case 1:
                 {
-                    _2281 += float3(0.5);
+                    _3670 += float3(0.5);
                     break;
                 }
                 case 2:
                 {
-                    _2281 -= float3(0.5);
+                    _3670 -= float3(0.5);
                     break;
                 }
                 default:
@@ -2086,17 +2838,17 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
             {
                 case 1:
                 {
-                    _2281 *= 2.0;
+                    _3670 *= 2.0;
                     break;
                 }
                 case 2:
                 {
-                    _2281 *= 4.0;
+                    _3670 *= 4.0;
                     break;
                 }
                 case 3:
                 {
-                    _2281 *= 0.5;
+                    _3670 *= 0.5;
                     break;
                 }
                 default:
@@ -2106,65 +2858,65 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
             }
             if (uniforms.tevStages.data[i].colorClamp != 0)
             {
-                _2281 = fast::clamp(_2281, float3(0.0), float3(1.0));
+                _3670 = fast::clamp(_3670, float3(0.0), float3(1.0));
             }
-            _2280 = _2281;
+            _3669 = _3670;
             break;
         } while(false);
         do
         {
             if (uniforms.tevStages.data[i].alphaBias == 3)
             {
-                uint _2633 = uint(round(fast::clamp(_2164, 0.0, 1.0) * 255.0));
-                uint _2639 = uint(round(fast::clamp(_2193, 0.0, 1.0) * 255.0));
+                uint _4022 = uint(round(fast::clamp(_3553, 0.0, 1.0) * 255.0));
+                uint _4028 = uint(round(fast::clamp(_3582, 0.0, 1.0) * 255.0));
                 if (uniforms.tevStages.data[i].alphaOp != 0)
                 {
-                    _2558 = _2633 == _2639;
+                    _3947 = _4022 == _4028;
                 }
                 else
                 {
-                    _2558 = _2633 > _2639;
+                    _3947 = _4022 > _4028;
                 }
-                if (_2558)
+                if (_3947)
                 {
-                    _2557 = _2222;
+                    _3946 = _3611;
                 }
                 else
                 {
-                    _2557 = 0.0;
+                    _3946 = 0.0;
                 }
-                float _2578 = _2557;
-                float _2579 = _2251 + _2578;
+                float _3967 = _3946;
+                float _3968 = _3640 + _3967;
                 if (uniforms.tevStages.data[i].alphaClamp != 0)
                 {
-                    _2557 = fast::clamp(_2579, 0.0, 1.0);
+                    _3946 = fast::clamp(_3968, 0.0, 1.0);
                 }
                 else
                 {
-                    _2557 = _2579;
+                    _3946 = _3968;
                 }
-                _2556 = _2557;
+                _3945 = _3946;
                 break;
             }
-            float _2591 = (_2164 * (1.0 - _2222)) + (_2193 * _2222);
+            float _3980 = (_3553 * (1.0 - _3611)) + (_3582 * _3611);
             if (uniforms.tevStages.data[i].alphaOp == 0)
             {
-                _2557 = _2251 + _2591;
+                _3946 = _3640 + _3980;
             }
             else
             {
-                _2557 = _2251 - _2591;
+                _3946 = _3640 - _3980;
             }
             switch (uniforms.tevStages.data[i].alphaBias)
             {
                 case 1:
                 {
-                    _2557 += 0.5;
+                    _3946 += 0.5;
                     break;
                 }
                 case 2:
                 {
-                    _2557 -= 0.5;
+                    _3946 -= 0.5;
                     break;
                 }
                 default:
@@ -2176,17 +2928,17 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
             {
                 case 1:
                 {
-                    _2557 *= 2.0;
+                    _3946 *= 2.0;
                     break;
                 }
                 case 2:
                 {
-                    _2557 *= 4.0;
+                    _3946 *= 4.0;
                     break;
                 }
                 case 3:
                 {
-                    _2557 *= 0.5;
+                    _3946 *= 0.5;
                     break;
                 }
                 default:
@@ -2196,47 +2948,47 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
             }
             if (uniforms.tevStages.data[i].alphaClamp != 0)
             {
-                _2557 = fast::clamp(_2557, 0.0, 1.0);
+                _3946 = fast::clamp(_3946, 0.0, 1.0);
             }
-            _2556 = _2557;
+            _3945 = _3946;
             break;
         } while(false);
         switch (uniforms.tevStages.data[i].colorOutput)
         {
             case 0:
             {
-                float4 _2919 = _2857;
-                _2919.x = _2280.x;
-                _2919.y = _2280.y;
-                _2919.z = _2280.z;
-                _2857 = _2919;
+                float4 _4380 = _4286;
+                _4380.x = _3669.x;
+                _4380.y = _3669.y;
+                _4380.z = _3669.z;
+                _4286 = _4380;
                 break;
             }
             case 1:
             {
-                float4 _2913 = _2858;
-                _2913.x = _2280.x;
-                _2913.y = _2280.y;
-                _2913.z = _2280.z;
-                _2858 = _2913;
+                float4 _4374 = _4287;
+                _4374.x = _3669.x;
+                _4374.y = _3669.y;
+                _4374.z = _3669.z;
+                _4287 = _4374;
                 break;
             }
             case 2:
             {
-                float4 _2907 = _2859;
-                _2907.x = _2280.x;
-                _2907.y = _2280.y;
-                _2907.z = _2280.z;
-                _2859 = _2907;
+                float4 _4368 = _4288;
+                _4368.x = _3669.x;
+                _4368.y = _3669.y;
+                _4368.z = _3669.z;
+                _4288 = _4368;
                 break;
             }
             case 3:
             {
-                float4 _2901 = _2860;
-                _2901.x = _2280.x;
-                _2901.y = _2280.y;
-                _2901.z = _2280.z;
-                _2860 = _2901;
+                float4 _4362 = _4289;
+                _4362.x = _3669.x;
+                _4362.y = _3669.y;
+                _4362.z = _3669.z;
+                _4289 = _4362;
                 break;
             }
             default:
@@ -2248,30 +3000,30 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
         {
             case 0:
             {
-                float4 _2931 = _2857;
-                _2931.w = _2556;
-                _2857 = _2931;
+                float4 _4392 = _4286;
+                _4392.w = _3945;
+                _4286 = _4392;
                 break;
             }
             case 1:
             {
-                float4 _2929 = _2858;
-                _2929.w = _2556;
-                _2858 = _2929;
+                float4 _4390 = _4287;
+                _4390.w = _3945;
+                _4287 = _4390;
                 break;
             }
             case 2:
             {
-                float4 _2927 = _2859;
-                _2927.w = _2556;
-                _2859 = _2927;
+                float4 _4388 = _4288;
+                _4388.w = _3945;
+                _4288 = _4388;
                 break;
             }
             case 3:
             {
-                float4 _2925 = _2860;
-                _2925.w = _2556;
-                _2860 = _2925;
+                float4 _4386 = _4289;
+                _4386.w = _3945;
+                _4289 = _4386;
                 break;
             }
             default:
@@ -2282,62 +3034,62 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
         i++;
         continue;
     }
-    _2690 = false;
-    bool _2691;
+    _4079 = false;
+    bool _4080;
     do
     {
-        _2728 = false;
-        bool _2729;
+        _4117 = false;
+        bool _4118;
         do
         {
             switch (uniforms.alphaComp0)
             {
                 case 0:
                 {
-                    _2728 = true;
-                    _2729 = false;
+                    _4117 = true;
+                    _4118 = false;
                     break;
                 }
                 case 1:
                 {
-                    _2728 = true;
-                    _2729 = _2857.w < uniforms.alphaRef0;
+                    _4117 = true;
+                    _4118 = _4286.w < uniforms.alphaRef0;
                     break;
                 }
                 case 2:
                 {
-                    _2728 = true;
-                    _2729 = _2857.w == uniforms.alphaRef0;
+                    _4117 = true;
+                    _4118 = _4286.w == uniforms.alphaRef0;
                     break;
                 }
                 case 3:
                 {
-                    _2728 = true;
-                    _2729 = _2857.w <= uniforms.alphaRef0;
+                    _4117 = true;
+                    _4118 = _4286.w <= uniforms.alphaRef0;
                     break;
                 }
                 case 4:
                 {
-                    _2728 = true;
-                    _2729 = _2857.w > uniforms.alphaRef0;
+                    _4117 = true;
+                    _4118 = _4286.w > uniforms.alphaRef0;
                     break;
                 }
                 case 5:
                 {
-                    _2728 = true;
-                    _2729 = _2857.w != uniforms.alphaRef0;
+                    _4117 = true;
+                    _4118 = _4286.w != uniforms.alphaRef0;
                     break;
                 }
                 case 6:
                 {
-                    _2728 = true;
-                    _2729 = _2857.w >= uniforms.alphaRef0;
+                    _4117 = true;
+                    _4118 = _4286.w >= uniforms.alphaRef0;
                     break;
                 }
                 case 7:
                 {
-                    _2728 = true;
-                    _2729 = true;
+                    _4117 = true;
+                    _4118 = true;
                     break;
                 }
                 default:
@@ -2345,66 +3097,66 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_2728)
+            if (_4117)
             {
                 break;
             }
-            _2728 = true;
-            _2729 = true;
+            _4117 = true;
+            _4118 = true;
             break;
         } while(false);
-        _2753 = false;
-        bool _2754;
+        _4142 = false;
+        bool _4143;
         do
         {
             switch (uniforms.alphaComp1)
             {
                 case 0:
                 {
-                    _2753 = true;
-                    _2754 = false;
+                    _4142 = true;
+                    _4143 = false;
                     break;
                 }
                 case 1:
                 {
-                    _2753 = true;
-                    _2754 = _2857.w < uniforms.alphaRef1;
+                    _4142 = true;
+                    _4143 = _4286.w < uniforms.alphaRef1;
                     break;
                 }
                 case 2:
                 {
-                    _2753 = true;
-                    _2754 = _2857.w == uniforms.alphaRef1;
+                    _4142 = true;
+                    _4143 = _4286.w == uniforms.alphaRef1;
                     break;
                 }
                 case 3:
                 {
-                    _2753 = true;
-                    _2754 = _2857.w <= uniforms.alphaRef1;
+                    _4142 = true;
+                    _4143 = _4286.w <= uniforms.alphaRef1;
                     break;
                 }
                 case 4:
                 {
-                    _2753 = true;
-                    _2754 = _2857.w > uniforms.alphaRef1;
+                    _4142 = true;
+                    _4143 = _4286.w > uniforms.alphaRef1;
                     break;
                 }
                 case 5:
                 {
-                    _2753 = true;
-                    _2754 = _2857.w != uniforms.alphaRef1;
+                    _4142 = true;
+                    _4143 = _4286.w != uniforms.alphaRef1;
                     break;
                 }
                 case 6:
                 {
-                    _2753 = true;
-                    _2754 = _2857.w >= uniforms.alphaRef1;
+                    _4142 = true;
+                    _4143 = _4286.w >= uniforms.alphaRef1;
                     break;
                 }
                 case 7:
                 {
-                    _2753 = true;
-                    _2754 = true;
+                    _4142 = true;
+                    _4143 = true;
                     break;
                 }
                 default:
@@ -2412,55 +3164,55 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                     break;
                 }
             }
-            if (_2753)
+            if (_4142)
             {
                 break;
             }
-            _2753 = true;
-            _2754 = true;
+            _4142 = true;
+            _4143 = true;
             break;
         } while(false);
-        bool _2692;
+        bool _4081;
         switch (uniforms.alphaLogic)
         {
             case 0:
             {
-                if (_2729)
+                if (_4118)
                 {
-                    _2692 = _2754;
+                    _4081 = _4143;
                 }
                 else
                 {
-                    _2692 = false;
+                    _4081 = false;
                 }
-                _2690 = true;
-                _2691 = _2692;
+                _4079 = true;
+                _4080 = _4081;
                 break;
             }
             case 1:
             {
-                if (_2729)
+                if (_4118)
                 {
-                    _2692 = true;
+                    _4081 = true;
                 }
                 else
                 {
-                    _2692 = _2754;
+                    _4081 = _4143;
                 }
-                _2690 = true;
-                _2691 = _2692;
+                _4079 = true;
+                _4080 = _4081;
                 break;
             }
             case 2:
             {
-                _2690 = true;
-                _2691 = _2729 != _2754;
+                _4079 = true;
+                _4080 = _4118 != _4143;
                 break;
             }
             case 3:
             {
-                _2690 = true;
-                _2691 = _2729 == _2754;
+                _4079 = true;
+                _4080 = _4118 == _4143;
                 break;
             }
             default:
@@ -2468,19 +3220,19 @@ fragment main0_out main0(main0_in in [[stage_in]], constant Uniforms_std140& uni
                 break;
             }
         }
-        if (_2690)
+        if (_4079)
         {
             break;
         }
-        _2690 = true;
-        _2691 = true;
+        _4079 = true;
+        _4080 = true;
         break;
     } while(false);
-    if (!_2691)
+    if (!_4080)
     {
         discard_fragment();
     }
-    out.entryPointParam_fragmentMain = _2857;
+    out.entryPointParam_fragmentMain = _4286;
     return out;
 }
 

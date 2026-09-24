@@ -31,6 +31,13 @@ struct VertexOut {
     float3 uv7 : TEXCOORD7;
 };
 
+struct IndirectStage {
+    int texCoord;
+    int texMap;
+    int scaleS;
+    int scaleT;
+};
+
 struct TevStage {
     int texCoord;
     int texMap;
@@ -64,6 +71,18 @@ struct TevStage {
 
     int konstColorSel;
     int konstAlphaSel;
+
+    int indirectStage;
+    int indirectFormat;
+    int indirectBias;
+    int indirectAlpha;
+
+    int indirectMatrix;
+    int indirectWrapS;
+    int indirectWrapT;
+
+    int indirectUseOriginalLod;
+    int indirectAddPrevious;
 };
 
 struct Uniforms {
@@ -74,8 +93,8 @@ struct Uniforms {
 
     int alphaLogic;
     int tevStageCount;
+    int indirectStageCount;
     int pad0;
-    int pad1;
 
     float4 tevRegister0;
     float4 tevRegister1;
@@ -92,7 +111,19 @@ struct Uniforms {
     float4 swapTable2;
     float4 swapTable3;
 
+    float4 textureSizes[8];
+
     TevStage tevStages[16];
+    IndirectStage indirectStages[4];
+
+    float4 indirectMatrix0A;
+    float4 indirectMatrix0B;
+
+    float4 indirectMatrix1A;
+    float4 indirectMatrix1B;
+
+    float4 indirectMatrix2A;
+    float4 indirectMatrix2B;
 };
 
 struct TevRegisters {
@@ -202,6 +233,8 @@ bool compareTevColor(float3 A, float3 B, int scale, int op) {
     return false;
 }
 
+float indirectScale(int scale) { return exp2(-float(scale)); }
+
 int4 getSwapTable(int index) {
     switch (index) {
     case 0:
@@ -232,12 +265,19 @@ float getChannel(float4 value, int channel) {
     return 0.0;
 }
 
-float4 getRasterColor(int channel, VertexOut input) {
+float4 getRasterColor(int channel, VertexOut input, float bumpAlpha) {
     switch (channel) {
     case 0:
         return input.color0;
     case 1:
         return input.color1;
+    case 5:
+        return float4(bumpAlpha, bumpAlpha, bumpAlpha, bumpAlpha);
+    case 6:
+        float normalized = bumpAlpha * 255.0;
+        normalized += floor(normalized / 32.0);
+        normalized /= 255.0;
+        return float4(normalized, normalized, normalized, normalized);
     default:
         return float4(0.0, 0.0, 0.0, 0.0);
     }
@@ -307,6 +347,102 @@ bool alphaTest(float alpha) {
     return true;
 }
 
+float3 sampleIndirect(int stageIndex, VertexOut input) {
+    IndirectStage ind = uniforms.indirectStages[stageIndex];
+    float3 tc = getGXTexCoord(ind.texCoord, input);
+
+    float2 uv = tc.xy;
+
+    if (tc.z != 0.0)
+        uv /= tc.z;
+
+    uv.x *= indirectScale(ind.scaleS);
+    uv.y *= indirectScale(ind.scaleT);
+
+    float4 sample = sampleGXTexture(ind.texMap, uv);
+
+    return floor(sample.abg * 255.0 + 0.5);
+}
+
+float3 formatIndirect(float3 value, int format) {
+    if (format == 0)
+        return value;
+    if (format == 1)
+        return floor(value / 8.0);
+    if (format == 2)
+        return floor(value / 16.0);
+
+    return floor(value / 32.0);
+}
+
+float3 applyIndirectBias(float3 value, int biasMask, int format) {
+    float bias = format == 0 ? -128.0 : 1.0;
+    if ((biasMask & 1) != 0)
+        value.x += bias;
+    if ((biasMask & 2) != 0)
+        value.y += bias;
+    if ((biasMask & 4) != 0)
+        value.z += bias;
+
+    return value;
+}
+
+float4 getIndirectMatrixRow(int index, bool secondRow) {
+    if (index == 0)
+        return secondRow ? uniforms.indirectMatrix0B : uniforms.indirectMatrix0A;
+    if (index == 1)
+        return secondRow ? uniforms.indirectMatrix1B : uniforms.indirectMatrix1A;
+    return secondRow ? uniforms.indirectMatrix2B : uniforms.indirectMatrix2A;
+}
+
+float2 applyIndirectMatrix(float3 v, int matrix, float2 baseUV,
+                           float2 inverseTextureSize) {
+    if (matrix == 0)
+        return float2(0.0, 0.0);
+
+    if (matrix >= 1 && matrix <= 3) {
+        float4 a = getIndirectMatrixRow(matrix - 1, false);
+        float4 b = getIndirectMatrixRow(matrix - 1, true);
+        return float2(dot(a.xyz, v), dot(b.xyz, v)) * exp2(a.w) *
+               inverseTextureSize;
+    }
+
+    if (matrix >= 5 && matrix <= 7) {
+        float4 a = getIndirectMatrixRow(matrix - 5, false);
+        return baseUV * v.x * exp2(a.w) / 256.0;
+    }
+
+    if (matrix >= 9 && matrix <= 11) {
+        float4 a = getIndirectMatrixRow(matrix - 9, false);
+        return baseUV * v.y * exp2(a.w) / 256.0;
+    }
+
+    return float2(0.0, 0.0);
+}
+
+float positiveMod(float x, float y) { return x - y * floor(x / y); }
+
+float wrapIndirectCoord(float value, int wrapMode, float inverseTextureSize) {
+    switch (wrapMode) {
+    case 0:
+        return value;
+    case 1:
+        return positiveMod(value, 256.0 * inverseTextureSize);
+    case 2:
+        return positiveMod(value, 128.0 * inverseTextureSize);
+    case 3:
+        return positiveMod(value, 64.0 * inverseTextureSize);
+    case 4:
+        return positiveMod(value, 32.0 * inverseTextureSize);
+    case 5:
+        return positiveMod(value, 16.0 * inverseTextureSize);
+    case 6:
+        return 0.0;
+    }
+
+    return value;
+}
+
 float4 applySwap(float4 value, int tableIndex) {
     int4 table = getSwapTable(tableIndex);
 
@@ -332,6 +468,29 @@ float4 sampleGXTexture(int index, float2 uv) {
         return tex6.Sample(samp6, uv);
     case 7:
         return tex7.Sample(samp7, uv);
+    }
+
+    return float4(1.0, 1.0, 1.0, 1.0);
+}
+
+float4 sampleGXTextureGrad(int index, float2 uv, float2 dx, float2 dy) {
+    switch (index) {
+    case 0:
+        return tex0.SampleGrad(samp0, uv, dx, dy);
+    case 1:
+        return tex1.SampleGrad(samp1, uv, dx, dy);
+    case 2:
+        return tex2.SampleGrad(samp2, uv, dx, dy);
+    case 3:
+        return tex3.SampleGrad(samp3, uv, dx, dy);
+    case 4:
+        return tex4.SampleGrad(samp4, uv, dx, dy);
+    case 5:
+        return tex5.SampleGrad(samp5, uv, dx, dy);
+    case 6:
+        return tex6.SampleGrad(samp6, uv, dx, dy);
+    case 7:
+        return tex7.SampleGrad(samp7, uv, dx, dy);
     }
 
     return float4(1.0, 1.0, 1.0, 1.0);
@@ -695,24 +854,70 @@ void writeTevAlpha(int output, float value, inout TevRegisters regs) {
     return;
 }
 
-void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs) {
-    float4 ras = getRasterColor(stage.colorChannel, input);
+void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs,
+                     inout float2 previousIndirectCoord,
+                     inout float bumpAlpha) {
+    float3 baseCoord = getGXTexCoord(stage.texCoord, input);
+    float2 baseUV = baseCoord.xy;
+
+    if (baseCoord.z != 0.0)
+        baseUV /= baseCoord.z;
+
+    float4 textureSize = uniforms.textureSizes[stage.texMap];
+    float3 indirectSample = float3(0.0, 0.0, 0.0);
+    bool validIndirectStage =
+        stage.indirectStage < uniforms.indirectStageCount;
+
+    if (validIndirectStage &&
+        (stage.indirectMatrix != 0 || stage.indirectAlpha != 0)) {
+        indirectSample = sampleIndirect(stage.indirectStage, input);
+    }
+
+    if (validIndirectStage && stage.indirectAlpha != 0) {
+        float component = indirectSample[stage.indirectAlpha - 1];
+        float shift = stage.indirectFormat == 0
+                          ? 0.0
+                          : 6.0 - float(stage.indirectFormat);
+        bumpAlpha = positiveMod(component * exp2(shift), 256.0);
+        bumpAlpha = floor(bumpAlpha / 8.0) * 8.0 / 255.0;
+    }
+
+    float3 formattedIndirect =
+        formatIndirect(indirectSample, stage.indirectFormat);
+    formattedIndirect = applyIndirectBias(
+        formattedIndirect, stage.indirectBias, stage.indirectFormat);
+
+    float2 offset = float2(0.0, 0.0);
+    if (validIndirectStage) {
+        offset = applyIndirectMatrix(formattedIndirect, stage.indirectMatrix,
+                                     baseUV, textureSize.zw);
+    }
+
+    float2 finalUV;
+    finalUV.x =
+        wrapIndirectCoord(baseUV.x, stage.indirectWrapS, textureSize.z);
+    finalUV.y =
+        wrapIndirectCoord(baseUV.y, stage.indirectWrapT, textureSize.w);
+    finalUV += offset;
+
+    if (stage.indirectAddPrevious != 0)
+        finalUV += previousIndirectCoord;
+
+    previousIndirectCoord = finalUV;
+
+    float4 ras = getRasterColor(stage.colorChannel, input, bumpAlpha);
     ras = applySwap(ras, stage.rasterSwap);
 
     float4 tex = float4(1, 1, 1, 1);
-    tex = applySwap(tex, stage.textureSwap);
-
     if (stage.textureEnabled != 0) {
-        float3 coord = getGXTexCoord(stage.texCoord, input);
-
-        float2 uv = coord.xy;
-
-        if (coord.z != 0.0) {
-            uv /= coord.z;
+        if (stage.indirectUseOriginalLod != 0) {
+            tex = sampleGXTextureGrad(stage.texMap, finalUV, ddx(baseUV),
+                                      ddy(baseUV));
+        } else {
+            tex = sampleGXTexture(stage.texMap, finalUV);
         }
-
-        tex = sampleGXTexture(stage.texMap, uv);
     }
+    tex = applySwap(tex, stage.textureSwap);
 
     float3 konstColor = getKonstColor(stage.konstColorSel);
     float konstAlpha = getKonstAlpha(stage.konstAlphaSel);
@@ -742,8 +947,12 @@ float4 fragmentMain(VertexOut input) : SV_TARGET {
     registers.reg1 = uniforms.tevRegister2;
     registers.reg2 = uniforms.tevRegister3;
 
+    float2 indirectCoord = float2(0.0, 0.0);
+    float bumpAlpha = 0.0;
+
     for (int i = 0; i < uniforms.tevStageCount; i++) {
-        executeTevStage(uniforms.tevStages[i], input, registers);
+        executeTevStage(uniforms.tevStages[i], input, registers, indirectCoord,
+                        bumpAlpha);
     }
 
     float4 color = registers.prev;

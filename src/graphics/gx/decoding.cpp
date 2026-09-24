@@ -1200,6 +1200,20 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
         return;
     }
 
+    if (reg >= 0x06 && reg <= 0x0E) {
+        renderer->flushEFB();
+        decodeIndirectMatrixWord(reg, value);
+        return;
+    }
+
+    if (reg >= 0x10 && reg <= 0x1F) {
+        renderer->flushEFB();
+
+        decodeTevIndirect(reg - 0x10, value);
+
+        return;
+    }
+
     if (reg >= 0xC0 && reg <= 0xDF) {
         renderer->flushEFB();
 
@@ -1252,6 +1266,10 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
         state.bp.tevStageCount =
             static_cast<uint8_t>(((value >> 10) & 0xFu) + 1);
 
+        state.bp.indirectStageCount = static_cast<uint8_t>((value >> 16) & 0x7);
+        state.bp.indirectStageCount =
+            std::min<uint8_t>(state.bp.indirectStageCount, 4);
+
         renderer->setRasterState(state.bp.raster);
 
         break;
@@ -1276,6 +1294,15 @@ void GX::writeBP(uint8_t reg, uint32_t value) {
 
         break;
     }
+    case 0x25:
+    case 0x26:
+        renderer->flushEFB();
+        decodeIndirectScale(reg, value);
+        break;
+    case 0x27:
+        renderer->flushEFB();
+        decodeIndirectRef(value);
+        break;
     case 0x28:
     case 0x29:
     case 0x2A:

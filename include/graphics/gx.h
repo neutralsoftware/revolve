@@ -689,6 +689,35 @@ struct GXTevSwapTable {
     uint8_t a = 3;
 };
 
+struct GXIndirectStage {
+    uint8_t texCoord = 0;
+    uint8_t texMap = 0;
+
+    uint8_t scaleS = 0;
+    uint8_t scaleT = 0;
+};
+
+struct GXIndirectMatrix {
+    float m[2][3]{};
+
+    int8_t exponent = 0;
+};
+
+struct GXTevIndirect {
+    uint8_t stage = 0;
+    uint8_t format = 0;
+    uint8_t bias = 0;
+    uint8_t alphaSelect = 0;
+
+    uint8_t matrix = 0;
+
+    uint8_t wrapS = 0;
+    uint8_t wrapT = 0;
+
+    bool useOriginalLod = false;
+    bool addPrevious = false;
+};
+
 struct GXBPState {
     std::array<uint32_t, 256> registers{};
     GXBPCopyState copy{};
@@ -713,6 +742,11 @@ struct GXBPState {
     }};
 
     uint32_t writeMask = 0x00FFFFFF;
+
+    std::array<GXIndirectStage, 4> indirectStages{};
+    std::array<GXIndirectMatrix, 3> indirectMatrices{};
+    std::array<GXTevIndirect, 16> tevIndirect{};
+    uint8_t indirectStageCount = 0;
 };
 
 struct GXState {
@@ -819,6 +853,15 @@ static int16_t signExtend11(uint32_t value) {
 
 static float tevComponentToFloat(int16_t value) {
     return static_cast<float>(value) / 255.0f;
+}
+
+static int16_t signExtend11Indirect(uint32_t value) {
+    value &= 0x7FF;
+
+    if (value & 0x400)
+        value |= ~0x7FFu;
+
+    return static_cast<int16_t>(value);
 }
 } // namespace gx
 
@@ -1134,6 +1177,11 @@ class GX {
     void decodeTevRegister(uint8_t reg, uint32_t value);
 
     void decodeTevKSel(uint8_t reg, uint32_t value);
+
+    void decodeIndirectRef(uint32_t value);
+    void decodeIndirectScale(uint8_t reg, uint32_t value);
+    void decodeTevIndirect(uint32_t stage, uint32_t value);
+    void decodeIndirectMatrixWord(uint8_t reg, uint32_t value);
 
     GXFifoReader reader{};
 

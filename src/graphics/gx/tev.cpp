@@ -830,3 +830,91 @@ void GX::decodeTevKSel(uint8_t reg, uint32_t value) {
         swap.a = xga;
     }
 }
+
+void GX::decodeIndirectRef(uint32_t value) {
+    for (uint32_t i = 0; i < 4; ++i) {
+        const uint32_t shift = i * 6;
+
+        state.bp.indirectStages[i].texMap =
+            static_cast<uint8_t>((value >> shift) & 0x7);
+        state.bp.indirectStages[i].texCoord =
+            static_cast<uint8_t>((value >> (shift + 3)) & 0x7);
+    }
+}
+
+void GX::decodeIndirectScale(uint8_t reg, uint32_t value) {
+    const uint32_t firstStage = reg == 0x25 ? 0 : 2;
+
+    state.bp.indirectStages[firstStage + 0].scaleS =
+        static_cast<uint8_t>((value >> 0) & 0xF);
+    state.bp.indirectStages[firstStage + 0].scaleT =
+        static_cast<uint8_t>((value >> 4) & 0xF);
+    state.bp.indirectStages[firstStage + 1].scaleS =
+        static_cast<uint8_t>((value >> 8) & 0xF);
+    state.bp.indirectStages[firstStage + 1].scaleT =
+        static_cast<uint8_t>((value >> 12) & 0xF);
+}
+
+void GX::decodeTevIndirect(uint32_t stage, uint32_t value) {
+    if (stage >= 16)
+        return;
+
+    auto &ind = state.bp.tevIndirect[stage];
+
+    ind.stage = static_cast<uint8_t>(value & 0x3);
+    ind.format = static_cast<uint8_t>((value >> 2) & 0x3);
+    ind.bias = static_cast<uint8_t>((value >> 4) & 0x7);
+    ind.alphaSelect = static_cast<uint8_t>((value >> 7) & 0x3);
+    ind.matrix = static_cast<uint8_t>((value >> 9) & 0xF);
+    ind.wrapS = static_cast<uint8_t>((value >> 13) & 0x7);
+    ind.wrapT = static_cast<uint8_t>((value >> 16) & 0x7);
+
+    ind.useOriginalLod = ((value >> 19) & 1) != 0;
+    ind.addPrevious = ((value >> 20) & 1) != 0;
+}
+
+void GX::decodeIndirectMatrixWord(uint8_t reg, uint32_t value) {
+
+    if (reg < 0x06 || reg > 0x0E)
+        return;
+
+    const uint32_t relative = reg - 0x06;
+    const uint32_t matrixIndex = relative / 3;
+
+    const uint32_t rowWord = relative % 3;
+
+    auto &matrix = state.bp.indirectMatrices[matrixIndex];
+
+    const int16_t a = gx::signExtend11Indirect(value);
+    const int16_t b = gx::signExtend11Indirect(value >> 11);
+
+    const float fa = static_cast<float>(a) / 1024.0f;
+    const float fb = static_cast<float>(b) / 1024.0f;
+
+    switch (rowWord) {
+    case 0:
+        matrix.m[0][0] = fa;
+        matrix.m[1][0] = fb;
+        break;
+
+    case 1:
+        matrix.m[0][1] = fa;
+        matrix.m[1][1] = fb;
+        break;
+
+    case 2:
+        matrix.m[0][2] = fa;
+        matrix.m[1][2] = fb;
+        break;
+    }
+
+    const uint32_t exponentPart = (value >> 22) & 0x3;
+
+    const uint32_t shift = rowWord * 2;
+
+    uint32_t rawExponent = static_cast<uint8_t>(matrix.exponent + 17);
+    rawExponent &= ~(0x3u << shift);
+    rawExponent |= exponentPart << shift;
+
+    matrix.exponent = static_cast<int8_t>(rawExponent) - 17;
+}
