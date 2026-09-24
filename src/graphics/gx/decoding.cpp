@@ -2,6 +2,7 @@
 #include "core/utils.h"
 #include "device.h"
 #include "graphics/gx.h"
+#include <array>
 #include <cmath>
 #include <cstdint>
 
@@ -1123,27 +1124,32 @@ GXRenderVertex GX::transformToRenderVertex(const GXVertex &vertex) const {
     out.b1 = color1.b;
     out.a1 = color1.a;
 
-    auto singleUvParsing = [&](uint32_t index, float &u, float &v) -> void {
-        GXVec3 tex = generateTexCoord(vertex, index);
+    std::array<GXVec3, 8> generatedTexCoords{};
+
+    auto singleUvParsing = [&](uint32_t index, float &u, float &v, float &q,
+                               const std::array<GXVec3, 8> &generated) -> void {
+        GXVec3 tex = generateTexCoord(vertex, index, generated);
 
         u = tex.x;
         v = tex.y;
+        q = tex.z;
 
         if (state.xf.texGens[index].projection == GXTexProjection::STQ &&
             tex.z != 0.0f) {
             u /= tex.z;
             v /= tex.z;
+            q = 1.0f;
         }
     };
 
-    singleUvParsing(0, out.u0, out.v0);
-    singleUvParsing(1, out.u1, out.v1);
-    singleUvParsing(2, out.u2, out.v2);
-    singleUvParsing(3, out.u3, out.v3);
-    singleUvParsing(4, out.u4, out.v4);
-    singleUvParsing(5, out.u5, out.v5);
-    singleUvParsing(6, out.u6, out.v6);
-    singleUvParsing(7, out.u7, out.v7);
+    singleUvParsing(0, out.u0, out.v0, out.q0, generatedTexCoords);
+    singleUvParsing(1, out.u1, out.v1, out.q1, generatedTexCoords);
+    singleUvParsing(2, out.u2, out.v2, out.q2, generatedTexCoords);
+    singleUvParsing(3, out.u3, out.v3, out.q3, generatedTexCoords);
+    singleUvParsing(4, out.u4, out.v4, out.q4, generatedTexCoords);
+    singleUvParsing(5, out.u5, out.v5, out.q5, generatedTexCoords);
+    singleUvParsing(6, out.u6, out.v6, out.q6, generatedTexCoords);
+    singleUvParsing(7, out.u7, out.v7, out.q7, generatedTexCoords);
 
     return out;
 }
@@ -1610,15 +1616,81 @@ GXVec3 GX::applyTextureMatrix(const GXVec4 &v, uint32_t matrixIndex,
     return out;
 }
 
-GXVec3 GX::generateTexCoord(const GXVertex &vertex, uint32_t index) const {
-    if (index >= state.xf.numTexGens) {
+GXVec3 GX::generateTexCoord(const GXVertex &vertex, uint32_t index,
+                            const std::array<GXVec3, 8> &generated) const {
+    if (index >= state.xf.numTexGens)
         return {};
+
+    const GXTexGenState &gen = state.xf.texGens[index];
+
+    if (gen.type == GXTexGenType::EmbossMap) {
+        if (gen.embossSource >= 8 || gen.embossLight >= 8) {
+            return {};
+        }
+
+        const GXVec3 base = generated[gen.embossSource];
+
+        const uint32_t matrixIndex = getVertexPositionMatrixIndex(vertex);
+
+        GXMatrix3x3 normalMatrix = getNormalMatrix(matrixIndex);
+
+        auto transformDirection = [&](const GXVec3 &v) -> GXVec3 {
+            return {
+                normalMatrix.m[0][0] * v.x + normalMatrix.m[0][1] * v.y +
+                    normalMatrix.m[0][2] * v.z,
+
+                normalMatrix.m[1][0] * v.x + normalMatrix.m[1][1] * v.y +
+                    normalMatrix.m[1][2] * v.z,
+
+                normalMatrix.m[2][0] * v.x + normalMatrix.m[2][1] * v.y +
+                    normalMatrix.m[2][2] * v.z,
+            };
+        };
+
+        GXVec3 tangent = transformDirection(vertex.tangent);
+        GXVec3 binormal = transformDirection(vertex.binormal);
+
+        const GXVec4 view = transformPosition(vertex);
+
+        GXVec3 lightDir{state.xf.lights[gen.embossLight].position.x - view.x,
+                        state.xf.lights[gen.embossLight].position.y - view.y,
+                        state.xf.lights[gen.embossLight].position.z - view.z};
+
+        lightDir = gx::normalize(lightDir);
+
+        return {base.x + gx::dot(lightDir, tangent),
+                base.y + gx::dot(lightDir, binormal), 1.0f};
     }
 
-    const auto &gen = state.xf.texGens[index];
+    switch (gen.type) {
+    case GXTexGenType::Color0: {
+        const GXVec4 view = transformPosition(vertex);
 
-    if (gen.type != GXTexGenType::Regular) {
-        return {};
+        const uint32_t matrixIndex = getVertexPositionMatrixIndex(vertex);
+
+        const GXVec3 normal = transformNormal(vertex, matrixIndex);
+
+        GXColor color = calculateLightingChannel(
+            vertex, 0, {view.x, view.y, view.z}, normal);
+
+        return {color.r, color.g, 1.0f};
+    }
+
+    case GXTexGenType::Color1: {
+        const GXVec4 view = transformPosition(vertex);
+
+        const uint32_t matrixIndex = getVertexPositionMatrixIndex(vertex);
+
+        const GXVec3 normal = transformNormal(vertex, matrixIndex);
+
+        GXColor color = calculateLightingChannel(
+            vertex, 1, {view.x, view.y, view.z}, normal);
+
+        return {color.r, color.g, 1.0f};
+    }
+
+    default:
+        break;
     }
 
     GXVec4 source = getTexGenSource(vertex, gen.source);
@@ -1629,7 +1701,24 @@ GXVec3 GX::generateTexCoord(const GXVertex &vertex, uint32_t index) const {
 
     uint32_t matrixIndex = getTextureMatrixIndex(vertex, index);
     GXVec3 result = applyTextureMatrix(source, matrixIndex, gen.projection);
-    result = applyPostTextureMatrix(result, index);
+
+    if (state.xf.dualTexTransform) {
+        const GXPostTexMatrixState &post = state.xf.postTexMatrices[index];
+
+        if (post.normalize) {
+            const float len =
+                std::sqrt(result.x * result.x + result.y * result.y +
+                          result.z * result.z);
+
+            if (len > 0.0f) {
+                result.x /= len;
+                result.y /= len;
+                result.z /= len;
+            }
+        }
+
+        result = applyPostTextureMatrix(result, index);
+    }
 
     return result;
 }

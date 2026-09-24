@@ -5,14 +5,14 @@ struct VertexIn {
     float4 color0 : COLOR0;
     float4 color1 : COLOR1;
 
-    float2 uv0 : TEXCOORD0;
-    float2 uv1 : TEXCOORD1;
-    float2 uv2 : TEXCOORD2;
-    float2 uv3 : TEXCOORD3;
-    float2 uv4 : TEXCOORD4;
-    float2 uv5 : TEXCOORD5;
-    float2 uv6 : TEXCOORD6;
-    float2 uv7 : TEXCOORD7;
+    float3 uv0 : TEXCOORD0;
+    float3 uv1 : TEXCOORD1;
+    float3 uv2 : TEXCOORD2;
+    float3 uv3 : TEXCOORD3;
+    float3 uv4 : TEXCOORD4;
+    float3 uv5 : TEXCOORD5;
+    float3 uv6 : TEXCOORD6;
+    float3 uv7 : TEXCOORD7;
 };
 
 struct VertexOut {
@@ -21,14 +21,14 @@ struct VertexOut {
     float4 color0 : COLOR0;
     float4 color1 : COLOR1;
 
-    float2 uv0 : TEXCOORD0;
-    float2 uv1 : TEXCOORD1;
-    float2 uv2 : TEXCOORD2;
-    float2 uv3 : TEXCOORD3;
-    float2 uv4 : TEXCOORD4;
-    float2 uv5 : TEXCOORD5;
-    float2 uv6 : TEXCOORD6;
-    float2 uv7 : TEXCOORD7;
+    float3 uv0 : TEXCOORD0;
+    float3 uv1 : TEXCOORD1;
+    float3 uv2 : TEXCOORD2;
+    float3 uv3 : TEXCOORD3;
+    float3 uv4 : TEXCOORD4;
+    float3 uv5 : TEXCOORD5;
+    float3 uv6 : TEXCOORD6;
+    float3 uv7 : TEXCOORD7;
 };
 
 struct TevStage {
@@ -243,7 +243,7 @@ float4 getRasterColor(int channel, VertexOut input) {
     }
 }
 
-float2 getGXTexCoord(int index, VertexOut input) {
+float3 getGXTexCoord(int index, VertexOut input) {
     switch (index) {
     case 0:
         return input.uv0;
@@ -263,7 +263,7 @@ float2 getGXTexCoord(int index, VertexOut input) {
         return input.uv7;
     }
 
-    return float2(0.0, 0.0);
+    return float3(0.0, 0.0, 0.0);
 }
 
 bool alphaCompare(float alpha, float ref, int op) {
@@ -703,7 +703,13 @@ void executeTevStage(TevStage stage, VertexOut input, inout TevRegisters regs) {
     tex = applySwap(tex, stage.textureSwap);
 
     if (stage.textureEnabled != 0) {
-        float2 uv = getGXTexCoord(stage.texCoord, input);
+        float3 coord = getGXTexCoord(stage.texCoord, input);
+
+        float2 uv = coord.xy;
+
+        if (coord.z != 0.0) {
+            uv /= coord.z;
+        }
 
         tex = sampleGXTexture(stage.texMap, uv);
     }

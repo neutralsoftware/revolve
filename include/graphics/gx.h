@@ -59,14 +59,14 @@ struct GXRenderVertex {
     // Raster 2
     float r1, g1, b1, a1;
 
-    float u0, v0;
-    float u1, v1;
-    float u2, v2;
-    float u3, v3;
-    float u4, v4;
-    float u5, v5;
-    float u6, v6;
-    float u7, v7;
+    float u0, v0, q0;
+    float u1, v1, q1;
+    float u2, v2, q2;
+    float u3, v3, q3;
+    float u4, v4, q4;
+    float u5, v5, q5;
+    float u6, v6, q6;
+    float u7, v7, q7;
 };
 
 struct GXMatrix3x4 {
@@ -1111,7 +1111,8 @@ class GX {
                               GXTexProjection projection) const;
     GXVec3 applyPostTextureMatrix(GXVec3 tex, uint32_t texGen) const;
 
-    GXVec3 generateTexCoord(const GXVertex &vertex, uint32_t index) const;
+    GXVec3 generateTexCoord(const GXVertex &vertex, uint32_t index,
+                            const std::array<GXVec3, 8> &generated) const;
 
     void processIndexedXF(uint8_t command);
 
