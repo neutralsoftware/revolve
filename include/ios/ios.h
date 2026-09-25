@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -251,6 +253,8 @@ enum class FSIOCtl : uint32_t {
 
 class FSDevice : public IOSDevice {
   public:
+    static std::filesystem::path rootPath();
+    static void initializeNAND();
     int32_t open(const std::string &path, uint32_t mode) override;
 
     int32_t close(int32_t fd) override;
@@ -265,6 +269,11 @@ class FSDevice : public IOSDevice {
 
     IOSResult ioctlv(const IOSIoctlvRequest &request,
                      const std::vector<IOSVector> &vectors) override;
+  private:
+    std::fstream file;
+    std::filesystem::path filePath;
+    uint32_t fileMode = 0;
+    uint32_t position = 0;
 };
 
 enum class DIIoctl : uint32_t {

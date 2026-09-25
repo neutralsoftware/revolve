@@ -8,6 +8,7 @@
 #include <vector>
 
 void IOS::init() {
+    FSDevice::initializeNAND();
     registerDevice("/dev/stm/immediate",
                    std::make_shared<STMImmediateDevice>());
     registerDevice("/dev/stm/eventhook",
@@ -73,19 +74,19 @@ IOSResult IOS::dispatch(const IOSRequest &request) {
 
         auto it = devices.find(path);
 
-        if (it == devices.end()) {
-            Logger::log("IOS", LogLevel::Warning,
-                        "No resource manager for " + path);
-
+        std::shared_ptr<IOSDevice> device;
+        if (it != devices.end()) {
+            device = it->second;
+        } else if (path.starts_with("/") && !path.starts_with("/dev/")) {
+            device = std::make_shared<FSDevice>();
+        } else {
             return IOS::error(IOSError::NotFound);
         }
-
-        std::shared_ptr<IOSDevice> device = it->second;
 
         int32_t result = device->open(path, open.mode);
 
         if (result < 0)
-            return IOS::error(IOSError::NotFound);
+            return result;
 
         return allocateFileDescriptor(path, device);
     }
