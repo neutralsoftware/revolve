@@ -2,6 +2,21 @@
 #include "device.h"
 #include <stdexcept>
 
+uint32_t DiscInterface::read(uint32_t offset, AccessSize size) {
+    constexpr uint32_t config = 1;
+    if (offset < 0x24 || offset >= 0x28)
+        return 0;
+    if (size == AccessSize::U32 && offset == 0x24)
+        return config;
+    if (size == AccessSize::U16 && (offset == 0x24 || offset == 0x26))
+        return offset == 0x24 ? config >> 16 : config & 0xFFFF;
+    if (size == AccessSize::U8)
+        return (config >> ((3 - (offset & 3)) * 8)) & 0xFF;
+    return 0;
+}
+
+void DiscInterface::write(uint32_t, uint32_t, AccessSize) {}
+
 uint16_t DSPInterface::read16(uint32_t offset) {
     switch (offset) {
     case 0x00:
@@ -45,7 +60,7 @@ uint16_t DSPInterface::read16(uint32_t offset) {
     case 0x36:
         return audioControl;
     case 0x3A:
-        return audioBlocksLeft;
+        return audioBlocksLeft > 0 ? audioBlocksLeft - 1 : 0;
     default:
         return 0;
     }
@@ -134,6 +149,15 @@ void DSPInterface::write16(uint32_t offset, uint16_t value) {
             audioCursor = audioAddress;
             audioBlocksLeft = value & 0x7FFF;
             audioAccumulator = 0;
+            Device::globalDevice->scheduler.schedule(
+                "AIDMAStart",
+                [this]() {
+                    if (audioControl & 0x8000) {
+                        control |= 1u << 3;
+                        updateInterrupt();
+                    }
+                },
+                200);
         }
         if (!(value & 0x8000)) {
             audioBlocksLeft = 0;
@@ -283,7 +307,7 @@ void ExpansionInterface::updateInterrupt() {
 }
 
 void DSPInterface::step(uint32_t cycles) {
-    if (!(audioControl & 0x8000) || !(audioControl & 0x7FFF))
+    if (!(audioControl & 0x8000))
         return;
     auto &device = *Device::globalDevice;
     const uint32_t rate = device.ai->dmaSampleRate();
@@ -291,10 +315,6 @@ void DSPInterface::step(uint32_t cycles) {
     constexpr uint64_t blockPeriod = BROADWAY_CLOCK * 8;
     while (audioAccumulator >= blockPeriod) {
         audioAccumulator -= blockPeriod;
-        if (!audioBlocksLeft) {
-            audioCursor = audioAddress;
-            audioBlocksLeft = audioControl & 0x7FFF;
-        }
         std::array<int16_t, 16> samples{};
         for (uint32_t frame = 0; frame < 8; ++frame) {
             samples[frame * 2] = static_cast<int16_t>(
@@ -303,8 +323,13 @@ void DSPInterface::step(uint32_t cycles) {
                 Bus::readPhysical16(audioCursor + frame * 4));
         }
         device.audio.submitSamples(samples, rate);
-        audioCursor += 32;
-        if (--audioBlocksLeft == 0) {
+        if (audioBlocksLeft != 0) {
+            --audioBlocksLeft;
+            audioCursor += 32;
+        }
+        if (audioBlocksLeft == 0) {
+            audioCursor = audioAddress;
+            audioBlocksLeft = audioControl & 0x7FFF;
             control |= 1u << 3;
             updateInterrupt();
         }

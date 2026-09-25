@@ -3,6 +3,8 @@
 
 #include "core/memory.h"
 #include "core/utils.h"
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
 static constexpr uint32_t XER_SO = 1u << 31;
@@ -292,6 +294,8 @@ class Broadway {
     void setupWiiBATs();
     uint32_t executeInstruction();
     uint32_t translateAddress(uint32_t address, MemoryAccess access);
+    void invalidateTranslationCache();
+    void invalidateTranslationPage(uint32_t address);
     void raiseException(uint32_t vector, uint32_t cause = 0);
     void requestExternalInterrupt();
     void clearExternalInterrupt();
@@ -371,6 +375,16 @@ class Broadway {
     void setupWiiHLEBootState();
 
   private:
+    struct TranslationCacheEntry {
+        uint32_t tag = 0;
+        uint32_t physicalPage = 0;
+        bool valid = false;
+    };
+
+    static constexpr size_t translationCacheSize = 1024;
+    std::array<std::array<TranslationCacheEntry, translationCacheSize>, 3>
+        translationCache{};
+
     bool deliverPendingException();
     bool translateBAT(uint32_t address, MemoryAccess access,
                       uint32_t &physicalAddress);

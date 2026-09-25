@@ -746,5 +746,13 @@ void DiscImage::prepareBoot(const Executable &executable) {
     Bus::writePhysical32(0x3C, static_cast<uint32_t>(fstMaximum));
     Bus::writePhysical32(0x3110, fstAddress);
     Bus::writePhysical32(0x3180, ::readBE32(header, 0));
+    Bus::writePhysical32(0x3194, 0);
+    Bus::writePhysical32(0x3198,
+                         static_cast<uint32_t>(partition->offset >> 2));
+    const uint8_t region = header[3];
+    const bool pal = region == 'P' || region == 'D' || region == 'F' ||
+                     region == 'I' || region == 'S' || region == 'H' ||
+                     region == 'X' || region == 'Y';
+    Bus::writePhysical32(0xCC, pal ? 1 : 0);
     Device::globalDevice->ios.prepareDiscBoot(partition->offset);
 }

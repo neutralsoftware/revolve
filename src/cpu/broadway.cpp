@@ -7,6 +7,7 @@
 
 void Broadway::reset(uint32_t entryPoint) {
     state = {};
+    invalidateTranslationCache();
     timeBaseRemainder = 0;
     state.cia = entryPoint;
     state.nia = entryPoint + 4;
@@ -292,15 +293,6 @@ void Broadway::executeIType(uint32_t instruction) {
 }
 
 void Broadway::raiseException(uint32_t vector, uint32_t cause) {
-    if (vector != 0x500 && vector != 0x900 && vector != 0xC00)
-        Logger::log("CPU", LogLevel::Error,
-                    "Exception vector=" + utils::toHexString(vector) +
-                        " cause=" + utils::toHexString(cause) +
-                        " CIA=" + utils::toHexString(state.cia) +
-                        " NIA=" + utils::toHexString(state.nia) +
-                        " LR=" + utils::toHexString(state.spr[SPR::LR]) +
-                        " MSR=" + utils::toHexString(state.msr));
-
     state.spr[SPR::SRR0] = state.cia;
     state.spr[SPR::SRR1] = (state.msr & 0x87C0FFFFu) | cause;
     state.nia = ((state.msr & 0x40) ? 0xFFF00000u : 0) | vector;
@@ -482,10 +474,40 @@ uint32_t Broadway::translateAddress(uint32_t address, MemoryAccess access) {
                                                        : state.msr & 0x10;
     if (!enabled)
         return address;
+
+    const uint32_t virtualPage = address & 0xFFFFF000u;
+    const uint32_t tag = virtualPage | ((state.msr >> 14) & 1u);
+    auto &entry = translationCache[static_cast<size_t>(access)]
+                                  [(address >> 12) &
+                                   (translationCacheSize - 1)];
+    if (entry.valid && entry.tag == tag)
+        return entry.physicalPage | (address & 0xFFFu);
+
     uint32_t physicalAddress;
-    if (translateBAT(address, access, physicalAddress))
-        return physicalAddress;
-    return translatePage(address, access);
+    if (!translateBAT(address, access, physicalAddress))
+        physicalAddress = translatePage(address, access);
+
+    entry.tag = tag;
+    entry.physicalPage = physicalAddress & 0xFFFFF000u;
+    entry.valid = true;
+    return physicalAddress;
+}
+
+void Broadway::invalidateTranslationCache() {
+    for (auto &cache : translationCache) {
+        for (auto &entry : cache)
+            entry = {};
+    }
+}
+
+void Broadway::invalidateTranslationPage(uint32_t address) {
+    const uint32_t virtualPage = address & 0xFFFFF000u;
+    const size_t index = (address >> 12) & (translationCacheSize - 1);
+    for (auto &cache : translationCache) {
+        auto &entry = cache[index];
+        if ((entry.tag & 0xFFFFF000u) == virtualPage)
+            entry.valid = false;
+    }
 }
 
 bool Broadway::branchCondition(uint32_t bo, uint32_t bi, bool useCTR) {
@@ -705,6 +727,8 @@ void Broadway::setupWiiBATs() {
 
     state.spr[SPR::DBAT5U] = 0xD0001FFF;
     state.spr[SPR::DBAT5L] = 0x1000002A;
+
+    invalidateTranslationCache();
 }
 
 void Broadway::advanceTime(uint64_t cycles) {

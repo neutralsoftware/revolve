@@ -140,10 +140,6 @@ void GX::processCPLoad() {
     uint32_t value = read32();
 
     state.cp.write(reg, value);
-
-    Logger::log("GX", LogLevel::Info,
-                "CPLoad: Register 0x" + utils::toHexString(reg) + " = 0x" +
-                    utils::toHexString(value));
 }
 
 void GX::processBPLoad() {
@@ -173,10 +169,6 @@ void GX::processXFLoad() {
 
     uint32_t count = ((header >> 16) & 0xFFF) + 1;
 
-    Logger::log("GX", LogLevel::Info,
-                "XF load addr=" + utils::toHexString(address) +
-                    " count=" + std::to_string(count));
-
     for (uint32_t i = 0; i < count; i++) {
         uint32_t value = read32();
 
@@ -185,14 +177,18 @@ void GX::processXFLoad() {
 }
 
 void GX::run() {
-    if (!Device::globalDevice->cp->isFifoReadEnabled())
+    if (!workPending || !Device::globalDevice->cp->isFifoReadEnabled()) {
+        workPending = false;
         return;
+    }
 
     auto *cp = Device::globalDevice->cp.get();
     const auto &fifo = cp->getFifo();
     while (reader.availableBytes >= 32 && cp->canReadFifo()) {
-        for (uint32_t i = 0; i < 32; ++i)
-            fifoBuffer.push_back(Bus::readPhysical8(reader.cursor + i));
+        const size_t offset = fifoBuffer.size();
+        fifoBuffer.resize(offset + 32);
+        Bus::readBlock(reader.cursor,
+                       std::span<uint8_t>(fifoBuffer).subspan(offset, 32));
         reader.cursor = reader.cursor == fifo.end ? fifo.base : reader.cursor + 32;
         reader.availableBytes -= 32;
         cp->onFifoBlockConsumed();
@@ -201,10 +197,15 @@ void GX::run() {
     while (commandAvailable())
         processCommand();
 
-    if (fifoBufferOffset != 0) {
+    if (fifoBufferOffset == fifoBuffer.size()) {
+        fifoBuffer.clear();
+        fifoBufferOffset = 0;
+    } else if (fifoBufferOffset != 0) {
         fifoBuffer.erase(fifoBuffer.begin(), fifoBuffer.begin() + fifoBufferOffset);
         fifoBufferOffset = 0;
     }
+
+    workPending = reader.availableBytes >= 32 || commandAvailable();
 }
 
 void GX::initializeFifoReader() {
@@ -213,6 +214,7 @@ void GX::initializeFifoReader() {
     reader.cursor = fifo.readPointer;
     reader.bytesIntoBlock = 0;
     reader.availableBytes = fifo.readWriteDistance;
+    workPending = reader.availableBytes >= 32;
 }
 
 void GX::onFifoBytesAvailable(uint32_t bytes) {
@@ -223,6 +225,7 @@ void GX::onFifoBytesAvailable(uint32_t bytes) {
     }
 
     reader.availableBytes += bytes;
+    workPending = true;
 }
 
 void GX::processPrimitive(uint8_t command) {
@@ -1641,6 +1644,9 @@ void GX::executeEfbCopy() {
     }
 
     renderer->copyEFBToXFB(state.bp.copy);
+    ++xfbCopyCount;
+    Logger::log("GX", LogLevel::Info,
+                "Guest XFB copy " + std::to_string(xfbCopyCount));
 
     if (state.bp.copy.clearAfterCopy) {
         renderer->clearEFB(state.bp.copy.clearColor, state.bp.copy.clearDepth);

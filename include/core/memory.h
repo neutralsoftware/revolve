@@ -70,6 +70,8 @@ class Memory {
 
     void writeBlock(uint32_t addr, std::span<const uint8_t> bytes,
                     int memIndex = 1);
+    void readBlock(uint32_t addr, std::span<uint8_t> buffer,
+                   int memIndex = 1);
     void readBlock(uint32_t addr, std::vector<uint8_t> &buffer,
                    int memIndex = 1);
 
@@ -113,6 +115,8 @@ class MMIO {
 
     std::vector<MMIOEntry> devices = {};
     std::unordered_map<uint64_t, uint64_t> unmappedAccessCounts;
+    size_t lastDeviceIndex = 0;
+    MMIOEntry *findDevice(uint32_t address);
     void logUnmapped(uint32_t address, AccessSize size, bool write);
 };
 
@@ -142,6 +146,7 @@ class Bus {
     static void writeDouble(uint32_t addr, double value);
 
     static void writeBlock(uint32_t addr, std::span<const uint8_t> bytes);
+    static void readBlock(uint32_t addr, std::span<uint8_t> buffer);
     static void readBlock(uint32_t addr, std::vector<uint8_t> &buffer);
 
     static void writeFromStream(uint32_t addr, size_t count,

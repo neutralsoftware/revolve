@@ -139,6 +139,10 @@ void Broadway::executeXFXType(uint32_t instruction) {
         state.spr[spr] = state.gpr[d];
         if (spr == SPR::HID0)
             state.spr[spr] &= ~0x00000C00u;
+        if (spr == SPR::SDR1 ||
+            (spr >= SPR::IBAT0U && spr <= SPR::DBAT3L) ||
+            (spr >= SPR::IBAT4U && spr <= SPR::DBAT7L))
+            invalidateTranslationCache();
         if (spr == SPR::DEC) {
             if (!(oldValue & 0x80000000u) && (state.gpr[d] & 0x80000000u))
                 state.decrementerPending = true;
@@ -189,6 +193,7 @@ void Broadway::executeXLType(uint32_t instruction) {
         state.msr =
             (state.msr & ~0x87C0FFFFu) | (state.spr[SPR::SRR1] & 0x87C0FFFFu);
         state.msr &= ~0x40000u;
+        invalidateTranslationCache();
         state.nia = state.spr[SPR::SRR0] & ~3u;
         return;
     case 150:
@@ -332,18 +337,24 @@ void Broadway::executeXType(uint32_t instruction) {
             break;
         case 146:
             state.msr = source;
+            invalidateTranslationCache();
             break;
         case 210:
             state.sr[a & 15] = source;
+            invalidateTranslationCache();
             break;
         case 242:
             state.sr[operand >> 28] = source;
+            invalidateTranslationCache();
             break;
         case 595:
             state.gpr[d] = state.sr[a & 15];
             break;
         case 659:
             state.gpr[d] = state.sr[operand >> 28];
+            break;
+        case 306:
+            invalidateTranslationPage(operand);
             break;
         }
         return;

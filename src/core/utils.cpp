@@ -152,7 +152,7 @@ std::string getTime() {
 void Logger::log(std::string system, LogLevel level,
                  const std::string &message) {
     std::cout << "[" << system << "] @ " << getTime() << "["
-              << static_cast<int>(level) << "] " << message << std::endl;
+              << static_cast<int>(level) << "] " << message << '\n';
 }
 
 void Logger::logObject(const Loggable &object, LogLevel level) {

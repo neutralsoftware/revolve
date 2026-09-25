@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
 set(CMAKE_C_COMPILER "/usr/bin/clang")
 set(CMAKE_CXX_COMPILER "/usr/bin/clang++")
+set(CMAKE_OBJCXX_COMPILER "/usr/bin/clang++")
 
-project(Revolve LANGUAGES C CXX)
+project(Revolve LANGUAGES C CXX OBJCXX)
+
+include(CheckIPOSupported)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
@@ -154,6 +157,14 @@ add_executable(revolve_test ${TEST_SOURCES} tests/broadway.cpp tests/disc.cpp
     src/core/executable.cpp src/device.cpp src/disc.cpp ${GRAPHICS_SOURCES} ${INPUT_SOURCES} ${AUDIO_SOURCES})
 add_dependencies(revolve_test revolve_shader_header)
 target_link_libraries(revolve_test PRIVATE OpenSSL::Crypto PkgConfig::ZSTD Opal::Opal)
+
+check_ipo_supported(RESULT REVOLVE_IPO_SUPPORTED)
+foreach(REVOLVE_TARGET revolve revolve_test)
+    target_compile_options(${REVOLVE_TARGET} PRIVATE $<$<CONFIG:Debug>:-O3>)
+    if(REVOLVE_IPO_SUPPORTED)
+        set_property(TARGET ${REVOLVE_TARGET} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+endforeach()
 
 if(APPLE)
     enable_language(OBJCXX)

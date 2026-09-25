@@ -47,20 +47,35 @@ ResolvedAddress Bus::resolveAddress(uint32_t addr) {
 
 uint16_t Bus::readPhysical16(uint32_t addr) {
     const auto resolved = resolveAddress(addr);
+    Memory &mem = Device::globalDevice->memory;
+    if (resolved.region == MemoryRegion::MEM1)
+        return mem.read16(resolved.offset, 1);
+    if (resolved.region == MemoryRegion::MEM2)
+        return mem.read16(resolved.offset, 2);
     if (resolved.region == MemoryRegion::MMIO)
         return Device::globalDevice->mmioDispatcher.read16(resolved.offset);
-    return static_cast<uint16_t>((readPhysical8(addr) << 8) |
-                                 readPhysical8(addr + 1));
+    return 0;
 }
 
 void Bus::writePhysical16(uint32_t addr, uint16_t value) {
+    auto &cpu = Device::globalDevice->cpu;
+    if (cpu.state.reservationValid &&
+        (cpu.state.reservationAddress & ~31u) >= (addr & ~31u) &&
+        (cpu.state.reservationAddress & ~31u) <= ((addr + 1) & ~31u))
+        cpu.state.reservationValid = false;
     const auto resolved = resolveAddress(addr);
-    if (resolved.region == MemoryRegion::MMIO) {
-        Device::globalDevice->mmioDispatcher.write16(resolved.offset, value);
+    Memory &mem = Device::globalDevice->memory;
+    if (resolved.region == MemoryRegion::MEM1) {
+        mem.write16(resolved.offset, value, 1);
         return;
     }
-    writePhysical8(addr, static_cast<uint8_t>(value >> 8));
-    writePhysical8(addr + 1, static_cast<uint8_t>(value));
+    if (resolved.region == MemoryRegion::MEM2) {
+        mem.write16(resolved.offset, value, 2);
+        return;
+    }
+    if (resolved.region == MemoryRegion::MMIO) {
+        Device::globalDevice->mmioDispatcher.write16(resolved.offset, value);
+    }
 }
 
 uint32_t Bus::readPhysical32(uint32_t addr) {
@@ -511,63 +526,64 @@ void MMIO::registerDevice(uint32_t baseAddr, uint32_t size,
     devices.push_back({baseAddr, size, device});
 }
 
-void MMIO::write8(uint32_t addr, uint8_t value) {
-    for (const auto &entry : devices) {
-        if (addr >= entry.baseAddr && addr < entry.baseAddr + entry.size) {
-            entry.device->write(addr - entry.baseAddr, value, AccessSize::U8);
-            return;
+MMIO::MMIOEntry *MMIO::findDevice(uint32_t address) {
+    if (lastDeviceIndex < devices.size()) {
+        auto &entry = devices[lastDeviceIndex];
+        if (address >= entry.baseAddr && address < entry.baseAddr + entry.size)
+            return &entry;
+    }
+
+    for (size_t index = 0; index < devices.size(); ++index) {
+        auto &entry = devices[index];
+        if (address >= entry.baseAddr && address < entry.baseAddr + entry.size) {
+            lastDeviceIndex = index;
+            return &entry;
         }
     }
+    return nullptr;
+}
+
+void MMIO::write8(uint32_t addr, uint8_t value) {
+    if (auto *entry = findDevice(addr)) {
+        entry->device->write(addr - entry->baseAddr, value, AccessSize::U8);
+        return;
+    }
     logUnmapped(addr, AccessSize::U8, true);
-    return;
 }
 
 void MMIO::write16(uint32_t addr, uint16_t value) {
-    for (const auto &entry : devices) {
-        if (addr >= entry.baseAddr && addr < entry.baseAddr + entry.size) {
-            entry.device->write(addr - entry.baseAddr, value, AccessSize::U16);
-            return;
-        }
+    if (auto *entry = findDevice(addr)) {
+        entry->device->write(addr - entry->baseAddr, value, AccessSize::U16);
+        return;
     }
     logUnmapped(addr, AccessSize::U16, true);
 }
 
 void MMIO::write32(uint32_t addr, uint32_t value) {
-    for (const auto &entry : devices) {
-        if (addr >= entry.baseAddr && addr < entry.baseAddr + entry.size) {
-            entry.device->write(addr - entry.baseAddr, value, AccessSize::U32);
-            return;
-        }
+    if (auto *entry = findDevice(addr)) {
+        entry->device->write(addr - entry->baseAddr, value, AccessSize::U32);
+        return;
     }
     logUnmapped(addr, AccessSize::U32, true);
 }
 
 uint8_t MMIO::read8(uint32_t addr) {
-    for (const auto &entry : devices) {
-        if (addr >= entry.baseAddr && addr < entry.baseAddr + entry.size) {
-            return entry.device->read(addr - entry.baseAddr, AccessSize::U8);
-        }
-    }
+    if (auto *entry = findDevice(addr))
+        return entry->device->read(addr - entry->baseAddr, AccessSize::U8);
     logUnmapped(addr, AccessSize::U8, false);
     return 0;
 }
 
 uint16_t MMIO::read16(uint32_t addr) {
-    for (const auto &entry : devices) {
-        if (addr >= entry.baseAddr && addr < entry.baseAddr + entry.size) {
-            return entry.device->read(addr - entry.baseAddr, AccessSize::U16);
-        }
-    }
+    if (auto *entry = findDevice(addr))
+        return entry->device->read(addr - entry->baseAddr, AccessSize::U16);
     logUnmapped(addr, AccessSize::U16, false);
     return 0;
 }
 
 uint32_t MMIO::read32(uint32_t addr) {
-    for (const auto &entry : devices) {
-        if (addr >= entry.baseAddr && addr < entry.baseAddr + entry.size) {
-            return entry.device->read(addr - entry.baseAddr, AccessSize::U32);
-        }
-    }
+    if (auto *entry = findDevice(addr))
+        return entry->device->read(addr - entry->baseAddr, AccessSize::U32);
     logUnmapped(addr, AccessSize::U32, false);
     return 0;
 }
@@ -617,7 +633,7 @@ void Memory::writeBlock(uint32_t addr, std::span<const uint8_t> bytes,
     }
 }
 
-void Bus::readBlock(uint32_t addr, std::vector<uint8_t> &buffer) {
+void Bus::readBlock(uint32_t addr, std::span<uint8_t> buffer) {
     if (buffer.empty())
         return;
 
@@ -643,7 +659,11 @@ void Bus::readBlock(uint32_t addr, std::vector<uint8_t> &buffer) {
     }
 }
 
-void Memory::readBlock(uint32_t addr, std::vector<uint8_t> &buffer,
+void Bus::readBlock(uint32_t addr, std::vector<uint8_t> &buffer) {
+    readBlock(addr, std::span<uint8_t>(buffer));
+}
+
+void Memory::readBlock(uint32_t addr, std::span<uint8_t> buffer,
                        int memIndex) {
     if (memIndex == 1) {
         std::copy(mem1.begin() + addr, mem1.begin() + addr + buffer.size(),
@@ -656,6 +676,11 @@ void Memory::readBlock(uint32_t addr, std::vector<uint8_t> &buffer,
                     "readBlock: Invalid memory index (" +
                         std::to_string(memIndex) + ")");
     }
+}
+
+void Memory::readBlock(uint32_t addr, std::vector<uint8_t> &buffer,
+                       int memIndex) {
+    readBlock(addr, std::span<uint8_t>(buffer), memIndex);
 }
 
 BigEndianStream Bus::readToStream(uint32_t addr, size_t count) {

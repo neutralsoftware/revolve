@@ -5,6 +5,42 @@
 #include <stdexcept>
 #include <string_view>
 
+namespace {
+std::vector<uint8_t> bluetoothDevices() {
+    std::vector<uint8_t> bytes(0x461);
+    bytes[0] = 1;
+    constexpr std::array<uint8_t, 6> address{1, 0, 0, 0x1D, 0x19, 0};
+    constexpr std::string_view name = "Nintendo RVL-CNT-01";
+    for (size_t offset : {size_t{1}, size_t{1 + 10 * 0x46}}) {
+        std::copy(address.begin(), address.end(), bytes.begin() + offset);
+        std::copy(name.begin(), name.end(), bytes.begin() + offset + 6);
+    }
+    return bytes;
+}
+
+void ensureBluetoothDevice(const std::filesystem::path &config) {
+    std::fstream file(config, std::ios::binary | std::ios::in | std::ios::out);
+    if (!file)
+        return;
+    std::array<uint8_t, 0x4000> data{};
+    file.read(reinterpret_cast<char *>(data.data()), data.size());
+    if (file.gcount() != static_cast<std::streamsize>(data.size()))
+        return;
+    constexpr std::string_view key = "BT.DINF";
+    const auto name = std::search(data.begin(), data.end(), key.begin(), key.end());
+    if (name == data.end())
+        return;
+    const size_t payload = static_cast<size_t>(name - data.begin()) + key.size() + 2;
+    if (payload + 0x461 > data.size() || data[payload] != 0)
+        return;
+    const auto devices = bluetoothDevices();
+    std::copy(devices.begin(), devices.end(), data.begin() + payload);
+    file.clear();
+    file.seekp(0);
+    file.write(reinterpret_cast<const char *>(data.data()), data.size());
+}
+}
+
 void initializeSystemConfiguration(const std::filesystem::path &root) {
     const auto config = root / "shared2/sys/SYSCONF";
     if (!std::filesystem::exists(config)) {
@@ -29,7 +65,7 @@ void initializeSystemConfiguration(const std::filesystem::path &root) {
             {"BT.SENS", 5, {0, 0, 0, 3}},
             {"BT.SPKV", 3, {0x58}},
             {"BT.MOT", 3, {1}},
-            {"BT.DINF", 1, std::vector<uint8_t>(0x461)},
+            {"BT.DINF", 1, bluetoothDevices()},
             {"BT.CDIF", 1, std::vector<uint8_t>(0x205)},
         };
         std::array<uint8_t, 0x4000> data{};
@@ -62,6 +98,7 @@ void initializeSystemConfiguration(const std::filesystem::path &root) {
         if (!file)
             throw std::runtime_error("Cannot initialize SYSCONF");
     }
+    ensureBluetoothDevice(config);
     const auto settings = root / "title/00000001/00000002/data/setting.txt";
     if (!std::filesystem::exists(settings)) {
         std::filesystem::create_directories(settings.parent_path());

@@ -43,6 +43,12 @@ std::shared_ptr<Device> Device::createDevice() {
                                                 globalDevice->wgpipe.get());
     globalDevice->mmioDispatcher.registerDevice(DSP_BASE, DSP_SIZE,
                                                 globalDevice->dsp.get());
+    globalDevice->mmioDispatcher.registerDevice(DI_BASE, DI_SIZE,
+                                                globalDevice->di.get());
+    globalDevice->mmioDispatcher.registerDevice(0x0C006000, DI_SIZE,
+                                                globalDevice->di.get());
+    globalDevice->mmioDispatcher.registerDevice(0x0D806000, DI_SIZE,
+                                                globalDevice->di.get());
     globalDevice->mmioDispatcher.registerDevice(SI_BASE, SI_SIZE,
                                                 globalDevice->si.get());
     globalDevice->mmioDispatcher.registerDevice(EXI_BASE, EXI_SIZE,
@@ -83,31 +89,53 @@ std::shared_ptr<Device> Device::createDevice() {
     Bus::writePhysical32(0x0020, 0x0D15EA5E);
     Bus::writePhysical32(0x0024, 0x00000001);
     Bus::writePhysical32(0x0028, 0x01800000);
+    Bus::writePhysical32(0x002C, 0x00000023);
+    Bus::writePhysical32(0x0030, 0);
     Bus::writePhysical32(0x0034, 0x817FEC60);
 
+    Bus::writePhysical32(0x00E4, 0x8008F7B8);
     Bus::writePhysical32(0x00F0, 0x01800000);
+    Bus::writePhysical32(0x00F4, 0x8179B500);
     Bus::writePhysical32(0x00F8, 0x0E7BE2C0);
     Bus::writePhysical32(0x00FC, 0x2B73A840);
+
+    Bus::writePhysical32(0x0300, 0x4C000064);
+    Bus::writePhysical32(0x0800, 0x4C000064);
+    Bus::writePhysical32(0x0C00, 0x4C000064);
+
+    Bus::writePhysical32(0x30C0, 0);
+    Bus::writePhysical32(0x30C4, 0);
 
     Bus::writePhysical32(0x3100, 0x01800000);
     Bus::writePhysical32(0x3104, 0x01800000);
     Bus::writePhysical32(0x3108, 0x81800000);
     Bus::writePhysical32(0x310C, 0);
     Bus::writePhysical32(0x3110, 0x817FEC60);
+    Bus::writePhysical32(0x3114, 0xDEADBEEF);
     Bus::writePhysical32(0x3118, 0x04000000);
     Bus::writePhysical32(0x311C, 0x04000000);
     Bus::writePhysical32(0x3120, 0x93400000);
     Bus::writePhysical32(0x3124, 0x90000800);
     Bus::writePhysical32(0x3128, 0x933E0000);
+    Bus::writePhysical32(0x312C, 0xDEADBEEF);
     Bus::writePhysical32(0x3130, 0x933E0000);
     Bus::writePhysical32(0x3134, 0x93400000);
+    Bus::writePhysical32(0x3138, 0x00000011);
+    Bus::writePhysical32(0x313C, 0xDEADBEEF);
     Bus::writePhysical32(0x3148, 0x93400000);
     Bus::writePhysical32(0x314C, 0x94000000);
+    Bus::writePhysical32(0x3150, 0xDEADBEEF);
+    Bus::writePhysical32(0x3154, 0xDEADBEEF);
+    Bus::writePhysical32(0x3158, 0x0000FF01);
+    Bus::writePhysical32(0x3160, 0);
 
     Bus::writePhysical32(0x30D8, 0xFFFFFFFF);
     Bus::writePhysical32(0x30DC, 0);
+    Bus::writePhysical16(0x30E6, 0x8201);
+    Bus::writePhysical32(0x30F0, 0);
 
     Bus::writePhysical8(0x315C, 0x80);
+    Bus::writePhysical16(0x315E, 0x0113);
 
     Bus::writePhysical8(0x30E0, 0);
     Bus::writePhysical32(0x3184, 0x80000000);
@@ -128,6 +156,9 @@ void Device::processIPC() {
 }
 
 void Device::step() {
+    constexpr uint64_t peripheralInterval = 4096;
+    constexpr uint64_t iosInterval = BROADWAY_CLOCK / 1000;
+
     cpu.setExternalInterrupt(pi->interruptPending());
 
     processIPC();
@@ -137,13 +168,36 @@ void Device::step() {
     cpu.advanceTime(cycles);
     scheduler.advance(cycles);
 
-    ai->step(cycles);
-    dsp->step(cycles);
-    si->step(cycles);
+    peripheralCycles += cycles;
+    if (peripheralCycles >= peripheralInterval) {
+        ai->step(static_cast<uint32_t>(peripheralCycles));
+        dsp->step(static_cast<uint32_t>(peripheralCycles));
+        si->step(peripheralCycles);
+        peripheralCycles = 0;
+    }
 
-    ios.update();
+    iosCycles += cycles;
+    if (iosCycles >= iosInterval) {
+        ios.update();
+        iosCycles = 0;
+    }
 
-    gx.run();
+    if (gx.hasPendingWork())
+        gx.run();
+}
+
+bool Device::serviceHostEvents() {
+    bool running = true;
+    SDL_Event event;
+
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_EVENT_QUIT)
+            running = false;
+    }
+
+    SDL_PumpEvents();
+    inputManager->update();
+    return running;
 }
 
 void Device::start() {
@@ -157,17 +211,7 @@ void Device::start() {
         const uint64_t hostTime = SDL_GetTicks();
         if (hostTime >= nextInputPoll) {
             nextInputPoll = hostTime + 4;
-            SDL_Event event;
-
-            while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_EVENT_QUIT) {
-                    running = false;
-                }
-            }
-
-            SDL_PumpEvents();
-
-            inputManager->update();
+            running = serviceHostEvents();
         }
 
         if (!running)

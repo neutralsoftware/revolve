@@ -100,6 +100,8 @@ void AudioInterface::write(uint32_t offset, uint32_t value, AccessSize size) {
         break;
 
     case 0x08:
+        sampleCounter = value;
+        sampleAccumulator = 0;
         break;
 
     case 0x0C:

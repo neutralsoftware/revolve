@@ -81,6 +81,7 @@ class Device {
 
     void step();
     void start();
+    bool serviceHostEvents();
     void requestStop() { stopRequested = true; }
 
     void processIPC();
@@ -107,6 +108,7 @@ class Device {
     std::shared_ptr<CommandProcessor> cp = std::make_shared<CommandProcessor>();
     std::shared_ptr<WriteGatherPipe> wgpipe =
         std::make_shared<WriteGatherPipe>();
+    std::shared_ptr<DiscInterface> di = std::make_shared<DiscInterface>();
     std::shared_ptr<DSPInterface> dsp = std::make_shared<DSPInterface>();
     std::shared_ptr<SerialInterface> si = std::make_shared<SerialInterface>();
     std::shared_ptr<ExpansionInterface> exi =
@@ -115,6 +117,10 @@ class Device {
         std::make_shared<InputManager>();
     std::shared_ptr<AudioInterface> ai =
         std::make_shared<AudioInterface>(pi.get());
+
+  private:
+    uint64_t peripheralCycles = 0;
+    uint64_t iosCycles = 0;
 };
 
 #endif

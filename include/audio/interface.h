@@ -36,11 +36,11 @@ class AudioInterface : public MMIODevice {
     ProcessorInterface *pi = nullptr;
 
     // AI_CONTROL state
-    bool dma32kHz = false;
+    bool dma32kHz = true;
     bool interruptValid = false;
     bool interruptStatus = false;
     bool interruptMask = false;
-    bool stream48kHz = false;
+    bool stream48kHz = true;
     bool playing = false;
 
     uint16_t volume = 0;

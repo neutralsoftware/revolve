@@ -8,10 +8,19 @@
 
 constexpr uint32_t DSP_BASE = 0x0C005000;
 constexpr uint32_t DSP_SIZE = 0x40;
+constexpr uint32_t DI_BASE = 0x0D006000;
+constexpr uint32_t DI_SIZE = 0x40;
 constexpr uint32_t SI_BASE = 0x0D006400;
 constexpr uint32_t SI_SIZE = 0x100;
 constexpr uint32_t EXI_BASE = 0x0D006800;
 constexpr uint32_t EXI_SIZE = 0x40;
+
+class DiscInterface : public MMIODevice {
+  public:
+    uint32_t read(uint32_t offset, AccessSize size) override;
+    void write(uint32_t offset, uint32_t value, AccessSize size) override;
+    std::string getName() override { return "DiscInterface"; }
+};
 
 class DSPInterface : public MMIODevice {
   public:

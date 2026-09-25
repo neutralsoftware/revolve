@@ -1,6 +1,7 @@
 #include "debugger.h"
-#include "SDL3/SDL_events.h"
+#include "SDL3/SDL_timer.h"
 #include "core/memory.h"
+#include "core/time.h"
 #include "core/utils.h"
 #include "device.h"
 #include <algorithm>
@@ -1202,10 +1203,8 @@ void Debugger::stepFrame() {
 
     while (vi->getFrameCounter() == startingFrame) {
         if ((steps++ & 4095) == 0) {
-            SDL_Event event;
-            while (SDL_PollEvent(&event))
-                if (event.type == SDL_EVENT_QUIT)
-                    interrupted = true;
+            if (!Device::globalDevice->serviceHostEvents())
+                interrupted = true;
         }
         if (interrupted) {
             std::cout << color("1;33", "interrupted") << "  "
@@ -1245,7 +1244,35 @@ void Debugger::stepFrame() {
 void Debugger::continueExecution() {
     interrupted = false;
     bool first = true;
+    uint32_t steps = 0;
+    uint64_t nextHostPoll = 0;
+    uint64_t hostEpoch = SDL_GetTicksNS();
+    uint64_t guestEpoch = Device::globalDevice->scheduler.now();
+
     while (true) {
+        if ((steps++ & 4095) == 0) {
+            const uint64_t hostTime = SDL_GetTicks();
+            if (hostTime >= nextHostPoll) {
+                nextHostPoll = hostTime + 4;
+                if (!Device::globalDevice->serviceHostEvents())
+                    interrupted = true;
+            }
+
+            const uint64_t elapsedCycles =
+                Device::globalDevice->scheduler.now() - guestEpoch;
+            const uint64_t guestNanoseconds =
+                (elapsedCycles / BROADWAY_CLOCK) * 1000000000ULL +
+                (elapsedCycles % BROADWAY_CLOCK) * 1000000000ULL /
+                    BROADWAY_CLOCK;
+            const uint64_t hostNanoseconds = SDL_GetTicksNS() - hostEpoch;
+            if (guestNanoseconds > hostNanoseconds + 1000000ULL)
+                SDL_DelayNS(std::min<uint64_t>(
+                    guestNanoseconds - hostNanoseconds, 4000000ULL));
+            else if (hostNanoseconds > guestNanoseconds + 250000000ULL) {
+                hostEpoch = SDL_GetTicksNS();
+                guestEpoch = Device::globalDevice->scheduler.now();
+            }
+        }
         if (interrupted) {
             std::cout << color("1;33", "interrupted") << "  "
                       << formatAddress(cpu.state.cia) << '\n';

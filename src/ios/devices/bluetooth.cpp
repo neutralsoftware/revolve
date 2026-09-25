@@ -1,4 +1,5 @@
 
+#include "core/utils.h"
 #include "ios/ios.h"
 
 BluetoothUSBDevice::BluetoothUSBDevice(IOS &ios, InputManager &inputManager)
@@ -411,23 +412,15 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
         break;
     }
     case HCI::ReadLocalVersion: {
-        const std::array<uint8_t, 9> response{
-            0x00,
-
-            0x03,       // HCI version
-            0x00, 0x00, // HCI revision
-            0x03,       // LMP version
-
-            0x0F, 0x00, // manufacturer
-            0x00, 0x00  // LMP subversion
-        };
+        const std::array<uint8_t, 9> response{0x00, 0x03, 0xA7, 0x40, 0x03,
+                                              0x0F, 0x00, 0x0E, 0x43};
 
         sendCommandComplete(opcode, response);
 
         break;
     }
     case HCI::ReadLocalSupportedFeatures: {
-        const std::array<uint8_t, 9> response{0x00, 0xFF, 0xFF, 0x8F, 0xFE,
+        const std::array<uint8_t, 9> response{0x00, 0xFF, 0xFF, 0x8D, 0xFE,
                                               0x9B, 0xF9, 0x00, 0x80};
 
         sendCommandComplete(opcode, response);
@@ -559,7 +552,32 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
         sendCommandComplete(opcode, response);
         break;
     }
+    case 0x0C0D: {
+        queueHCIEvent({0x15, 0x01, 0x00});
+
+        std::vector<uint8_t> response;
+
+        response.push_back(0x00);
+        appendLE16(response, 255);
+        appendLE16(response, 0);
+
+        sendCommandComplete(opcode, response);
+        break;
+    }
+    case 0x0C43:
+    case 0x0C45:
+    case 0x0C47:
+    case 0xFC4C:
+    case 0xFC4F: {
+        const std::array<uint8_t, 1> response{0x00};
+        sendCommandComplete(opcode, response);
+        break;
+    }
     default:
+        Logger::log("HCI", LogLevel::Error,
+                    "UNIMPLEMENTED HCI COMMAND 0x " +
+                        utils::toHexString(opcode));
+
         sendCommandStatus(opcode, 0x01);
         break;
     }

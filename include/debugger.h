@@ -28,7 +28,7 @@ class Debugger {
     std::vector<std::string> history;
     std::string previousCommand;
     bool colorsEnabled;
-    bool stopOnException = true;
+    bool stopOnException = false;
     bool running = true;
 
     void printBanner();

@@ -24,6 +24,7 @@ void IOS::init() {
                                               Device::globalDevice->disc));
     bluetoothDevice = std::make_shared<BluetoothUSBDevice>(
         *this, *Device::globalDevice->inputManager);
+    registerDevice("/dev/usb/oh0/57e/305", bluetoothDevice);
     registerDevice("/dev/usb/oh1/57e/305", bluetoothDevice);
 }
 

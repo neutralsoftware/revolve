@@ -99,6 +99,10 @@ void ESDevice::prepareDiscBoot(uint64_t partitionOffset) {
     const auto metadata = TitleMetadata::parse(tmd);
     if (!metadata)
         return;
+    if (static_cast<uint32_t>(metadata->ios) == 9) {
+        Bus::writePhysical32(0x3140, 0x0009040A);
+        Bus::writePhysical32(0x3144, 0x00030110);
+    }
     currentTitle = discTitle = metadata->id;
     discTmd = std::move(tmd);
     discTicket = std::move(ticket);

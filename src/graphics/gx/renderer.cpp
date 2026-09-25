@@ -466,7 +466,6 @@ void GXRenderer::copyEFBToXFB(const GXBPCopyState &copy) {
         commandBuffer->performResolve(resolve);
         commandBuffer->commit();
         device->submitCommandBuffer(commandBuffer);
-        commandBuffer->waitForSubmittedWork();
         xfb.valid = true;
     } else {
         presentPipeline->bindTexture("xfbTexture", efbColor, 0);
@@ -490,19 +489,16 @@ void GXRenderer::copyEFBToXFB(const GXBPCopyState &copy) {
         commandBuffer->endPass();
         commandBuffer->commit();
         device->submitCommandBuffer(commandBuffer);
-        commandBuffer->waitForSubmittedWork();
         xfb.valid = true;
     }
-
-    writeXFBToMemory(copy);
 }
 
 void GXRenderer::writeXFBToMemory(const GXBPCopyState &copy) {
     if (!xfb.valid || copy.xfbStride == 0 || xfb.width == 0 || xfb.height == 0)
         return;
 
-    std::vector<uint8_t> rgba(static_cast<size_t>(xfb.width) * xfb.height * 4);
-    xfb.texture->readData(rgba.data(), opal::TextureDataFormat::Rgba);
+    xfbRGBA.resize(static_cast<size_t>(xfb.width) * xfb.height * 4);
+    xfb.texture->readData(xfbRGBA.data(), opal::TextureDataFormat::Rgba);
 
     const uint32_t rowBytes = ((xfb.width + 1) & ~1u) * 2;
     const size_t outputSize =
@@ -512,15 +508,20 @@ void GXRenderer::writeXFBToMemory(const GXBPCopyState &copy) {
         copy.xfbAddress + static_cast<uint32_t>(outputSize - 1));
     if (first.region == MemoryRegion::Invalid || first.region != last.region)
         return;
-    std::vector<uint8_t> encoded(outputSize, 0);
-    std::vector<uint8_t> scanout(rgba.size(), 255);
-    static constexpr float gammaValues[] = {1.0f, 1.7f, 2.2f, 2.2f};
-    const float gammaReciprocal = 1.0f / gammaValues[copy.gamma & 3u];
-
-    const auto corrected = [&](uint8_t value) {
-        return static_cast<int>(
-            std::lround(std::pow(value / 255.0f, gammaReciprocal) * 255.0f));
-    };
+    xfbEncoded.assign(outputSize, 0);
+    xfbScanout.assign(xfbRGBA.size(), 255);
+    static const auto gammaTable = [] {
+        std::array<std::array<uint8_t, 256>, 4> table{};
+        constexpr float values[] = {1.0f, 1.7f, 2.2f, 2.2f};
+        for (size_t gamma = 0; gamma < table.size(); ++gamma) {
+            const float reciprocal = 1.0f / values[gamma];
+            for (size_t value = 0; value < table[gamma].size(); ++value)
+                table[gamma][value] = static_cast<uint8_t>(std::lround(
+                    std::pow(value / 255.0f, reciprocal) * 255.0f));
+        }
+        return table;
+    }();
+    const auto &corrected = gammaTable[copy.gamma & 3u];
     const auto clampByte = [](int value) {
         return static_cast<uint8_t>(std::clamp(value, 0, 255));
     };
@@ -532,12 +533,12 @@ void GXRenderer::writeXFBToMemory(const GXBPCopyState &copy) {
             const uint32_t secondX = std::min(x + 1, xfb.width - 1);
             const size_t first = sourceRow + static_cast<size_t>(x) * 4;
             const size_t second = sourceRow + static_cast<size_t>(secondX) * 4;
-            const int r0 = corrected(rgba[first]);
-            const int g0 = corrected(rgba[first + 1]);
-            const int b0 = corrected(rgba[first + 2]);
-            const int r1 = corrected(rgba[second]);
-            const int g1 = corrected(rgba[second + 1]);
-            const int b1 = corrected(rgba[second + 2]);
+            const int r0 = corrected[xfbRGBA[first]];
+            const int g0 = corrected[xfbRGBA[first + 1]];
+            const int b0 = corrected[xfbRGBA[first + 2]];
+            const int r1 = corrected[xfbRGBA[second]];
+            const int g1 = corrected[xfbRGBA[second + 1]];
+            const int b1 = corrected[xfbRGBA[second + 2]];
             const int y0 = (66 * r0 + 129 * g0 + 25 * b0 + 4096 + 128) >> 8;
             const int y1 = (66 * r1 + 129 * g1 + 25 * b1 + 4096 + 128) >> 8;
             const int r = (r0 + r1) / 2;
@@ -547,10 +548,10 @@ void GXRenderer::writeXFBToMemory(const GXBPCopyState &copy) {
             const int v = (112 * r - 94 * g - 18 * b + 32768 + 128) >> 8;
             const size_t destination =
                 destinationRow + static_cast<size_t>(x) * 2;
-            encoded[destination] = clampByte(y0);
-            encoded[destination + 1] = clampByte(u);
-            encoded[destination + 2] = clampByte(y1);
-            encoded[destination + 3] = clampByte(v);
+            xfbEncoded[destination] = clampByte(y0);
+            xfbEncoded[destination + 1] = clampByte(u);
+            xfbEncoded[destination + 2] = clampByte(y1);
+            xfbEncoded[destination + 3] = clampByte(v);
 
             const auto decode = [&](uint32_t pixelX, int luminance) {
                 const int c = luminance - 16;
@@ -558,10 +559,12 @@ void GXRenderer::writeXFBToMemory(const GXBPCopyState &copy) {
                 const int e = v - 128;
                 const size_t pixel =
                     (static_cast<size_t>(y) * xfb.width + pixelX) * 4;
-                scanout[pixel] = clampByte((298 * c + 409 * e + 128) >> 8);
-                scanout[pixel + 1] =
+                xfbScanout[pixel] =
+                    clampByte((298 * c + 409 * e + 128) >> 8);
+                xfbScanout[pixel + 1] =
                     clampByte((298 * c - 100 * d - 208 * e + 128) >> 8);
-                scanout[pixel + 2] = clampByte((298 * c + 516 * d + 128) >> 8);
+                xfbScanout[pixel + 2] =
+                    clampByte((298 * c + 516 * d + 128) >> 8);
             };
             decode(x, y0);
             if (secondX != x)
@@ -569,8 +572,8 @@ void GXRenderer::writeXFBToMemory(const GXBPCopyState &copy) {
         }
     }
 
-    Bus::writeBlock(copy.xfbAddress, encoded);
-    xfb.texture->updateData(scanout.data(), static_cast<int>(xfb.width),
+    Bus::writeBlock(copy.xfbAddress, xfbEncoded);
+    xfb.texture->updateData(xfbScanout.data(), static_cast<int>(xfb.width),
                             static_cast<int>(xfb.height),
                             opal::TextureDataFormat::Rgba);
 }
@@ -651,8 +654,6 @@ void GXRenderer::presentXFB() {
         copy.sourceHeight = EFB_HEIGHT;
         copyEFBToXFB(copy);
     }
-
-    readXFBFromMemory();
 
     presentPipeline->bindTexture("xfbTexture", xfb.texture, 0);
 

@@ -999,6 +999,9 @@ class GXRenderer {
     std::shared_ptr<opal::DrawingState> fullscreenDrawingState;
 
     std::vector<GXRenderVertex> vertices;
+    std::vector<uint8_t> xfbRGBA;
+    std::vector<uint8_t> xfbEncoded;
+    std::vector<uint8_t> xfbScanout;
 
     bool rasterStateDirty = true;
     GXRasterState currentRasterState{};
@@ -1097,6 +1100,7 @@ class GX {
 
     void initializeFifoReader();
     void onFifoBytesAvailable(uint32_t bytes);
+    bool hasPendingWork() const { return workPending; }
 
     std::shared_ptr<GXRenderer> renderer = std::make_shared<GXRenderer>();
 
@@ -1221,6 +1225,8 @@ class GX {
 
     GXDecodedTexture decodeTexture(const GXTextureState &state) const;
 
+    uint64_t xfbCopyCount = 0;
+
     GXDecodedTexture decodeTextureI4(uint32_t address, uint16_t width,
                                      uint16_t height) const;
     GXDecodedTexture decodeTextureI8(uint32_t address, uint16_t width,
@@ -1307,6 +1313,7 @@ class GX {
     GXFifoReader reader{};
     std::vector<uint8_t> fifoBuffer;
     size_t fifoBufferOffset = 0;
+    bool workPending = false;
 
     GXCommandSource commandSource = GXCommandSource::FIFO;
     GXDisplayListReader displayListReader{};

@@ -7,6 +7,21 @@
 
 IOSResult DIDevice::ioctl(const IOSIoctlRequest &request) {
     switch (static_cast<DIIoctl>(request.request)) {
+    case DIIoctl::Inquiry: {
+        if (request.outSize < 0x20)
+            return static_cast<int32_t>(DIResult::SecurityError);
+
+        std::array<uint8_t, 0x20> inquiry{};
+        inquiry[3] = 0x02;
+        inquiry[4] = 0x20;
+        inquiry[5] = 0x06;
+        inquiry[6] = 0x05;
+        inquiry[7] = 0x26;
+        inquiry[8] = 0x41;
+        Bus::writeBlock(request.outPtr, std::span<const uint8_t>(inquiry));
+        lastLength = 0x20;
+        return static_cast<int32_t>(DIResult::Success);
+    }
     case DIIoctl::ReadDiskID: {
         if (!disc || !disc->isOpen())
             return static_cast<int32_t>(DIResult::DriveError);
@@ -72,6 +87,8 @@ IOSResult DIDevice::ioctl(const IOSIoctlRequest &request) {
 
         return static_cast<int32_t>(DIResult::Success);
     }
+    case DIIoctl::ClearCoverInterrupt:
+        return static_cast<int32_t>(DIResult::Success);
     case DIIoctl::Read: {
         if (!disc || !disc->isOpen() || !currentPartition)
             return static_cast<int32_t>(DIResult::DriveError);
@@ -162,6 +179,10 @@ IOSResult DIDevice::ioctl(const IOSIoctlRequest &request) {
 
         return static_cast<int32_t>(DIResult::DriveError);
     }
+    case DIIoctl::StopMotor:
+        if (request.outSize >= 4)
+            Bus::writePhysical32(request.outPtr, 0);
+        return static_cast<int32_t>(DIResult::Success);
     default:
         Logger::log("DI", LogLevel::Warning,
                     "Unknown DI ioctl: 0x" +

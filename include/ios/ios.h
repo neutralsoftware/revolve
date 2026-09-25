@@ -297,6 +297,7 @@ enum class DIIoctl : uint32_t {
     GetCoverRegister = 0x7A,
 
     GetLength = 0x83,
+    ClearCoverInterrupt = 0x86,
     GetCoverStatus = 0x88,
 
     Reset = 0x8A,
@@ -305,6 +306,7 @@ enum class DIIoctl : uint32_t {
     UnencryptedRead = 0x8D,
 
     RequestError = 0xE0,
+    StopMotor = 0xE3,
 };
 
 enum class DIResult : int32_t {
