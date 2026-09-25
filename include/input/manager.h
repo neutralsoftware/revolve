@@ -10,6 +10,8 @@
 class InputManager {
   public:
     InputManager();
+    ~InputManager();
+    void enableBluetoothDiscovery() { bluetoothDiscovery = true; }
 
     GameCubeControllerState &gameCube(std::size_t index) {
         return gameCubeControllers.at(index);
@@ -45,6 +47,7 @@ class InputManager {
     std::array<std::unique_ptr<WiiRemoteDevice>, 4> wiimoteDevices{};
 
     std::array<PhysicalWiiRemote, 4> physicalWiimotes{};
+    bool bluetoothDiscovery = false;
     uint64_t nextPhysicalScan = 0;
     void updatePhysical();
 

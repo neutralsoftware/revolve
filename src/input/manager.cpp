@@ -1,4 +1,5 @@
 #include "input/manager.h"
+#include "input/native_bluetooth.h"
 #include "device.h"
 
 #include <SDL3/SDL.h>
@@ -167,7 +168,9 @@ void InputManager::updateGamepads() {
 
 void InputManager::updatePhysical() {
     const uint64_t now = SDL_GetTicks();
-    if (now >= nextPhysicalScan) {
+    if (bluetoothDiscovery)
+        pollNativeBluetooth();
+    if (!bluetoothDiscovery && now >= nextPhysicalScan) {
         nextPhysicalScan = now + 2000;
         auto *devices = SDL_hid_enumerate(0x057E, 0);
         for (auto *candidate = devices; candidate; candidate = candidate->next) {
@@ -189,9 +192,16 @@ void InputManager::updatePhysical() {
     for (std::size_t i = 0; i < physicalWiimotes.size(); ++i) {
         auto &remote = physicalWiimotes[i];
         auto &device = *wiimoteDevices[i];
+        if (bluetoothDiscovery)
+            remote.useNative(i);
         device.attachPhysical(remote.connected() ? &remote : nullptr);
         device.pollPhysical();
         if (remote.connected())
             wiimotes[i].connected = true;
     }
+}
+
+InputManager::~InputManager() {
+    if (bluetoothDiscovery)
+        shutdownNativeBluetooth();
 }

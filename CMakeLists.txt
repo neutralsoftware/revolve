@@ -154,3 +154,13 @@ add_executable(revolve_test ${TEST_SOURCES} tests/broadway.cpp tests/disc.cpp
     src/core/executable.cpp src/device.cpp src/disc.cpp ${GRAPHICS_SOURCES} ${INPUT_SOURCES} ${AUDIO_SOURCES})
 add_dependencies(revolve_test revolve_shader_header)
 target_link_libraries(revolve_test PRIVATE OpenSSL::Crypto PkgConfig::ZSTD Opal::Opal)
+
+if(APPLE)
+    enable_language(OBJCXX)
+    set_source_files_properties(src/input/native_bluetooth.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+    foreach(REVOLVE_TARGET revolve revolve_test)
+        target_sources(${REVOLVE_TARGET} PRIVATE src/input/native_bluetooth.mm)
+        target_link_libraries(${REVOLVE_TARGET} PRIVATE "-framework Foundation" "-framework IOBluetooth")
+        set_property(TARGET ${REVOLVE_TARGET} PROPERTY OBJCXX_STANDARD 20)
+    endforeach()
+endif()

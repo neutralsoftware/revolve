@@ -12,17 +12,20 @@
 int main(int argc, const char *argv[]) {
     std::vector<std::string> arguments;
     bool debug = false;
+    bool realWiimotes = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string argument = argv[i];
         if (argument == "-S" || argument == "--debug")
             debug = true;
+        else if (argument == "--real-wiimotes")
+            realWiimotes = true;
         else
             arguments.push_back(argument);
     }
 
     if (arguments.empty()) {
-        std::cerr << "Usage: revolve [-S] <parse|exec> <file>\n"
+        std::cerr << "Usage: revolve [-S] [--real-wiimotes] <parse|exec> <file>\n"
                   << "       revolve disc <image.iso|image.wbfs|image.rvz>\n"
                   << "       revolve -S <file>\n";
         return 1;
@@ -32,6 +35,8 @@ int main(int argc, const char *argv[]) {
         arguments.insert(arguments.begin(), "exec");
 
     Device::createDevice();
+    if (realWiimotes)
+        Device::globalDevice->inputManager->enableBluetoothDiscovery();
 
     auto loadExecutable =
         [](const std::string &filename) -> std::optional<Executable> {
