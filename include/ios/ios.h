@@ -334,12 +334,15 @@ class DIDevice : public IOSDevice {
 
 class ESDevice : public IOSDevice {
   public:
+    void prepareDiscBoot(uint64_t partitionOffset);
     int32_t open(const std::string &path, uint32_t mode) override;
 
     int32_t close(int32_t fd) override;
 
     IOSResult ioctlv(const IOSIoctlvRequest &request,
                      const std::vector<IOSVector> &vectors) override;
+  private:
+    uint64_t currentTitle = 0x0000000100000002ULL;
 };
 
 struct BluetoothAddress {

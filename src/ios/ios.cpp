@@ -286,6 +286,9 @@ void IOS::prepareDiscBoot(uint64_t partitionOffset) {
     auto device = std::dynamic_pointer_cast<DIDevice>(devices.at("/dev/di"));
     if (device)
         device->prepareBoot(partitionOffset);
+    auto es = std::dynamic_pointer_cast<ESDevice>(devices.at("/dev/es"));
+    if (es)
+        es->prepareDiscBoot(partitionOffset);
 }
 
 void IOS::completeRequest(uint32_t address, int32_t result) {
