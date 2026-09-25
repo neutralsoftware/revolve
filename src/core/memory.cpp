@@ -45,6 +45,24 @@ ResolvedAddress Bus::resolveAddress(uint32_t addr) {
     return {MemoryRegion::Invalid, 0};
 }
 
+uint16_t Bus::readPhysical16(uint32_t addr) {
+    const auto resolved = resolveAddress(addr);
+    if (resolved.region == MemoryRegion::MMIO)
+        return Device::globalDevice->mmioDispatcher.read16(resolved.offset);
+    return static_cast<uint16_t>((readPhysical8(addr) << 8) |
+                                 readPhysical8(addr + 1));
+}
+
+void Bus::writePhysical16(uint32_t addr, uint16_t value) {
+    const auto resolved = resolveAddress(addr);
+    if (resolved.region == MemoryRegion::MMIO) {
+        Device::globalDevice->mmioDispatcher.write16(resolved.offset, value);
+        return;
+    }
+    writePhysical8(addr, static_cast<uint8_t>(value >> 8));
+    writePhysical8(addr + 1, static_cast<uint8_t>(value));
+}
+
 uint32_t Bus::readPhysical32(uint32_t addr) {
     ResolvedAddress resolved = resolveAddress(addr);
     Memory &mem = Device::globalDevice->memory;
@@ -232,7 +250,8 @@ void Bus::write8(uint32_t addr, uint8_t value) {
 void Bus::write16(uint32_t addr, uint16_t value) {
     if ((addr & 0xFFF) > 0x1000 - 2) {
         Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Write);
-        Device::globalDevice->cpu.translateAddress(addr + 1, MemoryAccess::Write);
+        Device::globalDevice->cpu.translateAddress(addr + 1,
+                                                   MemoryAccess::Write);
         for (uint32_t i = 0; i < 2; ++i)
             write8(addr + i, static_cast<uint8_t>(value >> (8 - i * 8)));
         return;
@@ -266,7 +285,8 @@ void Bus::write16(uint32_t addr, uint16_t value) {
 void Bus::write32(uint32_t addr, uint32_t value) {
     if ((addr & 0xFFF) > 0x1000 - 4) {
         Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Write);
-        Device::globalDevice->cpu.translateAddress(addr + 3, MemoryAccess::Write);
+        Device::globalDevice->cpu.translateAddress(addr + 3,
+                                                   MemoryAccess::Write);
         for (uint32_t i = 0; i < 4; ++i)
             write8(addr + i, static_cast<uint8_t>(value >> (24 - i * 8)));
         return;
@@ -679,6 +699,6 @@ void MMIO::logUnmapped(uint32_t address, AccessSize size, bool write) {
         return;
     Logger::log("Memory", LogLevel::Error,
                 std::string("Unmapped MMIO ") + (write ? "write" : "read") +
-                " at " + utils::toHexString(address) + " (" +
-                std::to_string(count) + " accesses)");
+                    " at " + utils::toHexString(address) + " (" +
+                    std::to_string(count) + " accesses)");
 }
