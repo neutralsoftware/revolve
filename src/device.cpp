@@ -62,6 +62,11 @@ std::shared_ptr<Device> Device::createDevice() {
                     "Failed to initialize host audio");
     }
 
+    globalDevice->ai = std::make_shared<AudioInterface>(globalDevice->pi.get());
+
+    globalDevice->mmioDispatcher.registerDevice(AI_BASE, AI_SIZE,
+                                                globalDevice->ai.get());
+
     auto controller = std::make_shared<GameCubeControllerDevice>(
         &globalDevice->inputManager->gameCube(0));
 
@@ -123,7 +128,10 @@ void Device::step() {
 
     cpu.advanceTime(cycles);
     scheduler.advance(cycles);
+
+    ai->step(cycles);
     si->step(cycles);
+
     ios.update();
 
     gx.run();

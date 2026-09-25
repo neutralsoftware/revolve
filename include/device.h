@@ -2,6 +2,7 @@
 #define REVOLVE_DEVICE
 
 #include "audio/audio.h"
+#include "audio/interface.h"
 #include "core/memory.h"
 #include "core/system_hardware.h"
 #include "core/time.h"
@@ -110,6 +111,8 @@ class Device {
         std::make_shared<ExpansionInterface>();
     std::shared_ptr<InputManager> inputManager =
         std::make_shared<InputManager>();
+    std::shared_ptr<AudioInterface> ai =
+        std::make_shared<AudioInterface>(pi.get());
 };
 
 #endif
