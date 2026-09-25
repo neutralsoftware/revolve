@@ -2,6 +2,7 @@
 #include "device.h"
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_init.h"
+#include "SDL3/SDL_hints.h"
 #include "core/memory.h"
 #include "core/time.h"
 #include "core/utils.h"
@@ -18,6 +19,7 @@
 std::shared_ptr<Device> Device::globalDevice = nullptr;
 
 std::shared_ptr<Device> Device::createDevice() {
+    SDL_SetHint("SDL_JOYSTICK_HIDAPI_WII", "0");
     globalDevice = std::make_shared<Device>();
 
     globalDevice->controller.setPI(globalDevice->pi.get());

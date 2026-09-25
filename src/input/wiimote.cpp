@@ -353,6 +353,10 @@ std::vector<uint8_t> WiiRemoteDevice::buildDataReport() {
 
 void WiiRemoteDevice::handleOutputReport(uint8_t reportId,
                                          std::span<const uint8_t> payload) {
+    if (physical) {
+        physical->send(reportId, payload);
+        return;
+    }
     if (payload.empty() && reportId != 0x15)
         return;
 
@@ -516,6 +520,8 @@ void WiiRemoteDevice::handleReadMemory(std::span<const uint8_t> payload) {
 }
 
 void WiiRemoteDevice::update() {
+    if (physical)
+        return;
     if (!state || !state->connected)
         return;
 
@@ -634,4 +640,26 @@ void SDLWiiRemoteInput::shutdown() {
         return;
     SDL_CloseGamepad(gamepad);
     gamepad = nullptr;
+}
+
+void WiiRemoteDevice::attachPhysical(PhysicalWiiRemote *remote) {
+    if (physical == remote)
+        return;
+    physical = remote;
+    inputQueue.clear();
+    lastDataReport.clear();
+    reportMode = 0x30;
+    continuousReporting = false;
+    dataReportingEnabled = true;
+}
+
+void WiiRemoteDevice::pollPhysical() {
+    if (!usesPhysical())
+        return;
+    for (unsigned i = 0; i < 32 && inputQueue.size() < 128; ++i) {
+        auto report = physical->receive();
+        if (report.empty())
+            break;
+        inputQueue.push_back(std::move(report));
+    }
 }

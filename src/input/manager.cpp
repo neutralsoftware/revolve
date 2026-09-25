@@ -46,6 +46,7 @@ void InputManager::update() {
     }
     updateGamepads();
     updateKeyboard();
+    updatePhysical();
 }
 
 void InputManager::updateKeyboard() {
@@ -161,5 +162,36 @@ void InputManager::updateGamepads() {
         if (!wiimoteInput.connected() && !wiimoteInput.initialize(i))
             continue;
         wiimoteInput.update(wiimotes[i]);
+    }
+}
+
+void InputManager::updatePhysical() {
+    const uint64_t now = SDL_GetTicks();
+    if (now >= nextPhysicalScan) {
+        nextPhysicalScan = now + 2000;
+        auto *devices = SDL_hid_enumerate(0x057E, 0);
+        for (auto *candidate = devices; candidate; candidate = candidate->next) {
+            if (!candidate->path || (candidate->product_id != 0x0306 && candidate->product_id != 0x0330))
+                continue;
+            const bool assigned = std::any_of(physicalWiimotes.begin(), physicalWiimotes.end(),
+                [&](const auto &remote) { return remote.path() == candidate->path; });
+            if (assigned)
+                continue;
+            for (auto &remote : physicalWiimotes) {
+                if (!remote.connected()) {
+                    remote.open(candidate->path);
+                    break;
+                }
+            }
+        }
+        SDL_hid_free_enumeration(devices);
+    }
+    for (std::size_t i = 0; i < physicalWiimotes.size(); ++i) {
+        auto &remote = physicalWiimotes[i];
+        auto &device = *wiimoteDevices[i];
+        device.attachPhysical(remote.connected() ? &remote : nullptr);
+        device.pollPhysical();
+        if (remote.connected())
+            wiimotes[i].connected = true;
     }
 }

@@ -44,6 +44,10 @@ class InputManager {
     std::array<SDLWiiRemoteInput, 4> wiimoteInputs{};
     std::array<std::unique_ptr<WiiRemoteDevice>, 4> wiimoteDevices{};
 
+    std::array<PhysicalWiiRemote, 4> physicalWiimotes{};
+    uint64_t nextPhysicalScan = 0;
+    void updatePhysical();
+
     void updateKeyboard();
     void updateGamepads();
 };

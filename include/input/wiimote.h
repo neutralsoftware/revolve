@@ -2,6 +2,7 @@
 #pragma once
 
 #include "SDL3/SDL_gamepad.h"
+#include "input/physical_wiimote.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -69,15 +70,19 @@ class WiiRemoteDevice {
     std::vector<uint8_t> popInputReport();
 
     void update();
+    void attachPhysical(PhysicalWiiRemote *remote);
+    void pollPhysical();
+    bool usesPhysical() const { return physical && physical->connected(); }
 
     void initializeEEPROM();
     void initializeNunchukRegisters();
     void initializeMotionPlusRegisters();
 
-    inline bool isAvailable() const { return state && state->connected; }
+    inline bool isAvailable() const { return usesPhysical() || (state && state->connected); }
 
   private:
     WiiRemoteState *state;
+    PhysicalWiiRemote *physical = nullptr;
 
     uint8_t reportMode = 0x30;
     bool continuousReporting = false;
