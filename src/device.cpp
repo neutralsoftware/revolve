@@ -1,8 +1,9 @@
 
 #include "device.h"
 #include "SDL3/SDL_events.h"
-#include "SDL3/SDL_init.h"
 #include "SDL3/SDL_hints.h"
+#include "SDL3/SDL_init.h"
+#include "SDL3/SDL_timer.h"
 #include "core/memory.h"
 #include "core/time.h"
 #include "core/utils.h"
@@ -11,6 +12,7 @@
 #include "cpu/memory_interface.h"
 #include "graphics/video_interface.h"
 #include "input/gamecube.h"
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <numbers>
@@ -149,28 +151,42 @@ void Device::start() {
     stopRequested = false;
     uint64_t nextInputPoll = 0;
 
-    auto window = gx.renderer->window;
+    uint64_t hostEpoch = SDL_GetTicksNS();
+    uint64_t guestEpoch = scheduler.now();
     while (running && !stopRequested) {
         const uint64_t hostTime = SDL_GetTicks();
         if (hostTime >= nextInputPoll) {
-        nextInputPoll = hostTime + 4;
-        SDL_Event event;
+            nextInputPoll = hostTime + 4;
+            SDL_Event event;
 
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT) {
-                running = false;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_EVENT_QUIT) {
+                    running = false;
+                }
             }
-        }
 
-        SDL_PumpEvents();
+            SDL_PumpEvents();
 
-        inputManager->update();
+            inputManager->update();
         }
 
         if (!running)
             break;
-        for (uint32_t instruction = 0; instruction < 4096 && !stopRequested; ++instruction)
+        for (uint32_t instruction = 0; instruction < 4096 && !stopRequested;
+             ++instruction)
             step();
+        const uint64_t elapsedCycles = scheduler.now() - guestEpoch;
+        const uint64_t guestNanoseconds =
+            (elapsedCycles / BROADWAY_CLOCK) * 1000000000ULL +
+            (elapsedCycles % BROADWAY_CLOCK) * 1000000000ULL / BROADWAY_CLOCK;
+        const uint64_t hostNanoseconds = SDL_GetTicksNS() - hostEpoch;
+        if (guestNanoseconds > hostNanoseconds + 1000000ULL)
+            SDL_DelayNS(std::min<uint64_t>(guestNanoseconds - hostNanoseconds,
+                                           4000000ULL));
+        else if (hostNanoseconds > guestNanoseconds + 250000000ULL) {
+            hostEpoch = SDL_GetTicksNS();
+            guestEpoch = scheduler.now();
+        }
     }
 }
 

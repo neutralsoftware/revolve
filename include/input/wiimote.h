@@ -79,7 +79,10 @@ class WiiRemoteDevice {
     void initializeNunchukRegisters();
     void initializeMotionPlusRegisters();
 
-    inline bool isAvailable() const { return physicalRequired || physical ? usesPhysical() : (state && state->connected); }
+    inline bool isAvailable() const {
+        return physicalRequired || physical ? usesPhysical()
+                                            : (state && state->connected);
+    }
 
   private:
     WiiRemoteState *state;

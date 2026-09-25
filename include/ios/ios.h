@@ -276,6 +276,7 @@ class FSDevice : public IOSDevice {
 
     IOSResult ioctlv(const IOSIoctlvRequest &request,
                      const std::vector<IOSVector> &vectors) override;
+
   private:
     std::fstream file;
     std::filesystem::path filePath;
@@ -348,6 +349,7 @@ class ESDevice : public IOSDevice {
 
     IOSResult ioctlv(const IOSIoctlvRequest &request,
                      const std::vector<IOSVector> &vectors) override;
+
   private:
     uint64_t currentTitle = 0x0000000100000002ULL;
 };

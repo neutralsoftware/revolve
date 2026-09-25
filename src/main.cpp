@@ -25,9 +25,10 @@ int main(int argc, const char *argv[]) {
     }
 
     if (arguments.empty()) {
-        std::cerr << "Usage: revolve [-S] [--real-wiimotes] <parse|exec> <file>\n"
-                  << "       revolve disc <image.iso|image.wbfs|image.rvz>\n"
-                  << "       revolve -S <file>\n";
+        std::cerr
+            << "Usage: revolve [-S] [--real-wiimotes] <parse|exec> <file>\n"
+            << "       revolve disc <image.iso|image.wbfs|image.rvz>\n"
+            << "       revolve -S <file>\n";
         return 1;
     }
 
@@ -108,7 +109,8 @@ int main(int argc, const char *argv[]) {
             if (Device::globalDevice->disc->isOpen())
                 Device::globalDevice->disc->prepareBoot(*exec);
         } catch (const std::exception &error) {
-            std::cerr << "Error preparing executable: " << error.what() << std::endl;
+            std::cerr << "Error preparing executable: " << error.what()
+                      << std::endl;
             return 1;
         }
 

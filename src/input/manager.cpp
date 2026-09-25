@@ -1,6 +1,6 @@
 #include "input/manager.h"
-#include "input/native_bluetooth.h"
 #include "device.h"
+#include "input/native_bluetooth.h"
 
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -125,6 +125,9 @@ void InputManager::updateKeyboard() {
     SDL_GetWindowSize(Device::globalDevice->gx.renderer->window, &windowWidth,
                       &windowHeight);
 
+    if (windowWidth <= 0 || windowHeight <= 0)
+        return;
+
     const float px = mouseX / float(windowWidth);
     const float py = mouseY / float(windowHeight);
 
@@ -173,11 +176,16 @@ void InputManager::updatePhysical() {
     if (!bluetoothDiscovery && now >= nextPhysicalScan) {
         nextPhysicalScan = now + 2000;
         auto *devices = SDL_hid_enumerate(0x057E, 0);
-        for (auto *candidate = devices; candidate; candidate = candidate->next) {
-            if (!candidate->path || (candidate->product_id != 0x0306 && candidate->product_id != 0x0330))
+        for (auto *candidate = devices; candidate;
+             candidate = candidate->next) {
+            if (!candidate->path || (candidate->product_id != 0x0306 &&
+                                     candidate->product_id != 0x0330))
                 continue;
-            const bool assigned = std::any_of(physicalWiimotes.begin(), physicalWiimotes.end(),
-                [&](const auto &remote) { return remote.path() == candidate->path; });
+            const bool assigned =
+                std::any_of(physicalWiimotes.begin(), physicalWiimotes.end(),
+                            [&](const auto &remote) {
+                                return remote.path() == candidate->path;
+                            });
             if (assigned)
                 continue;
             for (auto &remote : physicalWiimotes) {
@@ -196,6 +204,8 @@ void InputManager::updatePhysical() {
             remote.useNative(i);
             device.requirePhysical();
         }
+        if (remote.connected())
+            device.requirePhysical();
         device.attachPhysical(remote.connected() ? &remote : nullptr);
         device.pollPhysical();
         if (remote.connected())

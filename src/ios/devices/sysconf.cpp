@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <fstream>
+#include <stdexcept>
 #include <string_view>
 
 void initializeSystemConfiguration(const std::filesystem::path &root) {
@@ -22,7 +23,8 @@ void initializeSystemConfiguration(const std::filesystem::path &root) {
             {"IPL.CB", 5, {0, 0, 0, 0}},
             {"IPL.DH", 3, {0}},
             {"IPL.IDL", 2, {0, 0}},
-            {"IPL.NIK", 2, {0, 'R', 0, 'e', 0, 'v', 0, 'o', 0, 'l', 0, 'v', 0, 'e', 0, 0, 0, 0, 0, 0, 7}},
+            {"IPL.NIK", 2, {0,   'R', 0,   'e', 0, 'v', 0, 'o', 0, 'l', 0,
+                            'v', 0,   'e', 0,   0, 0,   0, 0,   0, 7}},
             {"BT.BAR", 3, {1}},
             {"BT.SENS", 5, {0, 0, 0, 3}},
             {"BT.SPKV", 3, {0x58}},
@@ -64,7 +66,9 @@ void initializeSystemConfiguration(const std::filesystem::path &root) {
     if (!std::filesystem::exists(settings)) {
         std::filesystem::create_directories(settings.parent_path());
         std::array<uint8_t, 256> data{};
-        constexpr std::string_view text = "AREA=EUR\r\nMODEL=RVL-001(EUR)\r\nDVD=0\r\nMPCH=0x7FFE\r\nCODE=LEH\r\nSERNO=000000000\r\nVIDEO=PAL\r\nGAME=EU\r\n";
+        constexpr std::string_view text =
+            "AREA=EUR\r\nMODEL=RVL-001(EUR)\r\nDVD=0\r\nMPCH=0x7FFE\r\nCODE="
+            "LEH\r\nSERNO=000000000\r\nVIDEO=PAL\r\nGAME=EU\r\n";
         std::copy(text.begin(), text.end(), data.begin());
         uint32_t key = 0x73B5DBFA;
         for (auto &byte : data) {

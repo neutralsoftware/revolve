@@ -1,6 +1,6 @@
 #include "input/wiimote.h"
-#include "input/gamecube.h"
 #include "device.h"
+#include "input/gamecube.h"
 #include <algorithm>
 #include <vector>
 
@@ -527,7 +527,9 @@ void WiiRemoteDevice::update() {
     if (!state || !state->connected)
         return;
 
-    const uint64_t now = Device::globalDevice ? Device::globalDevice->scheduler.now() : nextReportTick;
+    const uint64_t now = Device::globalDevice
+                             ? Device::globalDevice->scheduler.now()
+                             : nextReportTick;
     if (now < nextReportTick)
         return;
     nextReportTick = now + BROADWAY_CLOCK / 100;
@@ -603,8 +605,10 @@ void SDLWiiRemoteInput::update(WiiRemoteState &state) {
     state.minus = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_BACK);
     state.home = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_GUIDE);
     state.dpadUp = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
-    state.dpadDown = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
-    state.dpadLeft = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+    state.dpadDown =
+        SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+    state.dpadLeft =
+        SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
     state.dpadRight =
         SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
     state.nunchuk.stickX =
@@ -623,8 +627,8 @@ void SDLWiiRemoteInput::update(WiiRemoteState &state) {
         767 / 255);
     state.ir[0] = {static_cast<uint16_t>(std::max<int>(0, irX - 50)), irY, 4,
                    true};
-    state.ir[1] = {static_cast<uint16_t>(std::min<int>(1023, irX + 50)), irY,
-                   4, true};
+    state.ir[1] = {static_cast<uint16_t>(std::min<int>(1023, irX + 50)), irY, 4,
+                   true};
     if (SDL_GamepadHasSensor(gamepad, SDL_SENSOR_ACCEL)) {
         float acceleration[3]{};
         if (SDL_GetGamepadSensorData(gamepad, SDL_SENSOR_ACCEL, acceleration,

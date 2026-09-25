@@ -121,7 +121,8 @@ void DSPInterface::write16(uint32_t offset, uint16_t value) {
         completeARAMTransfer();
         break;
     case 0x30:
-        audioAddress = (audioAddress & 0xFFFF) | (uint32_t(value & 0x1FFF) << 16);
+        audioAddress =
+            (audioAddress & 0xFFFF) | (uint32_t(value & 0x1FFF) << 16);
         break;
     case 0x32:
         audioAddress = (audioAddress & 0xFFFF0000) | (value & 0xFFE0);
@@ -296,8 +297,10 @@ void DSPInterface::step(uint32_t cycles) {
         }
         std::array<int16_t, 16> samples{};
         for (uint32_t frame = 0; frame < 8; ++frame) {
-            samples[frame * 2] = static_cast<int16_t>(Bus::readPhysical16(audioCursor + frame * 4 + 2));
-            samples[frame * 2 + 1] = static_cast<int16_t>(Bus::readPhysical16(audioCursor + frame * 4));
+            samples[frame * 2] = static_cast<int16_t>(
+                Bus::readPhysical16(audioCursor + frame * 4 + 2));
+            samples[frame * 2 + 1] = static_cast<int16_t>(
+                Bus::readPhysical16(audioCursor + frame * 4));
         }
         device.audio.submitSamples(samples, rate);
         audioCursor += 32;

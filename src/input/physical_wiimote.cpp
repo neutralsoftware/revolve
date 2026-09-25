@@ -31,7 +31,8 @@ bool PhysicalWiiRemote::send(uint8_t report, std::span<const uint8_t> payload) {
     data[0] = report;
     std::copy(payload.begin(), payload.end(), data.begin() + 1);
     const auto length = payload.size() + 1;
-    if (SDL_hid_write(handle, data.data(), length) != static_cast<int>(length)) {
+    if (SDL_hid_write(handle, data.data(), length) !=
+        static_cast<int>(length)) {
         close();
         return false;
     }
@@ -55,7 +56,8 @@ std::vector<uint8_t> PhysicalWiiRemote::receive() {
 }
 
 bool PhysicalWiiRemote::connected() const {
-    return nativeSlot >= 0 ? nativeBluetoothConnected(nativeSlot) : handle != nullptr;
+    return nativeSlot >= 0 ? nativeBluetoothConnected(nativeSlot)
+                           : handle != nullptr;
 }
 
 void PhysicalWiiRemote::useNative(std::size_t slot) {

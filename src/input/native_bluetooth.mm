@@ -4,9 +4,10 @@
 #include <algorithm>
 #include <array>
 #include <deque>
+#include <iostream>
 
 @interface RevolveRemote : NSObject <IOBluetoothL2CAPChannelDelegate> {
-@public
+  @public
     IOBluetoothDevice *device;
     IOBluetoothL2CAPChannel *control;
     IOBluetoothL2CAPChannel *interrupt;
@@ -20,10 +21,12 @@
 
 @implementation RevolveRemote
 - (void)connect:(IOBluetoothDevice *)target {
+    std::cerr << "[Bluetooth] Connecting Wii Remote\n";
     device = target;
     deadline = CFAbsoluteTimeGetCurrent() + 15;
     IOBluetoothL2CAPChannel *channel = nil;
-    if ([device openL2CAPChannelAsync:&channel withPSM:0x11 delegate:self] != kIOReturnSuccess) {
+    if ([device openL2CAPChannelAsync:&channel withPSM:0x11
+                             delegate:self] != kIOReturnSuccess) {
         [self disconnect];
         return;
     }
@@ -40,7 +43,8 @@
     device = nil;
     reports.clear();
 }
-- (void)l2capChannelOpenComplete:(IOBluetoothL2CAPChannel *)channel status:(IOReturn)status {
+- (void)l2capChannelOpenComplete:(IOBluetoothL2CAPChannel *)channel
+                          status:(IOReturn)status {
     if (status != kIOReturnSuccess) {
         [self disconnect];
         return;
@@ -48,7 +52,8 @@
     if ([channel getPSM] == 0x11) {
         control = channel;
         IOBluetoothL2CAPChannel *input = nil;
-        if ([device openL2CAPChannelAsync:&input withPSM:0x13 delegate:self] != kIOReturnSuccess) {
+        if ([device openL2CAPChannelAsync:&input withPSM:0x13
+                                 delegate:self] != kIOReturnSuccess) {
             [self disconnect];
             return;
         }
@@ -56,12 +61,15 @@
     } else {
         interrupt = channel;
         ready = true;
+        std::cerr << "[Bluetooth] Wii Remote connected\n";
     }
 }
 - (void)l2capChannelClosed:(IOBluetoothL2CAPChannel *)channel {
     [self disconnect];
 }
-- (void)l2capChannelData:(IOBluetoothL2CAPChannel *)channel data:(void *)bytes length:(size_t)length {
+- (void)l2capChannelData:(IOBluetoothL2CAPChannel *)channel
+                    data:(void *)bytes
+                  length:(size_t)length {
     const auto *data = static_cast<const uint8_t *>(bytes);
     if (length < 2 || length > 23 || data[0] != 0xA1 || reports.size() >= 128)
         return;
@@ -70,7 +78,7 @@
 @end
 
 @interface RevolveBluetooth : NSObject <IOBluetoothDeviceInquiryDelegate> {
-@public
+  @public
     IOBluetoothDeviceInquiry *inquiry;
     NSMutableArray<RevolveRemote *> *remotes;
     bool scanning;
@@ -96,7 +104,8 @@
 - (void)poll {
     CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, true);
     for (RevolveRemote *remote in remotes) {
-        if (remote->device && !remote->ready && CFAbsoluteTimeGetCurrent() > remote->deadline)
+        if (remote->device && !remote->ready &&
+            CFAbsoluteTimeGetCurrent() > remote->deadline)
             [remote disconnect];
     }
     if (scanning || CFAbsoluteTimeGetCurrent() < nextScan)
@@ -107,19 +116,27 @@
     if (full)
         return;
     nextScan = CFAbsoluteTimeGetCurrent() + 10;
-    scanning = [inquiry start] == kIOReturnSuccess;
+    const IOReturn status = [inquiry start];
+    scanning = status == kIOReturnSuccess;
+    if (!scanning)
+        std::cerr << "[Bluetooth] Discovery failed: " << status << "\n";
 }
-- (void)deviceInquiryComplete:(IOBluetoothDeviceInquiry *)sender error:(IOReturn)error aborted:(BOOL)aborted {
+- (void)deviceInquiryComplete:(IOBluetoothDeviceInquiry *)sender
+                        error:(IOReturn)error
+                      aborted:(BOOL)aborted {
     scanning = false;
     if (error != kIOReturnSuccess || aborted)
         return;
     for (IOBluetoothDevice *candidate in [sender foundDevices]) {
         NSString *name = [candidate name];
-        if (![name isEqualToString:@"Nintendo RVL-CNT-01"] && ![name isEqualToString:@"Nintendo RVL-CNT-01-TR"])
+        if (![name isEqualToString:@"Nintendo RVL-CNT-01"] &&
+            ![name isEqualToString:@"Nintendo RVL-CNT-01-TR"])
             continue;
         bool assigned = false;
         for (RevolveRemote *remote in remotes)
-            assigned |= remote->device && [[remote->device addressString] isEqualToString:[candidate addressString]];
+            assigned |= remote->device &&
+                        [[remote->device addressString]
+                            isEqualToString:[candidate addressString]];
         if (assigned)
             continue;
         for (RevolveRemote *remote in remotes) {
@@ -159,7 +176,8 @@ bool nativeBluetoothConnected(std::size_t slot) {
     return hub && slot < hub->remotes.count && hub->remotes[slot]->ready;
 }
 
-bool sendNativeBluetooth(std::size_t slot, uint8_t report, std::span<const uint8_t> payload) {
+bool sendNativeBluetooth(std::size_t slot, uint8_t report,
+                         std::span<const uint8_t> payload) {
     if (!nativeBluetoothConnected(slot) || payload.size() > 21)
         return false;
     @autoreleasepool {
@@ -168,7 +186,10 @@ bool sendNativeBluetooth(std::size_t slot, uint8_t report, std::span<const uint8
         data[0] = 0xA2;
         data[1] = report;
         std::copy(payload.begin(), payload.end(), data.begin() + 2);
-        if ([remote->interrupt writeSync:data.data() length:static_cast<UInt16>(payload.size() + 2)] != kIOReturnSuccess) {
+        if ([remote->interrupt
+                writeSync:data.data()
+                   length:static_cast<UInt16>(payload.size() + 2)] !=
+            kIOReturnSuccess) {
             [remote disconnect];
             return false;
         }

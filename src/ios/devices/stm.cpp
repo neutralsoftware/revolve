@@ -20,7 +20,8 @@ IOSResult STMImmediateDevice::ioctl(const IOSIoctlRequest &request) {
 }
 
 IOSResult STMEventHookDevice::ioctl(const IOSIoctlRequest &request) {
-    if (request.request != static_cast<uint32_t>(STMIoctl::EventHook) || request.outSize < 4)
+    if (request.request != static_cast<uint32_t>(STMIoctl::EventHook) ||
+        request.outSize < 4)
         return IOS::error(IOSError::Invalid);
     if (pendingRequest)
         return IOS::error(IOSError::Exists);

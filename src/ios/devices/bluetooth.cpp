@@ -435,9 +435,8 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
         break;
     }
     case 0x1004: {
-        const std::array<uint8_t, 11> response{0x00, 0x00, 0x00, 0xFF,
-                                               0xFF, 0x8F, 0xFE, 0x9B,
-                                               0xF9, 0x00, 0x80};
+        const std::array<uint8_t, 11> response{
+            0x00, 0x00, 0x00, 0xFF, 0xFF, 0x8F, 0xFE, 0x9B, 0xF9, 0x00, 0x80};
         sendCommandComplete(opcode, response);
         break;
     }
@@ -634,8 +633,8 @@ void BluetoothUSBDevice::sendL2CAPSignal(BluetoothConnection &connection,
     sendL2CAP(connection, 0x0001, packet);
 }
 
-void BluetoothUSBDevice::handleL2CAPSignaling(
-    BluetoothConnection &connection, std::span<const uint8_t> data) {
+void BluetoothUSBDevice::handleL2CAPSignaling(BluetoothConnection &connection,
+                                              std::span<const uint8_t> data) {
     while (data.size() >= 4) {
         const uint8_t code = data[0];
         const uint8_t identifier = data[1];
@@ -735,8 +734,7 @@ void BluetoothUSBDevice::handleSDP(BluetoothConnection &connection,
     if (data.size() < 5)
         return;
     const uint8_t pdu = data[0];
-    const uint16_t transaction =
-        (uint16_t(data[1]) << 8) | uint16_t(data[2]);
+    const uint16_t transaction = (uint16_t(data[1]) << 8) | uint16_t(data[2]);
     const uint16_t parameterLength =
         (uint16_t(data[3]) << 8) | uint16_t(data[4]);
     if (data.size() < 5 + parameterLength)
@@ -761,12 +759,11 @@ void BluetoothUSBDevice::handleSDP(BluetoothConnection &connection,
         };
         const std::array<uint8_t, 5> handle{0x0A, 0x00, 0x01, 0x00, 0x00};
         attribute(0x0000, handle);
-        const std::array<uint8_t, 5> serviceClass{0x35, 0x03, 0x19, 0x11,
-                                                  0x24};
+        const std::array<uint8_t, 5> serviceClass{0x35, 0x03, 0x19, 0x11, 0x24};
         attribute(0x0001, serviceClass);
-        const std::array<uint8_t, 15> protocols{
-            0x35, 0x0D, 0x35, 0x06, 0x19, 0x01, 0x00, 0x09,
-            0x00, 0x11, 0x35, 0x03, 0x19, 0x00, 0x11};
+        const std::array<uint8_t, 15> protocols{0x35, 0x0D, 0x35, 0x06, 0x19,
+                                                0x01, 0x00, 0x09, 0x00, 0x11,
+                                                0x35, 0x03, 0x19, 0x00, 0x11};
         attribute(0x0004, protocols);
         const std::array<uint8_t, 17> additionalProtocols{
             0x35, 0x0F, 0x35, 0x0D, 0x35, 0x06, 0x19, 0x01, 0x00,
@@ -776,8 +773,8 @@ void BluetoothUSBDevice::handleSDP(BluetoothConnection &connection,
                                               0x11, 0x24, 0x09, 0x01, 0x00};
         attribute(0x0009, profile);
         constexpr char name[] = "Nintendo RVL-CNT-01";
-        std::vector<uint8_t> serviceName{0x25,
-                                         static_cast<uint8_t>(sizeof(name) - 1)};
+        std::vector<uint8_t> serviceName{
+            0x25, static_cast<uint8_t>(sizeof(name) - 1)};
         serviceName.insert(serviceName.end(), name, name + sizeof(name) - 1);
         attribute(0x0100, serviceName);
         const std::array<uint8_t, 3> releaseNumber{0x09, 0x01, 0x00};
@@ -792,9 +789,8 @@ void BluetoothUSBDevice::handleSDP(BluetoothConnection &connection,
         attribute(0x0204, enabled);
         attribute(0x0205, enabled);
         const std::array<uint8_t, 21> reportDescriptor{
-            0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01,
-            0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08,
-            0x95, 0x16, 0x09, 0x01, 0x81, 0x02, 0xC0};
+            0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01, 0x15, 0x00, 0x26, 0xFF,
+            0x00, 0x75, 0x08, 0x95, 0x16, 0x09, 0x01, 0x81, 0x02, 0xC0};
         std::vector<uint8_t> descriptorString{
             0x25, static_cast<uint8_t>(reportDescriptor.size())};
         descriptorString.insert(descriptorString.end(),
@@ -896,9 +892,11 @@ void BluetoothUSBDevice::update() {
             }
             continue;
         }
-        if (!connection.basebandConnected && !connection.incomingRequested && (scanEnable & 2)) {
+        if (!connection.basebandConnected && !connection.incomingRequested &&
+            (scanEnable & 2)) {
             std::vector<uint8_t> event{0x04, 0x0A};
-            event.insert(event.end(), connection.address.bytes.begin(), connection.address.bytes.end());
+            event.insert(event.end(), connection.address.bytes.begin(),
+                         connection.address.bytes.end());
             event.insert(event.end(), {0x04, 0x25, 0x00, 0x01});
             queueHCIEvent(std::move(event));
             connection.incomingRequested = true;

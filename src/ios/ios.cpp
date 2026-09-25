@@ -157,7 +157,8 @@ IOSResult IOS::dispatch(const IOSRequest &request) {
 
         IOSIoctlvRequest ioctlv = parseIoctlvRequest(request);
 
-        if (ioctlv.inCount > 64 || ioctlv.outCount > 64 || ioctlv.inCount + ioctlv.outCount > 64)
+        if (ioctlv.inCount > 64 || ioctlv.outCount > 64 ||
+            ioctlv.inCount + ioctlv.outCount > 64)
             return IOS::error(IOSError::Invalid);
 
         auto vectors = parseVectors(ioctlv.vectorsAddress,

@@ -31,20 +31,24 @@ std::optional<std::filesystem::path> resolve(const std::string &guest) {
     auto result = FSDevice::rootPath();
     for (const auto &component : std::filesystem::path(guest).relative_path()) {
         const auto name = component.string();
-        if (name.empty() || name == "." || name == ".." || name.find('\\') != std::string::npos)
+        if (name.empty() || name == "." || name == ".." ||
+            name.find('\\') != std::string::npos)
             return std::nullopt;
         result /= component;
         std::error_code ec;
-        if (std::filesystem::is_symlink(std::filesystem::symlink_status(result, ec)))
+        if (std::filesystem::is_symlink(
+                std::filesystem::symlink_status(result, ec)))
             return std::nullopt;
     }
     return result;
 }
 
 std::filesystem::path metadataPath(const std::filesystem::path &path) {
-    auto result = FSDevice::rootPath().parent_path() / (FSDevice::rootPath().filename().string() + "-metadata");
+    auto result = FSDevice::rootPath().parent_path() /
+                  (FSDevice::rootPath().filename().string() + "-metadata");
     constexpr char hex[] = "0123456789abcdef";
-    for (const auto &component : path.lexically_relative(FSDevice::rootPath())) {
+    for (const auto &component :
+         path.lexically_relative(FSDevice::rootPath())) {
         std::string encoded;
         for (unsigned char c : component.string()) {
             encoded += hex[c >> 4];
@@ -69,7 +73,8 @@ bool saveAttributes(const std::filesystem::path &path, uint32_t address) {
     if (ec)
         return false;
     std::ofstream file(directory / "attributes", std::ios::binary);
-    file.write(reinterpret_cast<const char *>(attributes.data()), attributes.size());
+    file.write(reinterpret_cast<const char *>(attributes.data()),
+               attributes.size());
     return bool(file);
 }
 
@@ -86,7 +91,7 @@ int32_t fsError(const std::error_code &ec) {
         return denied;
     return ioError;
 }
-}
+} // namespace
 
 std::filesystem::path FSDevice::rootPath() {
     static const auto root = [] {
@@ -103,7 +108,8 @@ std::filesystem::path FSDevice::rootPath() {
 }
 
 void FSDevice::initializeNAND() {
-    for (const auto *name : {"sys", "shared2/sys", "shared2/menu/FaceLib", "title", "ticket", "tmp", "import", "meta"})
+    for (const auto *name : {"sys", "shared2/sys", "shared2/menu/FaceLib",
+                             "title", "ticket", "tmp", "import", "meta"})
         std::filesystem::create_directories(rootPath() / name);
     initializeSystemConfiguration(rootPath());
 }
@@ -155,7 +161,8 @@ int32_t FSDevice::read(uint32_t buffer, uint32_t size) {
         file.read(chunk.data(), count);
         const auto got = static_cast<uint32_t>(file.gcount());
         for (uint32_t i = 0; i < got; ++i)
-            Bus::writePhysical8(buffer + total + i, static_cast<uint8_t>(chunk[i]));
+            Bus::writePhysical8(buffer + total + i,
+                                static_cast<uint8_t>(chunk[i]));
         total += got;
         if (got < count)
             break;
@@ -167,7 +174,8 @@ int32_t FSDevice::read(uint32_t buffer, uint32_t size) {
 int32_t FSDevice::write(uint32_t buffer, uint32_t size) {
     if (!file.is_open() || !(fileMode & 2))
         return denied;
-    if (size > INT32_MAX || uint64_t(buffer) + size > UINT32_MAX || uint64_t(position) + size > INT32_MAX)
+    if (size > INT32_MAX || uint64_t(buffer) + size > UINT32_MAX ||
+        uint64_t(position) + size > INT32_MAX)
         return invalid;
     file.clear();
     file.seekp(position);
@@ -176,7 +184,8 @@ int32_t FSDevice::write(uint32_t buffer, uint32_t size) {
     while (total < size) {
         const auto count = std::min<uint32_t>(chunk.size(), size - total);
         for (uint32_t i = 0; i < count; ++i)
-            chunk[i] = static_cast<char>(Bus::readPhysical8(buffer + total + i));
+            chunk[i] =
+                static_cast<char>(Bus::readPhysical8(buffer + total + i));
         file.write(chunk.data(), count);
         if (!file)
             return ioError;
@@ -190,16 +199,17 @@ int32_t FSDevice::write(uint32_t buffer, uint32_t size) {
 int32_t FSDevice::seek(int32_t offset, uint32_t whence) {
     if (!file.is_open() || whence > 2)
         return invalid;
-    std::error_code ec;
-    const auto size = std::filesystem::file_size(filePath, ec);
-    if (ec)
-        return fsError(ec);
+    file.clear();
+    file.seekg(0, std::ios::end);
+    const auto size = static_cast<int64_t>(file.tellg());
+    if (!file || size < 0 || size > INT32_MAX)
+        return ioError;
     int64_t next = offset;
     if (whence == 1)
         next += position;
     if (whence == 2)
         next += size;
-    if (next < 0 || next > INT32_MAX || static_cast<uint64_t>(next) > size)
+    if (next < 0 || next > INT32_MAX || next > size)
         return invalid;
     position = static_cast<uint32_t>(next);
     return static_cast<int32_t>(position);
@@ -211,8 +221,10 @@ IOSResult FSDevice::ioctl(const IOSIoctlRequest &request) {
     if (command == FSIOCtl::GetFileStats) {
         if (!file.is_open() || request.outSize < 8)
             return invalid;
-        const auto size = std::filesystem::file_size(filePath, ec);
-        if (ec || size > UINT32_MAX)
+        file.clear();
+        file.seekg(0, std::ios::end);
+        const auto size = static_cast<int64_t>(file.tellg());
+        if (!file || size < 0 || size > UINT32_MAX)
             return ioError;
         Bus::writePhysical32(request.outPtr, static_cast<uint32_t>(size));
         Bus::writePhysical32(request.outPtr + 4, position);
@@ -230,16 +242,25 @@ IOSResult FSDevice::ioctl(const IOSIoctlRequest &request) {
         const auto space = std::filesystem::space(rootPath(), ec);
         if (ec)
             return fsError(ec);
-        const uint32_t available = std::min<uint64_t>(space.available / 16384, 0x7C00);
-        const std::array<uint32_t, 7> stats{16384, available, 0x7C00 - available, 0, 0, 0x17FF, 1};
+        const uint32_t available =
+            std::min<uint64_t>(space.available / 16384, 0x7C00);
+        const std::array<uint32_t, 7> stats{
+            16384, available, 0x7C00 - available, 0, 0, 0x17FF, 1};
         for (unsigned i = 0; i < stats.size(); ++i)
             Bus::writePhysical32(request.outPtr + i * 4, stats[i]);
         return 0;
     }
-    const bool attributeInput = command == FSIOCtl::CreateDirectory || command == FSIOCtl::CreateFile || command == FSIOCtl::SetAttribute;
+    const bool attributeInput = command == FSIOCtl::CreateDirectory ||
+                                command == FSIOCtl::CreateFile ||
+                                command == FSIOCtl::SetAttribute;
     if (request.inSize < (attributeInput ? 74u : 64u))
         return invalid;
-    const auto path = resolve(guestPath(request.inPtr + (attributeInput ? 6 : 0)));
+    if (attributeInput && (Bus::readPhysical8(request.inPtr + 70) > 3 ||
+                           Bus::readPhysical8(request.inPtr + 71) > 3 ||
+                           Bus::readPhysical8(request.inPtr + 72) > 3))
+        return invalid;
+    const auto path =
+        resolve(guestPath(request.inPtr + (attributeInput ? 6 : 0)));
     if (!path || *path == rootPath())
         return invalid;
     switch (command) {
@@ -249,16 +270,19 @@ IOSResult FSDevice::ioctl(const IOSIoctlRequest &request) {
         if (!std::filesystem::exists(*path, ec))
             return missing;
         std::array<uint8_t, 10> attributes{0, 0, 0, 0, 0, 0, 3, 3, 3, 0};
-        std::ifstream saved(metadataPath(*path) / "attributes", std::ios::binary);
+        std::ifstream saved(metadataPath(*path) / "attributes",
+                            std::ios::binary);
         if (saved.is_open()) {
-            saved.read(reinterpret_cast<char *>(attributes.data()), attributes.size());
+            saved.read(reinterpret_cast<char *>(attributes.data()),
+                       attributes.size());
             if (!saved)
                 return ioError;
         }
         for (unsigned i = 0; i < 6; ++i)
             Bus::writePhysical8(request.outPtr + i, attributes[i]);
         for (unsigned i = 0; i < 64; ++i)
-            Bus::writePhysical8(request.outPtr + 6 + i, Bus::readPhysical8(request.inPtr + i));
+            Bus::writePhysical8(request.outPtr + 6 + i,
+                                Bus::readPhysical8(request.inPtr + i));
         for (unsigned i = 0; i < 4; ++i)
             Bus::writePhysical8(request.outPtr + 70 + i, attributes[6 + i]);
         return 0;
@@ -294,6 +318,8 @@ IOSResult FSDevice::ioctl(const IOSIoctlRequest &request) {
         const auto destination = resolve(guestPath(request.inPtr + 64));
         if (!destination || *destination == rootPath())
             return invalid;
+        if (*path == *destination)
+            return std::filesystem::exists(*path, ec) ? 0 : missing;
         std::filesystem::rename(*path, *destination, ec);
         if (ec)
             return fsError(ec);
@@ -326,9 +352,12 @@ IOSResult FSDevice::ioctlv(const IOSIoctlvRequest &request,
     if (!std::filesystem::exists(*path, ec))
         return ec ? fsError(ec) : missing;
     if (request.request == static_cast<uint32_t>(FSIOCtl::ReadDirectory)) {
-        const bool names = request.inCount == 2 && request.outCount == 2 && vectors.size() == 4;
-        const bool countOnly = request.inCount == 1 && request.outCount == 1 && vectors.size() == 2;
-        if ((!names && !countOnly) || vectors.back().size < 4 || (names && vectors[1].size < 4))
+        const bool names = request.inCount == 2 && request.outCount == 2 &&
+                           vectors.size() == 4;
+        const bool countOnly = request.inCount == 1 && request.outCount == 1 &&
+                               vectors.size() == 2;
+        if ((!names && !countOnly) || vectors.back().size < 4 ||
+            (names && vectors[1].size < 4))
             return invalid;
         std::vector<std::string> entries;
         std::filesystem::directory_iterator iterator(*path, ec);
@@ -347,7 +376,8 @@ IOSResult FSDevice::ioctlv(const IOSIoctlvRequest &request,
                 if (entries[i].size() + 1 > vectors[2].size - cursor)
                     return invalid;
                 for (char c : entries[i])
-                    Bus::writePhysical8(vectors[2].address + cursor++, static_cast<uint8_t>(c));
+                    Bus::writePhysical8(vectors[2].address + cursor++,
+                                        static_cast<uint8_t>(c));
                 Bus::writePhysical8(vectors[2].address + cursor++, 0);
             }
         }
@@ -355,7 +385,8 @@ IOSResult FSDevice::ioctlv(const IOSIoctlvRequest &request,
         return 0;
     }
     if (request.request == static_cast<uint32_t>(FSIOCtl::GetUsage)) {
-        if (request.inCount != 1 || request.outCount != 2 || vectors.size() != 3 || vectors[1].size < 4 || vectors[2].size < 4)
+        if (request.inCount != 1 || request.outCount != 2 ||
+            vectors.size() != 3 || vectors[1].size < 4 || vectors[2].size < 4)
             return invalid;
         uint64_t blocks = 0;
         uint32_t inodes = 1;

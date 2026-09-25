@@ -1,8 +1,8 @@
 #include "audio/audio.h"
 
 #include <SDL3/SDL.h>
-#include <iostream>
 #include <algorithm>
+#include <iostream>
 
 AudioSystem::~AudioSystem() { shutdown(); }
 
@@ -51,7 +51,8 @@ void AudioSystem::shutdown() {
     inputRate = SAMPLE_RATE;
 }
 
-void AudioSystem::submitSamples(std::span<const int16_t> samples, uint32_t rate) {
+void AudioSystem::submitSamples(std::span<const int16_t> samples,
+                                uint32_t rate) {
     if (!stream || samples.empty()) {
         return;
     }
@@ -68,8 +69,10 @@ void AudioSystem::submitSamples(std::span<const int16_t> samples, uint32_t rate)
         inputRate = rate;
     }
     while (!samples.empty()) {
-        const size_t count = std::min(samples.size(), pendingSamples.size() - pendingCount);
-        std::copy_n(samples.begin(), count, pendingSamples.begin() + pendingCount);
+        const size_t count =
+            std::min(samples.size(), pendingSamples.size() - pendingCount);
+        std::copy_n(samples.begin(), count,
+                    pendingSamples.begin() + pendingCount);
         pendingCount += count;
         samples = samples.subspan(count);
         if (pendingCount == pendingSamples.size())
@@ -80,9 +83,13 @@ void AudioSystem::submitSamples(std::span<const int16_t> samples, uint32_t rate)
 void AudioSystem::flush() {
     if (!stream || !pendingCount)
         return;
-    if (SDL_GetAudioStreamQueued(stream) > static_cast<int>(inputRate * CHANNELS * sizeof(int16_t) / 4))
+    if (SDL_GetAudioStreamQueued(stream) >
+        static_cast<int>(inputRate * CHANNELS * sizeof(int16_t) / 4))
         SDL_ClearAudioStream(stream);
-    if (!SDL_PutAudioStreamData(stream, pendingSamples.data(), static_cast<int>(pendingCount * sizeof(int16_t))))
-        std::cerr << "[Audio] SDL_PutAudioStreamData failed: " << SDL_GetError() << '\n';
+    if (!SDL_PutAudioStreamData(
+            stream, pendingSamples.data(),
+            static_cast<int>(pendingCount * sizeof(int16_t))))
+        std::cerr << "[Audio] SDL_PutAudioStreamData failed: " << SDL_GetError()
+                  << '\n';
     pendingCount = 0;
 }
