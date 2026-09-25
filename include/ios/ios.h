@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+using IOSResult = std::optional<uint32_t>;
+
 enum class IOSCommand : uint32_t {
     Open = 1,
     Close = 2,
@@ -54,6 +56,8 @@ struct IOSSeekRequest {
 };
 
 struct IOSIoctlRequest {
+    uint32_t ipcAddress;
+
     uint32_t request;
     uint32_t inPtr;
     uint32_t inSize;
@@ -62,6 +66,8 @@ struct IOSIoctlRequest {
 };
 
 struct IOSIoctlvRequest {
+    uint32_t ipcAddress;
+
     uint32_t request;
     uint32_t inCount;
     uint32_t outCount;
@@ -82,9 +88,9 @@ class IOSDevice {
     virtual int32_t read(uint32_t buffer, uint32_t size) { return -1; };
     virtual int32_t write(uint32_t buffer, uint32_t size) { return -1; };
     virtual int32_t seek(int32_t offset, uint32_t whence) { return -1; };
-    virtual int32_t ioctl(const IOSIoctlRequest &request) { return -1; };
-    virtual int32_t ioctlv(const IOSIoctlvRequest &request,
-                           const std::vector<IOSVector> &vectors) {
+    virtual IOSResult ioctl(const IOSIoctlRequest &request) { return -1; };
+    virtual IOSResult ioctlv(const IOSIoctlvRequest &request,
+                             const std::vector<IOSVector> &vectors) {
         return -1;
     }
 };
@@ -164,8 +170,10 @@ class IOS {
         return static_cast<int32_t>(error);
     }
 
+    void completeRequest(uint32_t address, int32_t result);
+
   private:
-    int32_t dispatch(const IOSRequest &request);
+    IOSResult dispatch(const IOSRequest &request);
 
     int32_t allocateFileDescriptor(const std::string &path,
                                    std::shared_ptr<IOSDevice> device);
@@ -202,12 +210,12 @@ enum class STMIoctl : uint32_t {
 
 class STMImmediateDevice : public IOSDevice {
   public:
-    int32_t ioctl(const IOSIoctlRequest &request) override;
+    IOSResult ioctl(const IOSIoctlRequest &request) override;
 };
 
 class STMEventHookDevice : public IOSDevice {
   public:
-    int32_t ioctl(const IOSIoctlRequest &request) override;
+    IOSResult ioctl(const IOSIoctlRequest &request) override;
 
     void triggerReset();
     void triggerPower();
@@ -244,10 +252,10 @@ class FSDevice : public IOSDevice {
 
     int32_t seek(int32_t offset, uint32_t whence) override;
 
-    int32_t ioctl(const IOSIoctlRequest &request) override;
+    IOSResult ioctl(const IOSIoctlRequest &request) override;
 
-    int32_t ioctlv(const IOSIoctlvRequest &request,
-                   const std::vector<IOSVector> &vectors) override;
+    IOSResult ioctlv(const IOSIoctlvRequest &request,
+                     const std::vector<IOSVector> &vectors) override;
 };
 
 enum class DIIoctl : uint32_t {
@@ -288,10 +296,10 @@ class DIDevice : public IOSDevice {
         currentPartition = partitionOffset;
         discIDRead = true;
     }
-    int32_t ioctl(const IOSIoctlRequest &request) override;
+    IOSResult ioctl(const IOSIoctlRequest &request) override;
 
-    int32_t ioctlv(const IOSIoctlvRequest &request,
-                   const std::vector<IOSVector> &vectors) override;
+    IOSResult ioctlv(const IOSIoctlvRequest &request,
+                     const std::vector<IOSVector> &vectors) override;
 
   private:
     Memory &memory;
@@ -312,8 +320,8 @@ class ESDevice : public IOSDevice {
 
     int32_t close(int32_t fd) override;
 
-    int32_t ioctlv(const IOSIoctlvRequest &request,
-                   const std::vector<IOSVector> &vectors) override;
+    IOSResult ioctlv(const IOSIoctlvRequest &request,
+                     const std::vector<IOSVector> &vectors) override;
 };
 
 #endif
