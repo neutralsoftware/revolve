@@ -1,4 +1,5 @@
 #include "core/utils.h"
+#include "device.h"
 #include "ios/ios.h"
 #include <algorithm>
 #include <cstdint>
@@ -222,6 +223,7 @@ IOSResult DIDevice::ioctlv(const IOSIoctlvRequest &request,
             Bus::writePhysical32(vectors[4].address, 0);
 
         currentPartition = partitionOffset;
+        Device::globalDevice->ios.prepareDiscBoot(partitionOffset);
 
         return static_cast<int32_t>(DIResult::Success);
     }

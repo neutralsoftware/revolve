@@ -159,6 +159,7 @@ class IOS {
 
     void init();
     void prepareDiscBoot(uint64_t partitionOffset);
+    std::optional<Executable> loadTitleExecutable(uint64_t title);
 
     void submitRequest(uint32_t address);
 
@@ -344,6 +345,7 @@ class DIDevice : public IOSDevice {
 
 class ESDevice : public IOSDevice {
   public:
+    std::optional<Executable> loadTitleExecutable(uint64_t title);
     void prepareDiscBoot(uint64_t partitionOffset);
     int32_t open(const std::string &path, uint32_t mode) override;
 
@@ -354,6 +356,14 @@ class ESDevice : public IOSDevice {
 
   private:
     uint64_t currentTitle = 0x0000000100000002ULL;
+    std::vector<uint8_t> discTmd;
+    std::vector<uint8_t> discTicket;
+    uint64_t discTitle = 0;
+    std::unordered_map<int32_t, std::shared_ptr<FSDevice>> contentFiles;
+    int32_t nextContent = 0;
+    std::vector<uint8_t> titleMetadata(uint64_t title) const;
+    std::vector<uint8_t> titleTicket(uint64_t title) const;
+    int32_t openContent(uint64_t title, uint32_t index);
 };
 
 struct BluetoothAddress {

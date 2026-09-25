@@ -319,3 +319,8 @@ void IOS::releaseSTMEventHook() {
     if (stmEventHook)
         stmEventHook->release();
 }
+
+std::optional<Executable> IOS::loadTitleExecutable(uint64_t title) {
+    const auto es = std::dynamic_pointer_cast<ESDevice>(devices.at("/dev/es"));
+    return es ? es->loadTitleExecutable(title) : std::nullopt;
+}

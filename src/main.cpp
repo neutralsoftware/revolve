@@ -91,6 +91,23 @@ int main(int argc, const char *argv[]) {
             return 1;
         }
 
+    } else if (arguments[0] == "menu") {
+        auto executable = Device::globalDevice->ios.loadTitleExecutable(
+            0x0000000100000002ULL);
+        if (!executable) {
+            std::cerr << "System Menu boot content is missing, corrupt, or "
+                         "unsupported in the configured NAND.\n";
+            return 1;
+        }
+        executable->loadIntoMemory();
+        Device::globalDevice->cpu.reset(executable->entryPoint);
+        Device::globalDevice->cpu.setupWiiBATs();
+        if (debug) {
+            Debugger debugger(Device::globalDevice->cpu, *executable);
+            debugger.run();
+        } else {
+            Device::globalDevice->start();
+        }
     } else if (arguments[0] == "exec") {
         if (arguments.size() < 2) {
             std::cerr << "Error: No file specified for parsing." << std::endl;
