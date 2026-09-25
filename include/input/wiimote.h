@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <span>
+#include <vector>
 
 struct IRPoint {
     uint16_t x = 0x3FF;
@@ -55,7 +56,7 @@ struct WiiRemoteState {
 
 class WiiRemoteDevice {
   public:
-    explicit WiiRemoteDevice(WiiRemoteState *state) : state(state) {}
+    explicit WiiRemoteDevice(WiiRemoteState *state);
 
     void handleOutputReport(uint8_t reportId, std::span<const uint8_t> payload);
 
@@ -64,6 +65,9 @@ class WiiRemoteDevice {
     std::vector<uint8_t> popInputReport();
 
     void update();
+
+    void initializeEEPROM();
+    void initializeNunchukRegisters();
 
   private:
     WiiRemoteState *state;
@@ -86,15 +90,14 @@ class WiiRemoteDevice {
 
     std::deque<std::vector<uint8_t>> inputQueue;
 
-    void queueDataReport();
+    std::vector<uint8_t> buildDataReport();
     void queueStatus();
     void queueAck(uint8_t report, uint8_t error = 0);
 
     void handleReadMemory(std::span<const uint8_t> payload);
     void handleWriteMemory(std::span<const uint8_t> payload);
 
-    std::array<uint8_t, 2> makeButtons() const;
-    std::array<uint8_t, 3> makeAccel() const;
+    std::array<uint8_t, 2> makeButtons(bool includeAccel = false) const;
     std::array<uint8_t, 6> makeNunchuk() const;
 
     std::array<uint8_t, 10> makeIRBasic() const;
@@ -102,4 +105,9 @@ class WiiRemoteDevice {
 
     uint8_t readRegister(uint32_t address);
     void writeRegister(uint32_t address, uint8_t value);
+
+    std::vector<uint8_t> lastDataReport;
+    bool dataReportingEnabled = true;
+
+    bool previousNunchukConnected = false;
 };

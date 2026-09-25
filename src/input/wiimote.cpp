@@ -1,35 +1,9 @@
 #include "input/wiimote.h"
+#include <vector>
 
-std::array<uint8_t, 2> WiiRemoteDevice::makeButtons() const {
-    uint16_t buttons = 0;
-
-    if (state->dpadLeft)
-        buttons |= 0x0001;
-    if (state->dpadRight)
-        buttons |= 0x0002;
-    if (state->dpadDown)
-        buttons |= 0x0004;
-    if (state->dpadUp)
-        buttons |= 0x0008;
-
-    if (state->plus)
-        buttons |= 0x0010;
-
-    if (state->two)
-        buttons |= 0x0100;
-    if (state->one)
-        buttons |= 0x0200;
-    if (state->b)
-        buttons |= 0x0400;
-    if (state->a)
-        buttons |= 0x0800;
-    if (state->minus)
-        buttons |= 0x1000;
-    if (state->home)
-        buttons |= 0x8000;
-
-    return {static_cast<uint8_t>(buttons >> 8),
-            static_cast<uint8_t>(buttons & 0xFF)};
+WiiRemoteDevice::WiiRemoteDevice(WiiRemoteState *state) : state(state) {
+    initializeEEPROM();
+    initializeNunchukRegisters();
 }
 
 static uint16_t accelTo10Bit(float g) {
@@ -41,13 +15,64 @@ static uint16_t accelTo10Bit(float g) {
     return static_cast<uint16_t>(std::clamp(value, 0, 1023));
 }
 
-std::array<uint8_t, 3> WiiRemoteDevice::makeAccel() const {
-    uint16_t x = accelTo10Bit(state->accelX);
-    uint16_t y = accelTo10Bit(state->accelY);
-    uint16_t z = accelTo10Bit(state->accelZ);
+void WiiRemoteDevice::initializeEEPROM() {
+    eeprom.fill(0);
 
-    return {static_cast<uint8_t>(x >> 2), static_cast<uint8_t>(y >> 2),
-            static_cast<uint8_t>(z >> 2)};
+    constexpr uint8_t irCal[] = {0xA1, 0xAA, 0x8B, 0x99, 0xAE, 0x9E,
+                                 0x78, 0x30, 0xA7, 0x74, 0xD3};
+
+    std::copy(std::begin(irCal), std::end(irCal), eeprom.begin() + 0x0000);
+    std::copy(std::begin(irCal), std::end(irCal), eeprom.begin() + 0x000B);
+
+    constexpr uint8_t accelCal[] = {0x80, 0x80, 0x80, 0x00, 0xA0,
+                                    0xA0, 0xA0, 0x00, 0x40, 0xF5};
+
+    std::copy(std::begin(accelCal), std::end(accelCal),
+              eeprom.begin() + 0x0016);
+    std::copy(std::begin(accelCal), std::end(accelCal),
+              eeprom.begin() + 0x0020);
+}
+
+std::array<uint8_t, 2> WiiRemoteDevice::makeButtons(bool includeAccel) const {
+    uint8_t b0 = 0;
+    uint8_t b1 = 0;
+
+    if (state->dpadLeft)
+        b0 |= 0x01;
+    if (state->dpadRight)
+        b0 |= 0x02;
+    if (state->dpadDown)
+        b0 |= 0x04;
+    if (state->dpadUp)
+        b0 |= 0x08;
+    if (state->plus)
+        b0 |= 0x10;
+
+    if (state->two)
+        b1 |= 0x01;
+    if (state->one)
+        b1 |= 0x02;
+    if (state->b)
+        b1 |= 0x04;
+    if (state->a)
+        b1 |= 0x08;
+    if (state->minus)
+        b1 |= 0x10;
+    if (state->home)
+        b1 |= 0x80;
+
+    if (includeAccel) {
+        const uint16_t ax = accelTo10Bit(state->accelX);
+        const uint16_t ay = accelTo10Bit(state->accelY);
+        const uint16_t az = accelTo10Bit(state->accelZ);
+
+        b0 |= static_cast<uint8_t>((ax & 0x3) << 5);
+
+        b1 |= static_cast<uint8_t>(((ay >> 1) & 1) << 5);
+        b1 |= static_cast<uint8_t>(((az >> 1) & 1) << 6);
+    }
+
+    return {b0, b1};
 }
 
 std::array<uint8_t, 6> WiiRemoteDevice::makeNunchuk() const {
@@ -77,7 +102,8 @@ std::array<uint8_t, 6> WiiRemoteDevice::makeNunchuk() const {
     return out;
 }
 
-void initializeNunchukRegisters(std::array<uint8_t, 256> &regs) {
+void WiiRemoteDevice::initializeNunchukRegisters() {
+    auto regs = extensionRegisters;
     regs.fill(0);
 
     regs[0xFA] = 0x00;
@@ -198,29 +224,31 @@ std::array<uint8_t, 10> WiiRemoteDevice::makeIRBasic() const {
     return out;
 }
 
-void WiiRemoteDevice::queueDataReport() {
+std::vector<uint8_t> WiiRemoteDevice::buildDataReport() {
     if (!state || !state->connected)
-        return;
-
-    const auto buttons = makeButtons();
-    const auto accel = makeAccel();
+        return {};
 
     std::vector<uint8_t> report;
 
     report.push_back(reportMode);
 
     switch (reportMode) {
-    case 0x30:
+    case 0x30: {
+        auto buttons = makeButtons(false);
         report.insert(report.end(), buttons.begin(), buttons.end());
         break;
+    }
 
-    case 0x31:
+    case 0x31: {
+        auto buttons = makeButtons(true);
         report.insert(report.end(), buttons.begin(), buttons.end());
-        report.insert(report.end(), accel.begin(), accel.end());
         break;
+    }
 
     case 0x32: {
         auto ext = makeNunchuk();
+
+        auto buttons = makeButtons(true);
 
         report.insert(report.end(), buttons.begin(), buttons.end());
         report.insert(report.end(), ext.begin(), ext.end());
@@ -233,17 +261,18 @@ void WiiRemoteDevice::queueDataReport() {
     case 0x33: {
         auto ir = makeIRExtended();
 
+        auto buttons = makeButtons(true);
+
         report.insert(report.end(), buttons.begin(), buttons.end());
-        report.insert(report.end(), accel.begin(), accel.end());
         report.insert(report.end(), ir.begin(), ir.end());
         break;
     }
 
     case 0x35: {
         auto ext = makeNunchuk();
+        auto buttons = makeButtons(true);
 
         report.insert(report.end(), buttons.begin(), buttons.end());
-        report.insert(report.end(), accel.begin(), accel.end());
         report.insert(report.end(), ext.begin(), ext.end());
 
         while (report.size() < 1 + 2 + 3 + 16)
@@ -255,18 +284,21 @@ void WiiRemoteDevice::queueDataReport() {
         auto ir = makeIRBasic();
         auto ext = makeNunchuk();
 
+        auto buttons = makeButtons(true);
+
         report.insert(report.end(), buttons.begin(), buttons.end());
-        report.insert(report.end(), accel.begin(), accel.end());
         report.insert(report.end(), ir.begin(), ir.end());
         report.insert(report.end(), ext.begin(), ext.end());
         break;
     }
 
     default:
-        return;
+        return {};
     }
 
     inputQueue.push_back(std::move(report));
+
+    return inputQueue.back();
 }
 
 void WiiRemoteDevice::handleOutputReport(uint8_t reportId,
@@ -290,9 +322,11 @@ void WiiRemoteDevice::handleOutputReport(uint8_t reportId,
     case 0x12:
         if (payload.size() >= 2) {
             rumble = payload[0] & 0x01;
-            continuousReporting = (payload[0] & 0x04) != 0;
-
+            continuousReporting = payload[0] & 0x04;
             reportMode = payload[1];
+
+            dataReportingEnabled = true;
+            lastDataReport.clear();
         }
         break;
 
@@ -428,8 +462,27 @@ void WiiRemoteDevice::update() {
     if (!state || !state->connected)
         return;
 
-    if (continuousReporting)
-        queueDataReport();
+    if (state->nunchukConnected != previousNunchukConnected) {
+        previousNunchukConnected = state->nunchukConnected;
+
+        queueStatus();
+
+        dataReportingEnabled = false;
+        return;
+    }
+
+    if (!dataReportingEnabled)
+        return;
+
+    auto report = buildDataReport();
+
+    if (report.empty())
+        return;
+
+    if (continuousReporting || report != lastDataReport) {
+        inputQueue.push_back(report);
+        lastDataReport = std::move(report);
+    }
 }
 
 std::vector<uint8_t> WiiRemoteDevice::popInputReport() {
