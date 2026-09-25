@@ -35,8 +35,8 @@ constexpr uint32_t InLengthMask = 0x7Fu << InLengthShift;
 
 class SerialInterface : public MMIODevice {
   public:
-    uint32_t read(uint32_t offset, AccessSize size);
-    void write(uint32_t offset, uint32_t value, AccessSize size);
+    uint32_t read(uint32_t offset, AccessSize size) override;
+    void write(uint32_t offset, uint32_t value, AccessSize size) override;
     std::string getName() override { return "SerialInterface"; }
 
     void step(uint64_t ticks);

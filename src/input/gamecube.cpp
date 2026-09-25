@@ -95,7 +95,7 @@ int GameCubeControllerDevice::runCommand(const uint8_t *request,
             response[i] = report.data[i];
         }
 
-        return 0;
+        return 8;
     }
     case GCControllerCommand::Origin:
     case GCControllerCommand::Recalibrate: {
@@ -117,7 +117,8 @@ int GameCubeControllerDevice::runCommand(const uint8_t *request,
 
     default:
         Logger::log("SI", LogLevel::Warning,
-                    "Unknown GameCube controller command");
+                    "Unknown GameCube controller command: " +
+                        utils::toHexString(static_cast<uint32_t>(command)));
 
         return 0;
     }
@@ -143,37 +144,6 @@ bool SDLGameCubeInput::initialize() {
 }
 
 void SDLGameCubeInput::update(GameCubeControllerState &state) {
-    if (!gamepad) {
-        const bool *keys = SDL_GetKeyboardState(nullptr);
-        state.connected = true;
-        state.a = keys[SDL_SCANCODE_X];
-        state.b = keys[SDL_SCANCODE_Z];
-        state.x = keys[SDL_SCANCODE_S];
-        state.y = keys[SDL_SCANCODE_A];
-        state.start = keys[SDL_SCANCODE_RETURN];
-        state.dpadUp = keys[SDL_SCANCODE_UP];
-        state.dpadDown = keys[SDL_SCANCODE_DOWN];
-        state.dpadLeft = keys[SDL_SCANCODE_LEFT];
-        state.dpadRight = keys[SDL_SCANCODE_RIGHT];
-
-        int sx = 0;
-        int sy = 0;
-
-        if (keys[SDL_SCANCODE_D])
-            sx += 127;
-        if (keys[SDL_SCANCODE_A])
-            sx -= 127;
-
-        if (keys[SDL_SCANCODE_W])
-            sy += 127;
-        if (keys[SDL_SCANCODE_S])
-            sy -= 127;
-
-        state.stickX = static_cast<uint8_t>(sx + 128);
-        state.stickY = static_cast<uint8_t>(sy + 128);
-        return;
-    }
-
     state.connected = true;
     state.a = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
     state.x = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_EAST);
@@ -201,4 +171,29 @@ void SDLGameCubeInput::update(GameCubeControllerState &state) {
         SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
     state.triggerR = input::triggerToU8(
         SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+}
+
+void GameCubeControllerDevice::sendDirectCommand(uint32_t command,
+                                                 uint8_t poll) {
+    const uint8_t commandByte = static_cast<uint8_t>((command >> 16) & 0xFF);
+    const uint8_t parameter1 = static_cast<uint8_t>((command >> 8) & 0xFF);
+    const uint8_t parameter2 = static_cast<uint8_t>(command & 0xFF);
+
+    if (commandByte == 0x40) {
+        rumble = (parameter1 == 1);
+
+        if (poll == 0) {
+            mode = parameter2;
+        }
+
+        return;
+    }
+
+    if (commandByte == 0x00) {
+        return;
+    }
+
+    Logger::log("SI", LogLevel::Warning,
+                "Unknown GameCube direct command: " +
+                    utils::toHexString(static_cast<uint32_t>(command)));
 }

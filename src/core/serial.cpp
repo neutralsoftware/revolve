@@ -58,6 +58,27 @@ uint32_t SerialInterface::read(uint32_t offset, AccessSize size) {
 }
 
 void SerialInterface::write(uint32_t offset, uint32_t value, AccessSize size) {
+    if (offset >= 0x80 && offset < 0x100) {
+        const uint32_t index = offset - 0x80;
+
+        if (size == AccessSize::U32) {
+            if (index + 3 >= communicationBuffer.size())
+                return;
+
+            communicationBuffer[index + 0] =
+                static_cast<uint8_t>((value >> 24) & 0xFF);
+            communicationBuffer[index + 1] =
+                static_cast<uint8_t>((value >> 16) & 0xFF);
+            communicationBuffer[index + 2] =
+                static_cast<uint8_t>((value >> 8) & 0xFF);
+            communicationBuffer[index + 3] = static_cast<uint8_t>(value & 0xFF);
+
+            return;
+        }
+
+        return;
+    }
+
     if (size != AccessSize::U32)
         return;
 
@@ -75,12 +96,15 @@ void SerialInterface::write(uint32_t offset, uint32_t value, AccessSize size) {
     case 0x30:
         poll = value;
         return;
+
     case 0x34:
         handleComCSRWrite(value);
         return;
+
     case 0x38:
         handleStatusWrite(value);
         return;
+
     case 0x3C:
         exiClockLock = value;
         return;

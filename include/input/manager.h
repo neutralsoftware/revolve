@@ -1,6 +1,7 @@
 #pragma once
 
 #include "input/gamecube.h"
+#include "input/wiimote.h"
 #include <array>
 
 class InputManager {
@@ -13,23 +14,19 @@ class InputManager {
         return gameCubeControllers.at(index);
     }
 
-    void reset() {
-        for (auto &controller : gameCubeControllers) {
-            controller = {};
-            controller.stickX = 0x80;
-            controller.stickY = 0x80;
-            controller.cStickX = 0x80;
-            controller.cStickY = 0x80;
-        }
+    WiiRemoteState &wiimote(std::size_t index) { return wiimotes.at(index); }
+
+    const WiiRemoteState &wiimote(std::size_t index) const {
+        return wiimotes.at(index);
     }
 
-    inline void update() {
-        for (std::size_t i = 0; i < sdlInputs.size(); ++i) {
-            sdlInputs[i].update(gameCubeControllers[i]);
-        }
-    }
+    void reset();
+    void update();
 
   private:
     std::array<GameCubeControllerState, 4> gameCubeControllers{};
-    std::array<SDLGameCubeInput, 4> sdlInputs{};
+    std::array<WiiRemoteState, 4> wiimotes{};
+
+    void updateKeyboard();
+    void updateGamepads();
 };
