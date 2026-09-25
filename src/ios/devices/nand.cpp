@@ -6,6 +6,8 @@
 #include <limits>
 #include <stdexcept>
 
+void initializeSystemConfiguration(const std::filesystem::path &root);
+
 namespace {
 constexpr int32_t invalid = static_cast<int32_t>(IOSError::FS_Invalid);
 constexpr int32_t missing = static_cast<int32_t>(IOSError::FS_NotFound);
@@ -71,6 +73,7 @@ std::filesystem::path FSDevice::rootPath() {
 void FSDevice::initializeNAND() {
     for (const auto *name : {"sys", "shared2/sys", "shared2/menu/FaceLib", "title", "ticket", "tmp", "import", "meta"})
         std::filesystem::create_directories(rootPath() / name);
+    initializeSystemConfiguration(rootPath());
 }
 
 int32_t FSDevice::open(const std::string &path, uint32_t mode) {
