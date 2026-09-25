@@ -41,6 +41,38 @@ std::optional<std::filesystem::path> resolve(const std::string &guest) {
     return result;
 }
 
+std::filesystem::path metadataPath(const std::filesystem::path &path) {
+    auto result = FSDevice::rootPath().parent_path() / (FSDevice::rootPath().filename().string() + "-metadata");
+    constexpr char hex[] = "0123456789abcdef";
+    for (const auto &component : path.lexically_relative(FSDevice::rootPath())) {
+        std::string encoded;
+        for (unsigned char c : component.string()) {
+            encoded += hex[c >> 4];
+            encoded += hex[c & 15];
+        }
+        result /= encoded;
+    }
+    return result;
+}
+
+bool saveAttributes(const std::filesystem::path &path, uint32_t address) {
+    std::array<uint8_t, 10> attributes{};
+    for (unsigned i = 0; i < 6; ++i)
+        attributes[i] = Bus::readPhysical8(address + i);
+    for (unsigned i = 0; i < 4; ++i)
+        attributes[6 + i] = Bus::readPhysical8(address + 70 + i);
+    if (attributes[6] > 3 || attributes[7] > 3 || attributes[8] > 3)
+        return false;
+    const auto directory = metadataPath(path);
+    std::error_code ec;
+    std::filesystem::create_directories(directory, ec);
+    if (ec)
+        return false;
+    std::ofstream file(directory / "attributes", std::ios::binary);
+    file.write(reinterpret_cast<const char *>(attributes.data()), attributes.size());
+    return bool(file);
+}
+
 int32_t fsError(const std::error_code &ec) {
     if (!ec)
         return 0;
@@ -192,28 +224,70 @@ IOSResult FSDevice::ioctl(const IOSIoctlRequest &request) {
         return 0;
     if (command == FSIOCtl::Format)
         return denied;
-    const bool attributeInput = command == FSIOCtl::CreateDirectory || command == FSIOCtl::CreateFile;
+    if (command == FSIOCtl::GetStats) {
+        if (request.outSize < 28)
+            return invalid;
+        const auto space = std::filesystem::space(rootPath(), ec);
+        if (ec)
+            return fsError(ec);
+        const uint32_t available = std::min<uint64_t>(space.available / 16384, 0x7C00);
+        const std::array<uint32_t, 7> stats{16384, available, 0x7C00 - available, 0, 0, 0x17FF, 1};
+        for (unsigned i = 0; i < stats.size(); ++i)
+            Bus::writePhysical32(request.outPtr + i * 4, stats[i]);
+        return 0;
+    }
+    const bool attributeInput = command == FSIOCtl::CreateDirectory || command == FSIOCtl::CreateFile || command == FSIOCtl::SetAttribute;
     if (request.inSize < (attributeInput ? 74u : 64u))
         return invalid;
     const auto path = resolve(guestPath(request.inPtr + (attributeInput ? 6 : 0)));
     if (!path || *path == rootPath())
         return invalid;
     switch (command) {
+    case FSIOCtl::GetAttribute: {
+        if (request.outSize < 74)
+            return invalid;
+        if (!std::filesystem::exists(*path, ec))
+            return missing;
+        std::array<uint8_t, 10> attributes{0, 0, 0, 0, 0, 0, 3, 3, 3, 0};
+        std::ifstream saved(metadataPath(*path) / "attributes", std::ios::binary);
+        if (saved.is_open()) {
+            saved.read(reinterpret_cast<char *>(attributes.data()), attributes.size());
+            if (!saved)
+                return ioError;
+        }
+        for (unsigned i = 0; i < 6; ++i)
+            Bus::writePhysical8(request.outPtr + i, attributes[i]);
+        for (unsigned i = 0; i < 64; ++i)
+            Bus::writePhysical8(request.outPtr + 6 + i, Bus::readPhysical8(request.inPtr + i));
+        for (unsigned i = 0; i < 4; ++i)
+            Bus::writePhysical8(request.outPtr + 70 + i, attributes[6 + i]);
+        return 0;
+    }
+    case FSIOCtl::SetAttribute:
+        if (!std::filesystem::exists(*path, ec))
+            return missing;
+        return saveAttributes(*path, request.inPtr) ? 0 : ioError;
     case FSIOCtl::CreateDirectory:
     case FSIOCtl::CreateFile:
         if (std::filesystem::exists(*path, ec))
             return static_cast<int32_t>(IOSError::FS_Exists);
         if (command == FSIOCtl::CreateDirectory) {
             std::filesystem::create_directory(*path, ec);
-            return fsError(ec);
+            if (ec)
+                return fsError(ec);
+            return saveAttributes(*path, request.inPtr) ? 0 : ioError;
         } else {
             std::ofstream created(*path, std::ios::binary);
-            return created ? 0 : ioError;
+            if (!created)
+                return ioError;
+            created.close();
+            return saveAttributes(*path, request.inPtr) ? 0 : ioError;
         }
     case FSIOCtl::Delete:
         if (!std::filesystem::remove(*path, ec))
             return ec ? fsError(ec) : missing;
-        return 0;
+        std::filesystem::remove_all(metadataPath(*path), ec);
+        return fsError(ec);
     case FSIOCtl::Rename: {
         if (request.inSize < 128)
             return invalid;
@@ -221,6 +295,19 @@ IOSResult FSDevice::ioctl(const IOSIoctlRequest &request) {
         if (!destination || *destination == rootPath())
             return invalid;
         std::filesystem::rename(*path, *destination, ec);
+        if (ec)
+            return fsError(ec);
+        const auto oldMetadata = metadataPath(*path);
+        const auto newMetadata = metadataPath(*destination);
+        if (std::filesystem::exists(oldMetadata, ec)) {
+            std::filesystem::create_directories(newMetadata.parent_path(), ec);
+            if (ec)
+                return fsError(ec);
+            std::filesystem::remove_all(newMetadata, ec);
+            if (ec)
+                return fsError(ec);
+            std::filesystem::rename(oldMetadata, newMetadata, ec);
+        }
         return fsError(ec);
     }
     default:
