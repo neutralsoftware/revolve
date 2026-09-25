@@ -1,6 +1,7 @@
 #ifndef REVOLVE_DEVICE
 #define REVOLVE_DEVICE
 
+#include "audio/audio.h"
 #include "core/memory.h"
 #include "core/system_hardware.h"
 #include "core/time.h"
@@ -88,6 +89,8 @@ class Device {
     Scheduler scheduler;
     HollywoodInterruptController controller;
     GX gx;
+
+    AudioSystem audio;
 
     IOS ios;
 

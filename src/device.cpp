@@ -1,6 +1,7 @@
 
 #include "device.h"
 #include "SDL3/SDL_events.h"
+#include "SDL3/SDL_init.h"
 #include "core/memory.h"
 #include "core/time.h"
 #include "core/utils.h"
@@ -11,6 +12,7 @@
 #include "input/gamecube.h"
 #include <cstdint>
 #include <memory>
+#include <numbers>
 #include <string>
 
 std::shared_ptr<Device> Device::globalDevice = nullptr;
@@ -49,6 +51,16 @@ std::shared_ptr<Device> Device::createDevice() {
     globalDevice->vi->initialize();
 
     globalDevice->gx.initialize();
+
+    if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+        Logger::log("Audio", LogLevel::Warning,
+                    "Failed to initialize SDL audio subsystem: " +
+                        std::string(SDL_GetError()));
+    }
+    if (!globalDevice->audio.initialize()) {
+        Logger::log("Audio", LogLevel::Warning,
+                    "Failed to initialize host audio");
+    }
 
     auto controller = std::make_shared<GameCubeControllerDevice>(
         &globalDevice->inputManager->gameCube(0));
