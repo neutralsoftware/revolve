@@ -22,7 +22,9 @@ class AudioInterface : public MMIODevice {
 
     void step(uint32_t cpuCycles);
 
-    uint32_t sampleRate() const { return rate32kHz ? 32000 : 48000; }
+    uint32_t sampleRate() const { return auxRate32kHz ? 48000 : 32000; }
+
+    uint32_t dmaSampleRate() const { return rate32kHz ? 32000 : 48000; }
 
     uint8_t leftVolume() const { return static_cast<uint8_t>(volume & 0xFF); }
 

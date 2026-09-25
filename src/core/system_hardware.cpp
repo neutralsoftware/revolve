@@ -38,6 +38,14 @@ uint16_t DSPInterface::read16(uint32_t offset) {
         return static_cast<uint16_t>(arCount >> 16);
     case 0x2A:
         return static_cast<uint16_t>(arCount);
+    case 0x30:
+        return static_cast<uint16_t>(audioAddress >> 16);
+    case 0x32:
+        return static_cast<uint16_t>(audioAddress);
+    case 0x36:
+        return audioControl;
+    case 0x3A:
+        return audioBlocksLeft;
     default:
         return 0;
     }
@@ -112,6 +120,26 @@ void DSPInterface::write16(uint32_t offset, uint16_t value) {
         arCount = (arCount & 0xFFFF0000) | (value & 0xFFE0);
         completeARAMTransfer();
         break;
+    case 0x30:
+        audioAddress = (audioAddress & 0xFFFF) | (uint32_t(value & 0x1FFF) << 16);
+        break;
+    case 0x32:
+        audioAddress = (audioAddress & 0xFFFF0000) | (value & 0xFFE0);
+        break;
+    case 0x36: {
+        const bool starting = !(audioControl & 0x8000) && (value & 0x8000);
+        audioControl = value;
+        if (starting) {
+            audioCursor = audioAddress;
+            audioBlocksLeft = value & 0x7FFF;
+            audioAccumulator = 0;
+        }
+        if (!(value & 0x8000)) {
+            audioBlocksLeft = 0;
+            audioAccumulator = 0;
+        }
+        break;
+    }
     default:
         break;
     }
@@ -251,4 +279,31 @@ void ExpansionInterface::updateInterrupt() {
         Device::globalDevice->pi->raiseInterrupt(PIInterrupt::EXI);
     else
         Device::globalDevice->pi->clearInterrupt(PIInterrupt::EXI);
+}
+
+void DSPInterface::step(uint32_t cycles) {
+    if (!(audioControl & 0x8000) || !(audioControl & 0x7FFF))
+        return;
+    auto &device = *Device::globalDevice;
+    const uint32_t rate = device.ai->dmaSampleRate();
+    audioAccumulator += uint64_t(cycles) * rate;
+    constexpr uint64_t blockPeriod = BROADWAY_CLOCK * 8;
+    while (audioAccumulator >= blockPeriod) {
+        audioAccumulator -= blockPeriod;
+        if (!audioBlocksLeft) {
+            audioCursor = audioAddress;
+            audioBlocksLeft = audioControl & 0x7FFF;
+        }
+        std::array<int16_t, 16> samples{};
+        for (uint32_t frame = 0; frame < 8; ++frame) {
+            samples[frame * 2] = static_cast<int16_t>(Bus::readPhysical16(audioCursor + frame * 4 + 2));
+            samples[frame * 2 + 1] = static_cast<int16_t>(Bus::readPhysical16(audioCursor + frame * 4));
+        }
+        device.audio.submitSamples(samples, rate);
+        audioCursor += 32;
+        if (--audioBlocksLeft == 0) {
+            control |= 1u << 3;
+            updateInterrupt();
+        }
+    }
 }

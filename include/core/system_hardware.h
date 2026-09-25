@@ -18,6 +18,7 @@ class DSPInterface : public MMIODevice {
     uint32_t read(uint32_t offset, AccessSize size) override;
     void write(uint32_t offset, uint32_t value, AccessSize size) override;
     std::string getName() override { return "DSPInterface"; }
+    void step(uint32_t cycles);
 
   private:
     uint16_t read16(uint32_t offset);
@@ -36,6 +37,11 @@ class DSPInterface : public MMIODevice {
     uint32_t arMainAddress = 0;
     uint32_t arAddress = 0;
     uint32_t arCount = 0;
+    uint32_t audioAddress = 0;
+    uint32_t audioCursor = 0;
+    uint16_t audioControl = 0;
+    uint16_t audioBlocksLeft = 0;
+    uint64_t audioAccumulator = 0;
 };
 
 class ExpansionInterface : public MMIODevice {

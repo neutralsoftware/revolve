@@ -64,6 +64,10 @@ std::shared_ptr<Device> Device::createDevice() {
 
     globalDevice->ai = std::make_shared<AudioInterface>(globalDevice->pi.get());
 
+    globalDevice->mmioDispatcher.registerDevice(0x0D006C00, AI_SIZE,
+                                                globalDevice->ai.get());
+    globalDevice->mmioDispatcher.registerDevice(0x0C006C00, AI_SIZE,
+                                                globalDevice->ai.get());
     globalDevice->mmioDispatcher.registerDevice(AI_BASE, AI_SIZE,
                                                 globalDevice->ai.get());
 
@@ -130,6 +134,7 @@ void Device::step() {
     scheduler.advance(cycles);
 
     ai->step(cycles);
+    dsp->step(cycles);
     si->step(cycles);
 
     ios.update();

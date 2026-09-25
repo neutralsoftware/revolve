@@ -48,10 +48,21 @@ void AudioSystem::shutdown() {
     stream = nullptr;
 }
 
-void AudioSystem::submitSamples(std::span<const int16_t> samples) {
+void AudioSystem::submitSamples(std::span<const int16_t> samples, uint32_t rate) {
     if (!stream || samples.empty()) {
         return;
     }
+
+    if (rate != 32000 && rate != 48000)
+        return;
+    if (rate != inputRate) {
+        SDL_AudioSpec spec{SDL_AUDIO_S16, CHANNELS, static_cast<int>(rate)};
+        if (!SDL_SetAudioStreamFormat(stream, &spec, nullptr))
+            return;
+        inputRate = rate;
+    }
+    if (SDL_GetAudioStreamQueued(stream) > static_cast<int>(rate * CHANNELS * sizeof(int16_t) / 4))
+        SDL_ClearAudioStream(stream);
 
     const int byteCount = static_cast<int>(samples.size_bytes());
 
