@@ -2,6 +2,8 @@
 
 A from-scratch Wii emulator focused on correctness, understanding, and gradual hardware emulation.
 
+Checkboxes describe implementation progress, not runtime certification. The audio, NAND, network, and physical-controller additions have not been built or tested. Commercial-game milestones require observed gameplay; Wii Sports compatibility is not established. See [runtime setup and limitations](docs/runtime.md).
+
 ---
 
 ## Executable Loading
@@ -97,33 +99,48 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 - [x] Add Wii Remote IR support
 - [x] Add Nunchuk support
 - [ ] Add Bluetooth support for Wii Remotes
+  - [x] macOS discovery and HID L2CAP transport
+  - [x] Forward physical reports, including extension and MotionPlus traffic
+  - [ ] Complete pairing, reconnect, and controller-model compatibility
 
 ## Audio / DSP
 
-- [ ] Research DSP architecture
-- [ ] Implement basic audio DMA
-- [ ] Output PCM audio
-- [ ] Synchronize audio with emulation
+- [x] Research DSP architecture and AXWii command variants
+- [x] Implement basic audio DMA
+- [x] Output PCM audio
+- [x] Schedule DMA consumption using guest cycles and the selected sample rate
+- [ ] Complete audio synchronization and DSP scheduling
 - [ ] Implement enough DSP functionality for games
 
 ## NAND
 
 - [ ] Implement NAND filesystem
-- [ ] Implement SYSCONF
-- [ ] Implement save data
+  - [x] Persistent files, independent descriptors, directory operations, and attributes
+  - [ ] Enforce title ownership, permissions, quotas, and complete error semantics
+- [x] Initialize persistent SYSCONF and regional settings
+- [x] Persist title save directories and file contents
+- [ ] Complete save lifecycle and title isolation
 
 ## Wii System Services
 
-- [ ] Add ES
-- [ ] Add FS
-- [ ] Add ISFS
-- [ ] Add STM
-- [ ] Add DI
-- [ ] Add USB
-- [ ] Add Bluetooth
-- [ ] Add network services
-- [ ] Add WC24 stubs
+- [ ] Complete ES
+  - [x] Title identity, TMDs, ticket views, and installed-content reads
+  - [ ] Title launch/reload, installation, and authentication
+- [ ] Complete FS
+- [ ] Complete ISFS
+- [ ] Complete STM
+  - [x] Asynchronous event hooks and shutdown
+  - [ ] Hot reset and remaining lifecycle behavior
+- [ ] Complete DI command coverage
+- [ ] Complete USB beyond the emulated Bluetooth device
+- [ ] Complete Bluetooth HCI and connection lifecycle
+- [ ] Complete network services
+  - [x] IPv4 TCP/UDP, asynchronous socket operations, DNS, and network configuration
+  - [ ] Remaining socket APIs, SSL, and ICMP
+- [x] Add offline WC24 lifecycle stubs and network clock
 - [ ] Add System Menu support
+  - [x] Load and hash-check imported NAND System Menu boot content
+  - [ ] Complete runtime services needed by the System Menu
 
 ## Timing & Accuracy
 
