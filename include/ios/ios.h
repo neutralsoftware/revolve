@@ -150,6 +150,7 @@ enum class IOSError : int32_t {
 };
 
 class BluetoothUSBDevice;
+class NetworkDevice;
 class STMEventHookDevice;
 
 class IOS {
@@ -194,6 +195,7 @@ class IOS {
     int32_t nextFileDescriptor = 0;
 
     std::shared_ptr<BluetoothUSBDevice> bluetoothDevice;
+    std::shared_ptr<NetworkDevice> networkDevice;
     std::shared_ptr<STMEventHookDevice> stmEventHook;
 };
 

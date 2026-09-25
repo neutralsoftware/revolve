@@ -1,6 +1,7 @@
 #include "ios/ios.h"
 #include "core/memory.h"
 #include "device.h"
+#include "ios/network.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -9,6 +10,8 @@
 
 void IOS::init() {
     FSDevice::initializeNAND();
+    networkDevice = std::make_shared<NetworkDevice>(*this);
+    registerDevice("/dev/net/ip/top", networkDevice);
     registerDevice("/dev/stm/immediate",
                    std::make_shared<STMImmediateDevice>());
     stmEventHook = std::make_shared<STMEventHookDevice>();
@@ -24,6 +27,8 @@ void IOS::init() {
 }
 
 void IOS::update() {
+    if (networkDevice)
+        networkDevice->update();
     if (bluetoothDevice)
         bluetoothDevice->update();
 }
