@@ -146,9 +146,14 @@ void Device::step() {
 
 void Device::start() {
     bool running = true;
+    stopRequested = false;
+    uint64_t nextInputPoll = 0;
 
     auto window = gx.renderer->window;
-    while (running) {
+    while (running && !stopRequested) {
+        const uint64_t hostTime = SDL_GetTicks();
+        if (hostTime >= nextInputPoll) {
+        nextInputPoll = hostTime + 4;
         SDL_Event event;
 
         while (SDL_PollEvent(&event)) {
@@ -160,10 +165,11 @@ void Device::start() {
         SDL_PumpEvents();
 
         inputManager->update();
+        }
 
         if (!running)
             break;
-        for (uint32_t instruction = 0; instruction < 4096; ++instruction)
+        for (uint32_t instruction = 0; instruction < 4096 && !stopRequested; ++instruction)
             step();
     }
 }

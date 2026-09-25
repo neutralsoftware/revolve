@@ -150,6 +150,7 @@ enum class IOSError : int32_t {
 };
 
 class BluetoothUSBDevice;
+class STMEventHookDevice;
 
 class IOS {
   public:
@@ -180,6 +181,7 @@ class IOS {
 
     void completeRequest(uint32_t address, int32_t result);
     void update();
+    void releaseSTMEventHook();
 
   private:
     IOSResult dispatch(const IOSRequest &request);
@@ -192,6 +194,7 @@ class IOS {
     int32_t nextFileDescriptor = 0;
 
     std::shared_ptr<BluetoothUSBDevice> bluetoothDevice;
+    std::shared_ptr<STMEventHookDevice> stmEventHook;
 };
 
 enum class STMIoctl : uint32_t {
@@ -230,9 +233,13 @@ class STMEventHookDevice : public IOSDevice {
 
     void triggerReset();
     void triggerPower();
+    void release();
+    int32_t close(int32_t fd) override;
 
   private:
+    void complete(uint32_t event);
     std::optional<uint32_t> pendingRequest;
+    uint32_t eventOutput = 0;
 };
 
 enum class FSIOCtl : uint32_t {
@@ -355,6 +362,7 @@ struct BluetoothConnection {
     BluetoothAddress address{};
 
     bool basebandConnected = false;
+    bool incomingRequested = false;
 
     uint16_t handle = 0;
 
@@ -471,6 +479,7 @@ class BluetoothUSBDevice final : public IOSDevice {
     void sendL2CAPSignal(BluetoothConnection &connection, uint8_t code,
                          uint8_t identifier, std::span<const uint8_t> data);
 
+    uint8_t scanEnable = 0;
     uint16_t nextCID = 0x0040;
     uint8_t nextSignalIdentifier = 1;
 };

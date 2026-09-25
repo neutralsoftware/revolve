@@ -350,8 +350,10 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
     switch (opcode) {
     case HCI::Reset: {
         aclPackets.clear();
+        scanEnable = 0;
         for (auto &connection : connections) {
             connection.basebandConnected = false;
+            connection.incomingRequested = false;
             connection.hidControlLocalCID = 0;
             connection.hidControlRemoteCID = 0;
             connection.hidInterruptLocalCID = 0;
@@ -454,7 +456,7 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
         break;
     }
     case 0x0C19: {
-        const std::array<uint8_t, 2> response{0x00, 0x03};
+        const std::array<uint8_t, 2> response{0x00, scanEnable};
         sendCommandComplete(opcode, response);
         break;
     }
@@ -504,6 +506,7 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
         sendRemoteName(address);
         break;
     }
+    case 0x0409:
     case HCI::CreateConnection: {
         if (payload.size() < 6)
             break;
@@ -514,12 +517,13 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
 
         auto *connection = findConnectionByAddress(address);
 
-        if (!connection) {
+        if (!connection || !connection->wiimote->isAvailable()) {
             sendCommandStatus(opcode, 0x02);
             break;
         }
 
         connection->basebandConnected = true;
+        connection->incomingRequested = false;
 
         sendCommandStatus(opcode);
         sendConnectionComplete(*connection);
@@ -546,6 +550,12 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
         break;
     }
     case HCI::WriteScanEnable: {
+        if (payload.empty() || payload[0] > 3) {
+            const std::array<uint8_t, 1> response{0x12};
+            sendCommandComplete(opcode, response);
+            break;
+        }
+        scanEnable = payload[0];
         const std::array<uint8_t, 1> response{0x00};
         sendCommandComplete(opcode, response);
         break;
@@ -872,6 +882,27 @@ void BluetoothUSBDevice::handleHID(BluetoothConnection &connection,
 
 void BluetoothUSBDevice::update() {
     for (auto &connection : connections) {
+        if (!connection.wiimote->isAvailable()) {
+            connection.incomingRequested = false;
+            if (connection.basebandConnected) {
+                connection.basebandConnected = false;
+                connection.hidControlConfigured = false;
+                connection.hidInterruptConfigured = false;
+                connection.sdpConfigured = false;
+                std::vector<uint8_t> event{0x05, 0x04, 0x00};
+                appendLE16(event, connection.handle);
+                event.push_back(0x08);
+                queueHCIEvent(std::move(event));
+            }
+            continue;
+        }
+        if (!connection.basebandConnected && !connection.incomingRequested && (scanEnable & 2)) {
+            std::vector<uint8_t> event{0x04, 0x0A};
+            event.insert(event.end(), connection.address.bytes.begin(), connection.address.bytes.end());
+            event.insert(event.end(), {0x04, 0x25, 0x00, 0x01});
+            queueHCIEvent(std::move(event));
+            connection.incomingRequested = true;
+        }
         if (!connection.basebandConnected)
             continue;
 

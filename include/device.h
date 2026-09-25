@@ -81,8 +81,10 @@ class Device {
 
     void step();
     void start();
+    void requestStop() { stopRequested = true; }
 
     void processIPC();
+    bool stopRequested = false;
 
     Memory memory;
     MMIO mmioDispatcher;

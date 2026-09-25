@@ -11,8 +11,8 @@ void IOS::init() {
     FSDevice::initializeNAND();
     registerDevice("/dev/stm/immediate",
                    std::make_shared<STMImmediateDevice>());
-    registerDevice("/dev/stm/eventhook",
-                   std::make_shared<STMEventHookDevice>());
+    stmEventHook = std::make_shared<STMEventHookDevice>();
+    registerDevice("/dev/stm/eventhook", stmEventHook);
     registerDevice("/dev/es", std::make_shared<ESDevice>());
     registerDevice("/dev/fs", std::make_shared<FSDevice>());
     registerDevice("/dev/di",
@@ -156,6 +156,9 @@ IOSResult IOS::dispatch(const IOSRequest &request) {
             return IOS::error(IOSError::NotFound);
 
         IOSIoctlvRequest ioctlv = parseIoctlvRequest(request);
+
+        if (ioctlv.inCount > 64 || ioctlv.outCount > 64 || ioctlv.inCount + ioctlv.outCount > 64)
+            return IOS::error(IOSError::Invalid);
 
         auto vectors = parseVectors(ioctlv.vectorsAddress,
                                     ioctlv.inCount + ioctlv.outCount);
@@ -303,4 +306,9 @@ void IOS::completeRequest(uint32_t address, int32_t result) {
                          static_cast<uint32_t>(IOSCommand::Reply));
 
     Device::globalDevice->ipc->replyFromStarlet(address);
+}
+
+void IOS::releaseSTMEventHook() {
+    if (stmEventHook)
+        stmEventHook->release();
 }
