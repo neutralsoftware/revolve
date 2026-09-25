@@ -91,7 +91,7 @@ int32_t fsError(const std::error_code &ec) {
         return denied;
     return ioError;
 }
-} // namespace
+}
 
 std::filesystem::path FSDevice::rootPath() {
     static const auto root = [] {

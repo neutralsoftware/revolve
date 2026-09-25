@@ -78,8 +78,10 @@ void IPC::write(uint32_t offset, uint32_t value, AccessSize size) {
         if (value & (1u << 1))
             y2 = false;
 
-        if (value & (1u << 2))
+        if (value & (1u << 2)) {
             y1 = false;
+            presentReply();
+        }
 
         interruptY1 = (value & (1u << 4)) != 0;
         interruptY2 = (value & (1u << 5)) != 0;
@@ -126,9 +128,17 @@ void IPC::write(uint32_t offset, uint32_t value, AccessSize size) {
 }
 
 void IPC::replyFromStarlet(uint32_t requestAddress) {
-    armMessage = requestAddress;
-    y1 = true;
+    pendingReplies.push_back(requestAddress);
+    presentReply();
     updateInterrupts();
+}
+
+void IPC::presentReply() {
+    if (y1 || pendingReplies.empty())
+        return;
+    armMessage = pendingReplies.front();
+    pendingReplies.pop_front();
+    y1 = true;
 }
 
 void IPC::updateInterrupts() {
@@ -138,6 +148,8 @@ void IPC::updateInterrupts() {
 
     if (shouldInterrupt)
         hollywood.raise(HollywoodIRQ::IPC);
+    else
+        hollywood.clear(HollywoodIRQ::IPC);
 }
 
 bool IPC::ppcRequestPending() const { return x1; }

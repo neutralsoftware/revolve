@@ -17,7 +17,7 @@ uint64_t readTitle(uint32_t address) {
     return (uint64_t(Bus::readPhysical32(address)) << 32) |
            Bus::readPhysical32(address + 4);
 }
-} // namespace
+}
 
 void ESDevice::prepareDiscBoot(uint64_t partitionOffset) {
     std::array<uint8_t, 8> title{};

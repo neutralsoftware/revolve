@@ -3,6 +3,7 @@
 
 #include "core/memory.h"
 #include <cstdint>
+#include <deque>
 
 constexpr uint32_t IPC_MMIO_BASE = 0x0D800000;
 constexpr uint32_t IPC_MMIO_END = 0x0D8001FF;
@@ -45,6 +46,8 @@ class IPC : public MMIODevice {
     uint32_t gpioOutput = 0;
     uint32_t hardwareResets = 0xFFFFFFFF;
 
+    std::deque<uint32_t> pendingReplies;
+    void presentReply();
     void updateInterrupts();
 };
 
