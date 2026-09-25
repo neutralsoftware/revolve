@@ -26,7 +26,7 @@ uint32_t AudioInterface::read(uint32_t offset, AccessSize size) {
         if (playing)
             control |= CONTROL_PSTAT;
 
-        if (auxRate32kHz)
+        if (stream48kHz)
             control |= CONTROL_AFR;
 
         if (interruptMask)
@@ -38,7 +38,7 @@ uint32_t AudioInterface::read(uint32_t offset, AccessSize size) {
         if (interruptValid)
             control |= CONTROL_AIINTVLD;
 
-        if (rate32kHz)
+        if (dma32kHz)
             control |= CONTROL_RATE;
 
         return control;
@@ -76,7 +76,10 @@ void AudioInterface::write(uint32_t offset, uint32_t value, AccessSize size) {
 
         playing = (value & CONTROL_PSTAT) != 0;
 
-        auxRate32kHz = (value & CONTROL_AFR) != 0;
+        const bool newStream48kHz = (value & CONTROL_AFR) != 0;
+        if (stream48kHz != newStream48kHz)
+            sampleAccumulator = 0;
+        stream48kHz = newStream48kHz;
 
         interruptMask = (value & CONTROL_AIINTMSK) != 0;
 
@@ -84,10 +87,8 @@ void AudioInterface::write(uint32_t offset, uint32_t value, AccessSize size) {
 
         const bool newRate32kHz = (value & CONTROL_RATE) != 0;
 
-        if (newRate32kHz != rate32kHz) {
-            rate32kHz = newRate32kHz;
-
-            sampleAccumulator = 0;
+        if (newRate32kHz != dma32kHz) {
+            dma32kHz = newRate32kHz;
         }
 
         updateInterrupt();

@@ -72,17 +72,19 @@ class WiiRemoteDevice {
     void update();
     void attachPhysical(PhysicalWiiRemote *remote);
     void pollPhysical();
+    void requirePhysical() { physicalRequired = true; }
     bool usesPhysical() const { return physical && physical->connected(); }
 
     void initializeEEPROM();
     void initializeNunchukRegisters();
     void initializeMotionPlusRegisters();
 
-    inline bool isAvailable() const { return usesPhysical() || (state && state->connected); }
+    inline bool isAvailable() const { return physicalRequired || physical ? usesPhysical() : (state && state->connected); }
 
   private:
     WiiRemoteState *state;
     PhysicalWiiRemote *physical = nullptr;
+    bool physicalRequired = false;
 
     uint8_t reportMode = 0x30;
     bool continuousReporting = false;
@@ -123,7 +125,7 @@ class WiiRemoteDevice {
     bool dataReportingEnabled = true;
 
     bool previousNunchukConnected = false;
-    uint32_t updateCounter = 0;
+    uint64_t nextReportTick = 0;
 };
 
 class SDLWiiRemoteInput {

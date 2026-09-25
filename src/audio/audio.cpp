@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 #include <iostream>
+#include <algorithm>
 
 AudioSystem::~AudioSystem() { shutdown(); }
 
@@ -46,6 +47,8 @@ void AudioSystem::shutdown() {
 
     SDL_DestroyAudioStream(stream);
     stream = nullptr;
+    pendingCount = 0;
+    inputRate = SAMPLE_RATE;
 }
 
 void AudioSystem::submitSamples(std::span<const int16_t> samples, uint32_t rate) {
@@ -55,20 +58,31 @@ void AudioSystem::submitSamples(std::span<const int16_t> samples, uint32_t rate)
 
     if (rate != 32000 && rate != 48000)
         return;
+    if (samples.size() % CHANNELS != 0)
+        return;
     if (rate != inputRate) {
+        flush();
         SDL_AudioSpec spec{SDL_AUDIO_S16, CHANNELS, static_cast<int>(rate)};
         if (!SDL_SetAudioStreamFormat(stream, &spec, nullptr))
             return;
         inputRate = rate;
     }
-    if (SDL_GetAudioStreamQueued(stream) > static_cast<int>(rate * CHANNELS * sizeof(int16_t) / 4))
-        SDL_ClearAudioStream(stream);
-
-    const int byteCount = static_cast<int>(samples.size_bytes());
-
-    if (!SDL_PutAudioStreamData(stream, samples.data(), byteCount)) {
-
-        std::cerr << "[Audio] SDL_PutAudioStreamData failed: " << SDL_GetError()
-                  << '\n';
+    while (!samples.empty()) {
+        const size_t count = std::min(samples.size(), pendingSamples.size() - pendingCount);
+        std::copy_n(samples.begin(), count, pendingSamples.begin() + pendingCount);
+        pendingCount += count;
+        samples = samples.subspan(count);
+        if (pendingCount == pendingSamples.size())
+            flush();
     }
+}
+
+void AudioSystem::flush() {
+    if (!stream || !pendingCount)
+        return;
+    if (SDL_GetAudioStreamQueued(stream) > static_cast<int>(inputRate * CHANNELS * sizeof(int16_t) / 4))
+        SDL_ClearAudioStream(stream);
+    if (!SDL_PutAudioStreamData(stream, pendingSamples.data(), static_cast<int>(pendingCount * sizeof(int16_t))))
+        std::cerr << "[Audio] SDL_PutAudioStreamData failed: " << SDL_GetError() << '\n';
+    pendingCount = 0;
 }

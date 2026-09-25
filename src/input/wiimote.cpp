@@ -1,5 +1,6 @@
 #include "input/wiimote.h"
 #include "input/gamecube.h"
+#include "device.h"
 #include <algorithm>
 #include <vector>
 
@@ -353,8 +354,9 @@ std::vector<uint8_t> WiiRemoteDevice::buildDataReport() {
 
 void WiiRemoteDevice::handleOutputReport(uint8_t reportId,
                                          std::span<const uint8_t> payload) {
-    if (physical) {
-        physical->send(reportId, payload);
+    if (physicalRequired || physical) {
+        if (physical)
+            physical->send(reportId, payload);
         return;
     }
     if (payload.empty() && reportId != 0x15)
@@ -520,14 +522,17 @@ void WiiRemoteDevice::handleReadMemory(std::span<const uint8_t> payload) {
 }
 
 void WiiRemoteDevice::update() {
-    if (physical)
+    if (physicalRequired || physical)
         return;
     if (!state || !state->connected)
         return;
 
-    if (++updateCounter < 4096)
+    const uint64_t now = Device::globalDevice ? Device::globalDevice->scheduler.now() : nextReportTick;
+    if (now < nextReportTick)
         return;
-    updateCounter = 0;
+    nextReportTick = now + BROADWAY_CLOCK / 100;
+    if (inputQueue.size() >= 128)
+        return;
 
     if (state->nunchukConnected != previousNunchukConnected) {
         previousNunchukConnected = state->nunchukConnected;

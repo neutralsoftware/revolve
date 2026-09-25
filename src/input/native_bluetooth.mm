@@ -1,6 +1,7 @@
 #include "input/native_bluetooth.h"
 #import <Foundation/Foundation.h>
 #import <IOBluetooth/IOBluetooth.h>
+#include <algorithm>
 #include <array>
 #include <deque>
 
@@ -10,6 +11,7 @@
     IOBluetoothL2CAPChannel *control;
     IOBluetoothL2CAPChannel *interrupt;
     bool ready;
+    CFAbsoluteTime deadline;
     std::deque<std::vector<uint8_t>> reports;
 }
 - (void)connect:(IOBluetoothDevice *)target;
@@ -19,6 +21,7 @@
 @implementation RevolveRemote
 - (void)connect:(IOBluetoothDevice *)target {
     device = target;
+    deadline = CFAbsoluteTimeGetCurrent() + 15;
     IOBluetoothL2CAPChannel *channel = nil;
     if ([device openL2CAPChannelAsync:&channel withPSM:0x11 delegate:self] != kIOReturnSuccess) {
         [self disconnect];
@@ -92,6 +95,10 @@
 }
 - (void)poll {
     CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, true);
+    for (RevolveRemote *remote in remotes) {
+        if (remote->device && !remote->ready && CFAbsoluteTimeGetCurrent() > remote->deadline)
+            [remote disconnect];
+    }
     if (scanning || CFAbsoluteTimeGetCurrent() < nextScan)
         return;
     bool full = true;

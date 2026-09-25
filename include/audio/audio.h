@@ -3,6 +3,7 @@
 
 #include <SDL3/SDL_audio.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -24,6 +25,9 @@ class AudioSystem {
     SDL_AudioStream *stream = nullptr;
 
     uint32_t inputRate = 48000;
+    std::array<int16_t, 512> pendingSamples{};
+    size_t pendingCount = 0;
+    void flush();
 
     static constexpr int SAMPLE_RATE = 48000;
     static constexpr int CHANNELS = 2;

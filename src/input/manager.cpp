@@ -192,8 +192,10 @@ void InputManager::updatePhysical() {
     for (std::size_t i = 0; i < physicalWiimotes.size(); ++i) {
         auto &remote = physicalWiimotes[i];
         auto &device = *wiimoteDevices[i];
-        if (bluetoothDiscovery)
+        if (bluetoothDiscovery) {
             remote.useNative(i);
+            device.requirePhysical();
+        }
         device.attachPhysical(remote.connected() ? &remote : nullptr);
         device.pollPhysical();
         if (remote.connected())
