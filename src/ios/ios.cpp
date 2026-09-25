@@ -17,6 +17,14 @@ void IOS::init() {
     registerDevice("/dev/di",
                    std::make_shared<DIDevice>(Device::globalDevice->memory,
                                               Device::globalDevice->disc));
+    bluetoothDevice = std::make_shared<BluetoothUSBDevice>(
+        *this, *Device::globalDevice->inputManager);
+    registerDevice("/dev/usb/oh1/57e/305", bluetoothDevice);
+}
+
+void IOS::update() {
+    if (bluetoothDevice)
+        bluetoothDevice->update();
 }
 
 void IOS::registerDevice(const std::string &path,

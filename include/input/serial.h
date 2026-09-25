@@ -73,7 +73,7 @@ class SerialInterface : public MMIODevice {
 
     void setChannelReadStatus(unsigned channel);
 
-    uint64_t accumulatedTicks;
+    uint64_t accumulatedTicks = 0;
     static constexpr uint32_t pollInterval = 1000;
 
     static constexpr uint32_t CHANNEL_READ_STATUS_BITS[4] = {

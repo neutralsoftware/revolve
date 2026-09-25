@@ -87,6 +87,7 @@ int GameCubeControllerDevice::runCommand(const uint8_t *request,
 
         if (requestSize >= 3) {
             rumble = (request[2] & 0x01) != 0;
+            state->rumble = rumble;
         }
 
         auto report = input::buildControllerReport(*state);
@@ -124,26 +125,37 @@ int GameCubeControllerDevice::runCommand(const uint8_t *request,
     }
 }
 
-bool SDLGameCubeInput::initialize() {
+SDLGameCubeInput::~SDLGameCubeInput() { shutdown(); }
+
+bool SDLGameCubeInput::initialize(std::size_t index) {
+    shutdown();
     int count = 0;
 
     SDL_JoystickID *ids = SDL_GetGamepads(&count);
 
-    if (!ids || count == 0) {
+    if (!ids || index >= static_cast<std::size_t>(count)) {
         if (ids)
             SDL_free(ids);
 
         return false;
     }
 
-    gamepad = SDL_OpenGamepad(ids[0]);
+    gamepad = SDL_OpenGamepad(ids[index]);
 
     SDL_free(ids);
 
     return gamepad != nullptr;
 }
 
+bool SDLGameCubeInput::connected() const {
+    return gamepad && SDL_GamepadConnected(gamepad);
+}
+
 void SDLGameCubeInput::update(GameCubeControllerState &state) {
+    if (!connected()) {
+        state.connected = false;
+        return;
+    }
     state.connected = true;
     state.a = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
     state.x = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_EAST);
@@ -159,6 +171,7 @@ void SDLGameCubeInput::update(GameCubeControllerState &state) {
         SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
     state.l = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
     state.r = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    state.z = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_MISC1);
     state.stickX =
         input::axisToU8(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX));
     state.stickY = input::invertedAxisToU8(
@@ -171,20 +184,28 @@ void SDLGameCubeInput::update(GameCubeControllerState &state) {
         SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
     state.triggerR = input::triggerToU8(
         SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+    SDL_RumbleGamepad(gamepad, state.rumble ? 0xFFFF : 0,
+                      state.rumble ? 0xFFFF : 0, 100);
+}
+
+void SDLGameCubeInput::shutdown() {
+    if (!gamepad)
+        return;
+    SDL_CloseGamepad(gamepad);
+    gamepad = nullptr;
 }
 
 void GameCubeControllerDevice::sendDirectCommand(uint32_t command,
-                                                 uint8_t poll) {
+                                                 uint8_t) {
     const uint8_t commandByte = static_cast<uint8_t>((command >> 16) & 0xFF);
     const uint8_t parameter1 = static_cast<uint8_t>((command >> 8) & 0xFF);
     const uint8_t parameter2 = static_cast<uint8_t>(command & 0xFF);
 
     if (commandByte == 0x40) {
-        rumble = (parameter1 == 1);
-
-        if (poll == 0) {
-            mode = parameter2;
-        }
+        mode = parameter1 & 0x07;
+        rumble = (parameter2 & 0x01) != 0;
+        if (state)
+            state->rumble = rumble;
 
         return;
     }

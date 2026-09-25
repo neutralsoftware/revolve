@@ -111,6 +111,8 @@ void Device::step() {
 
     cpu.advanceTime(cycles);
     scheduler.advance(cycles);
+    si->step(cycles);
+    ios.update();
 
     gx.run();
 }

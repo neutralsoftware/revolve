@@ -1,7 +1,9 @@
 
 #pragma once
 
+#include "SDL3/SDL_gamepad.h"
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <span>
@@ -28,6 +30,8 @@ struct NunchukState {
 
 struct WiiRemoteState {
     bool connected = false;
+    bool rumble = false;
+    uint8_t leds = 0;
 
     bool a = false;
     bool b = false;
@@ -68,6 +72,9 @@ class WiiRemoteDevice {
 
     void initializeEEPROM();
     void initializeNunchukRegisters();
+    void initializeMotionPlusRegisters();
+
+    inline bool isAvailable() const { return state && state->connected; }
 
   private:
     WiiRemoteState *state;
@@ -98,6 +105,7 @@ class WiiRemoteDevice {
     void handleWriteMemory(std::span<const uint8_t> payload);
 
     std::array<uint8_t, 2> makeButtons(bool includeAccel = false) const;
+    std::array<uint8_t, 3> makeAccel() const;
     std::array<uint8_t, 6> makeNunchuk() const;
 
     std::array<uint8_t, 10> makeIRBasic() const;
@@ -110,4 +118,18 @@ class WiiRemoteDevice {
     bool dataReportingEnabled = true;
 
     bool previousNunchukConnected = false;
+    uint32_t updateCounter = 0;
+};
+
+class SDLWiiRemoteInput {
+  public:
+    ~SDLWiiRemoteInput();
+
+    bool initialize(std::size_t index);
+    bool connected() const;
+    void update(WiiRemoteState &state);
+    void shutdown();
+
+  private:
+    SDL_Gamepad *gamepad = nullptr;
 };

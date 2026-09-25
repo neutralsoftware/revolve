@@ -4,6 +4,14 @@
 #include <SDL3/SDL.h>
 #include <algorithm>
 
+InputManager::InputManager() {
+    for (std::size_t i = 0; i < wiimotes.size(); ++i) {
+        wiimoteDevices[i] = std::make_unique<WiiRemoteDevice>(&wiimotes[i]);
+    }
+
+    reset();
+}
+
 void InputManager::reset() {
     for (auto &controller : gameCubeControllers) {
         controller = {};
@@ -20,8 +28,24 @@ void InputManager::reset() {
 }
 
 void InputManager::update() {
-    updateKeyboard();
+    for (auto &gc : gameCubeControllers) {
+        const bool rumble = gc.rumble;
+        gc = {};
+        gc.rumble = rumble;
+        gc.stickX = 0x80;
+        gc.stickY = 0x80;
+        gc.cStickX = 0x80;
+        gc.cStickY = 0x80;
+    }
+    for (auto &wiimote : wiimotes) {
+        const bool rumble = wiimote.rumble;
+        const uint8_t leds = wiimote.leds;
+        wiimote = {};
+        wiimote.rumble = rumble;
+        wiimote.leds = leds;
+    }
     updateGamepads();
+    updateKeyboard();
 }
 
 void InputManager::updateKeyboard() {
@@ -34,17 +58,20 @@ void InputManager::updateKeyboard() {
 
     gc.connected = true;
 
-    gc.a = keys[SDL_SCANCODE_X];
-    gc.b = keys[SDL_SCANCODE_Z];
-    gc.x = keys[SDL_SCANCODE_S];
-    gc.y = keys[SDL_SCANCODE_A];
+    gc.a |= keys[SDL_SCANCODE_X];
+    gc.b |= keys[SDL_SCANCODE_Z];
+    gc.x |= keys[SDL_SCANCODE_S];
+    gc.y |= keys[SDL_SCANCODE_A];
 
-    gc.start = keys[SDL_SCANCODE_RETURN];
+    gc.start |= keys[SDL_SCANCODE_RETURN];
+    gc.z |= keys[SDL_SCANCODE_C];
+    gc.l |= keys[SDL_SCANCODE_Q];
+    gc.r |= keys[SDL_SCANCODE_E];
 
-    gc.dpadUp = keys[SDL_SCANCODE_UP];
-    gc.dpadDown = keys[SDL_SCANCODE_DOWN];
-    gc.dpadLeft = keys[SDL_SCANCODE_LEFT];
-    gc.dpadRight = keys[SDL_SCANCODE_RIGHT];
+    gc.dpadUp |= keys[SDL_SCANCODE_UP];
+    gc.dpadDown |= keys[SDL_SCANCODE_DOWN];
+    gc.dpadLeft |= keys[SDL_SCANCODE_LEFT];
+    gc.dpadRight |= keys[SDL_SCANCODE_RIGHT];
 
     //
     // Wii Remote 0
@@ -53,23 +80,23 @@ void InputManager::updateKeyboard() {
 
     wm.connected = true;
 
-    wm.a = keys[SDL_SCANCODE_SPACE];
-    wm.b = keys[SDL_SCANCODE_LSHIFT];
+    wm.a |= keys[SDL_SCANCODE_SPACE];
+    wm.b |= keys[SDL_SCANCODE_LSHIFT];
 
-    wm.one = keys[SDL_SCANCODE_1];
-    wm.two = keys[SDL_SCANCODE_2];
+    wm.one |= keys[SDL_SCANCODE_1];
+    wm.two |= keys[SDL_SCANCODE_2];
 
-    wm.plus = keys[SDL_SCANCODE_EQUALS];
-    wm.minus = keys[SDL_SCANCODE_MINUS];
-    wm.home = keys[SDL_SCANCODE_H];
+    wm.plus |= keys[SDL_SCANCODE_EQUALS];
+    wm.minus |= keys[SDL_SCANCODE_MINUS];
+    wm.home |= keys[SDL_SCANCODE_H];
 
-    wm.dpadUp = keys[SDL_SCANCODE_UP];
-    wm.dpadDown = keys[SDL_SCANCODE_DOWN];
-    wm.dpadLeft = keys[SDL_SCANCODE_LEFT];
-    wm.dpadRight = keys[SDL_SCANCODE_RIGHT];
+    wm.dpadUp |= keys[SDL_SCANCODE_UP];
+    wm.dpadDown |= keys[SDL_SCANCODE_DOWN];
+    wm.dpadLeft |= keys[SDL_SCANCODE_LEFT];
+    wm.dpadRight |= keys[SDL_SCANCODE_RIGHT];
 
-    int nx = 128;
-    int ny = 128;
+    int nx = wm.nunchuk.stickX;
+    int ny = wm.nunchuk.stickY;
 
     if (keys[SDL_SCANCODE_A])
         nx = 30;
@@ -84,8 +111,8 @@ void InputManager::updateKeyboard() {
     wm.nunchuk.stickX = static_cast<uint8_t>(nx);
     wm.nunchuk.stickY = static_cast<uint8_t>(ny);
 
-    wm.nunchuk.c = keys[SDL_SCANCODE_Q];
-    wm.nunchuk.z = keys[SDL_SCANCODE_E];
+    wm.nunchuk.c |= keys[SDL_SCANCODE_C];
+    wm.nunchuk.z |= keys[SDL_SCANCODE_Z];
 
     float mouseX = 0;
     float mouseY = 0;
@@ -120,13 +147,19 @@ void InputManager::updateKeyboard() {
 void InputManager::updateGamepads() {
     for (std::size_t i = 0; i < gameCubeControllers.size(); ++i) {
         auto &gc = gameCubeControllers[i];
+        auto &input = gamepadInputs[i];
 
-        SDLGameCubeInput gcInput;
-
-        if (!gcInput.initialize()) {
+        if (!input.connected() && !input.initialize(i)) {
+            if (i != 0)
+                gc.connected = false;
             continue;
         }
 
-        gcInput.update(gc);
+        input.update(gc);
+
+        auto &wiimoteInput = wiimoteInputs[i];
+        if (!wiimoteInput.connected() && !wiimoteInput.initialize(i))
+            continue;
+        wiimoteInput.update(wiimotes[i]);
     }
 }

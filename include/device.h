@@ -15,6 +15,7 @@
 #include "input/gamecube.h"
 #include "input/manager.h"
 #include "input/serial.h"
+#include "input/wiimote.h"
 #include "ios/ios.h"
 #include "ios/ipc.h"
 #include <memory>

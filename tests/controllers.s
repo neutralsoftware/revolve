@@ -38,6 +38,7 @@ _start:
 2:
     li 5, 3
     stw 5, 0(4)
+    stw 6, 8(4)
     stw 4, 0(3)
     li 5, 1
     stw 5, 4(3)
@@ -55,6 +56,6 @@ _start:
 open_request:
     .long 1, 0, -1, wiimote_path, 0, 0, 0, 0
 read_request:
-    .long 3, 0, 0, 0x80003000, 20, 0, 0, 0
+    .long 3, 0, 0, 0x80003000, 24, 0, 0, 0
 wiimote_path:
     .asciz "/dev/revolve/wiimote"

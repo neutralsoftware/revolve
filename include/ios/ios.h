@@ -3,8 +3,12 @@
 
 #include "core/memory.h"
 #include "disc.h"
+#include "input/manager.h"
+#include "input/wiimote.h"
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
@@ -12,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-using IOSResult = std::optional<uint32_t>;
+using IOSResult = std::optional<int32_t>;
 
 enum class IOSCommand : uint32_t {
     Open = 1,
@@ -143,6 +147,8 @@ enum class IOSError : int32_t {
     ES_InvalidTicket = -1029,
 };
 
+class BluetoothUSBDevice;
+
 class IOS {
   public:
     IOSRequest parseRequest(uint32_t address);
@@ -171,6 +177,7 @@ class IOS {
     }
 
     void completeRequest(uint32_t address, int32_t result);
+    void update();
 
   private:
     IOSResult dispatch(const IOSRequest &request);
@@ -181,6 +188,8 @@ class IOS {
     std::unordered_map<int32_t, IOSFileDescriptor> fileDescriptors;
     std::unordered_map<std::string, std::shared_ptr<IOSDevice>> devices;
     int32_t nextFileDescriptor = 0;
+
+    std::shared_ptr<BluetoothUSBDevice> bluetoothDevice;
 };
 
 enum class STMIoctl : uint32_t {
@@ -322,6 +331,136 @@ class ESDevice : public IOSDevice {
 
     IOSResult ioctlv(const IOSIoctlvRequest &request,
                      const std::vector<IOSVector> &vectors) override;
+};
+
+struct BluetoothAddress {
+    std::array<uint8_t, 6> bytes{};
+};
+
+struct BluetoothConnection {
+    WiiRemoteDevice *wiimote = nullptr;
+
+    BluetoothAddress address{};
+
+    bool basebandConnected = false;
+
+    uint16_t handle = 0;
+
+    uint16_t hidControlLocalCID = 0;
+    uint16_t hidControlRemoteCID = 0;
+
+    uint16_t hidInterruptLocalCID = 0;
+    uint16_t hidInterruptRemoteCID = 0;
+
+    uint16_t sdpLocalCID = 0;
+    uint16_t sdpRemoteCID = 0;
+
+    bool hidControlConfigured = false;
+    bool hidInterruptConfigured = false;
+    bool sdpConfigured = false;
+};
+
+enum class USBV0Request : uint32_t {
+    Control = 0,
+    Bulk = 1,
+    Interrupt = 2,
+};
+
+namespace HCI {
+constexpr uint16_t Inquiry = 0x0401;
+constexpr uint16_t CreateConnection = 0x0405;
+constexpr uint16_t Disconnect = 0x0406;
+constexpr uint16_t RemoteNameRequest = 0x0419;
+
+constexpr uint16_t Reset = 0x0C03;
+constexpr uint16_t WriteScanEnable = 0x0C1A;
+
+constexpr uint16_t ReadLocalVersion = 0x1001;
+constexpr uint16_t ReadLocalSupportedFeatures = 0x1003;
+constexpr uint16_t ReadBufferSize = 0x1005;
+constexpr uint16_t ReadBDADDR = 0x1009;
+} // namespace HCI
+
+class BluetoothUSBDevice final : public IOSDevice {
+  public:
+    BluetoothUSBDevice(IOS &ios, InputManager &inputManager);
+
+    IOSResult ioctlv(const IOSIoctlvRequest &request,
+                     const std::vector<IOSVector> &vectors) override;
+
+    void update();
+
+  private:
+    struct PendingRead {
+        uint32_t ipcAddress = 0;
+        uint32_t bufferAddress = 0;
+        uint32_t capacity = 0;
+    };
+
+    IOS &ios;
+
+    std::array<WiiRemoteDevice *, 4> wiimotes{};
+    std::array<BluetoothConnection, 4> connections{};
+
+    std::optional<PendingRead> pendingHCIRead;
+    std::optional<PendingRead> pendingACLRead;
+
+    std::deque<std::vector<uint8_t>> hciEvents;
+    std::deque<std::vector<uint8_t>> aclPackets;
+
+    IOSResult handleControl(const IOSIoctlvRequest &request,
+                            const std::vector<IOSVector> &vectors);
+
+    IOSResult handleBulk(const IOSIoctlvRequest &request,
+                         const std::vector<IOSVector> &vectors);
+
+    IOSResult handleInterrupt(const IOSIoctlvRequest &request,
+                              const std::vector<IOSVector> &vectors);
+
+    void handleHCICommand(std::span<const uint8_t> command);
+
+    void handleACLFromWii(std::span<const uint8_t> packet);
+
+    void handleL2CAP(BluetoothConnection &connection,
+                     std::span<const uint8_t> packet);
+
+    void handleL2CAPSignaling(BluetoothConnection &connection,
+                              std::span<const uint8_t> data);
+
+    void handleHID(BluetoothConnection &connection, uint16_t destinationCID,
+                   std::span<const uint8_t> data);
+
+    void handleSDP(BluetoothConnection &connection,
+                   std::span<const uint8_t> data);
+
+    void queueHCIEvent(std::vector<uint8_t> event);
+
+    void queueACL(std::vector<uint8_t> packet);
+
+    void sendHIDInput(BluetoothConnection &connection,
+                      std::span<const uint8_t> report);
+
+    BluetoothConnection *findConnectionByHandle(uint16_t handle);
+
+    BluetoothConnection *
+    findConnectionByAddress(const BluetoothAddress &address);
+
+    void sendCommandComplete(uint16_t opcode,
+                             std::span<const uint8_t> parameters);
+    void sendCommandStatus(uint16_t opcode, uint8_t status = 0);
+    void sendInquiryResults();
+
+    void sendRemoteName(const BluetoothAddress &address);
+    void sendConnectionComplete(BluetoothConnection &connection);
+
+    void sendL2CAP(BluetoothConnection &connection, uint16_t remoteCID,
+                   std::span<const uint8_t> data);
+
+    void sendL2CAPSignal(BluetoothConnection &connection, uint8_t code,
+                         uint8_t identifier, std::span<const uint8_t> data);
+
+    uint16_t nextCID = 0x0040;
+    uint8_t nextSignalIdentifier = 1;
 };
 
 #endif

@@ -1,5 +1,6 @@
 #include "SDL3/SDL.h"
 #include "core/executable.h"
+#include "core/utils.h"
 #include "device.h"
 #include "ios/ios.h"
 #include <cstring>
@@ -22,7 +23,7 @@ class TestWiiRemoteDevice final : public IOSDevice {
     explicit TestWiiRemoteDevice(const WiiRemoteState *state) : state(state) {}
 
     int32_t read(uint32_t buffer, uint32_t size) override {
-        if (!state || !state->connected || size < 20)
+        if (!state || !state->connected || size < 24)
             return -1;
         uint32_t buttons = 0;
         buttons |= static_cast<uint32_t>(state->a) << 0;
@@ -45,7 +46,12 @@ class TestWiiRemoteDevice final : public IOSDevice {
         Bus::writePhysical32(buffer + 12, value);
         std::memcpy(&value, &state->accelZ, sizeof(value));
         Bus::writePhysical32(buffer + 16, value);
-        return 20;
+        uint32_t nunchuk = uint32_t(state->nunchuk.stickX) << 24;
+        nunchuk |= uint32_t(state->nunchuk.stickY) << 16;
+        nunchuk |= static_cast<uint32_t>(state->nunchuk.c) << 1;
+        nunchuk |= static_cast<uint32_t>(state->nunchuk.z);
+        Bus::writePhysical32(buffer + 20, nunchuk);
+        return 24;
     }
 
   private:
@@ -136,7 +142,7 @@ float floatValue(uint32_t bits) {
     return value;
 }
 
-void printWii(uint32_t buttons, float x, float y, float z) {
+void printWii(uint32_t buttons, float x, float y, float z, uint32_t nunchuk) {
     std::cout
         << "\033[2J\033[HWii Remote report from guest IOS IPC bytecode\n\n";
     button("A", buttons & 1);
@@ -153,7 +159,12 @@ void printWii(uint32_t buttons, float x, float y, float z) {
     button("Left", buttons & 512);
     button("Right", buttons & 1024);
     std::cout << "\n\nAccel X   " << x << "\nAccel Y   " << y << "\nAccel Z   "
-              << z << '\n';
+              << z << "\n\nNunchuk\n\n";
+    button("C", nunchuk & 2);
+    button("Z", nunchuk & 1);
+    std::cout << "\n\n";
+    axis("Stick X", nunchuk >> 24);
+    axis("Stick Y", nunchuk >> 16);
 }
 }
 
@@ -186,7 +197,14 @@ int runControllerSuite() {
                            selection == "1" ? "GameCube Controller Test"
                                             : "Wii Remote Test");
         SDL_RaiseWindow(device->gx.renderer->window);
+        std::cout << "\nRunning guest controller bytecode. Values will appear "
+                     "below.\n";
+        if (selection == "2")
+            std::cout << "Wii: Space=A, Left Shift=B, 1/2, arrows=D-pad; "
+                         "Nunchuk: WASD, C/Z.\n";
+        std::cout << std::flush;
         bool running = true;
+        uint64_t stepsWithoutReport = 0;
         while (running) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
@@ -197,10 +215,24 @@ int runControllerSuite() {
             }
             SDL_PumpEvents();
             device->inputManager->update();
-            for (uint32_t step = 0; step < 4096; ++step)
+            for (uint32_t step = 0; step < 4096; ++step) {
                 device->step();
-            if (Bus::readPhysical32(ReportAddress) != ReportMagic)
+                if (device->cpu.state.exceptionTaken)
+                    throw std::runtime_error(
+                        "Guest exception at PC " +
+                        utils::toHexString(device->cpu.state.cia));
+            }
+            if (Bus::readPhysical32(ReportAddress) != ReportMagic) {
+                stepsWithoutReport += 4096;
+                if (stepsWithoutReport >= 4'096'000) {
+                    std::cout << "\rWaiting for guest report; PC="
+                              << utils::toHexString(device->cpu.state.cia)
+                              << "      " << std::flush;
+                    stepsWithoutReport = 0;
+                }
                 continue;
+            }
+            stepsWithoutReport = 0;
             if (selection == "1")
                 printGameCube(Bus::readPhysical32(ReportAddress + 4),
                               Bus::readPhysical32(ReportAddress + 8));
@@ -208,7 +240,8 @@ int runControllerSuite() {
                 printWii(Bus::readPhysical32(ReportAddress + 4),
                          floatValue(Bus::readPhysical32(ReportAddress + 8)),
                          floatValue(Bus::readPhysical32(ReportAddress + 12)),
-                         floatValue(Bus::readPhysical32(ReportAddress + 16)));
+                         floatValue(Bus::readPhysical32(ReportAddress + 16)),
+                         Bus::readPhysical32(ReportAddress + 20));
             std::cout << "\nPress Escape or close the Revolve window to quit"
                       << std::flush;
         }

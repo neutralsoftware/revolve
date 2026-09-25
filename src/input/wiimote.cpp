@@ -1,9 +1,12 @@
 #include "input/wiimote.h"
+#include "input/gamecube.h"
+#include <algorithm>
 #include <vector>
 
 WiiRemoteDevice::WiiRemoteDevice(WiiRemoteState *state) : state(state) {
     initializeEEPROM();
     initializeNunchukRegisters();
+    initializeMotionPlusRegisters();
 }
 
 static uint16_t accelTo10Bit(float g) {
@@ -103,7 +106,7 @@ std::array<uint8_t, 6> WiiRemoteDevice::makeNunchuk() const {
 }
 
 void WiiRemoteDevice::initializeNunchukRegisters() {
-    auto regs = extensionRegisters;
+    auto &regs = extensionRegisters;
     regs.fill(0);
 
     regs[0xFA] = 0x00;
@@ -112,6 +115,21 @@ void WiiRemoteDevice::initializeNunchukRegisters() {
     regs[0xFD] = 0x20;
     regs[0xFE] = 0x00;
     regs[0xFF] = 0x00;
+}
+
+void WiiRemoteDevice::initializeMotionPlusRegisters() {
+    motionPlusRegisters.fill(0);
+    motionPlusRegisters[0xFC] = 0xA6;
+    motionPlusRegisters[0xFD] = 0x20;
+    motionPlusRegisters[0xFF] = 0x05;
+}
+
+std::array<uint8_t, 3> WiiRemoteDevice::makeAccel() const {
+    return {
+        static_cast<uint8_t>(accelTo10Bit(state->accelX) >> 2),
+        static_cast<uint8_t>(accelTo10Bit(state->accelY) >> 2),
+        static_cast<uint8_t>(accelTo10Bit(state->accelZ) >> 2),
+    };
 }
 
 uint8_t WiiRemoteDevice::readRegister(uint32_t address) {
@@ -138,6 +156,9 @@ uint8_t WiiRemoteDevice::readRegister(uint32_t address) {
         return 0;
     }
 
+    if ((address & 0xFF0000) == 0xA60000)
+        return motionPlusRegisters[address & 0xFF];
+
     return 0;
 }
 
@@ -147,17 +168,12 @@ void WiiRemoteDevice::writeRegister(uint32_t address, uint8_t value) {
 
         extensionRegisters[offset] = value;
 
-        if (offset == 0xF0 && value == 0x55) {
-        }
-
-        if (offset == 0xFB && value == 0x00) {
-        }
-
         return;
     }
 
     if ((address & 0xFF0000) == 0xA60000) {
-        // MotionPlus later
+        motionPlusRegisters[address & 0xFF] = value;
+        return;
     }
 
     if ((address & 0xFF0000) == 0xB00000) {
@@ -241,14 +257,26 @@ std::vector<uint8_t> WiiRemoteDevice::buildDataReport() {
 
     case 0x31: {
         auto buttons = makeButtons(true);
+        auto accel = makeAccel();
         report.insert(report.end(), buttons.begin(), buttons.end());
+        report.insert(report.end(), accel.begin(), accel.end());
+        break;
+    }
+
+    case 0x34: {
+        auto buttons = makeButtons(false);
+        auto ext = makeNunchuk();
+        report.insert(report.end(), buttons.begin(), buttons.end());
+        report.insert(report.end(), ext.begin(), ext.end());
+        while (report.size() < 1 + 2 + 19)
+            report.push_back(0);
         break;
     }
 
     case 0x32: {
         auto ext = makeNunchuk();
 
-        auto buttons = makeButtons(true);
+        auto buttons = makeButtons(false);
 
         report.insert(report.end(), buttons.begin(), buttons.end());
         report.insert(report.end(), ext.begin(), ext.end());
@@ -258,12 +286,25 @@ std::vector<uint8_t> WiiRemoteDevice::buildDataReport() {
         break;
     }
 
+    case 0x36: {
+        auto buttons = makeButtons(false);
+        auto ir = makeIRBasic();
+        auto ext = makeNunchuk();
+        report.insert(report.end(), buttons.begin(), buttons.end());
+        report.insert(report.end(), ir.begin(), ir.end());
+        report.insert(report.end(), ext.begin(), ext.end());
+        while (report.size() < 1 + 2 + 10 + 9)
+            report.push_back(0);
+        break;
+    }
+
     case 0x33: {
         auto ir = makeIRExtended();
-
         auto buttons = makeButtons(true);
+        auto accel = makeAccel();
 
         report.insert(report.end(), buttons.begin(), buttons.end());
+        report.insert(report.end(), accel.begin(), accel.end());
         report.insert(report.end(), ir.begin(), ir.end());
         break;
     }
@@ -271,8 +312,10 @@ std::vector<uint8_t> WiiRemoteDevice::buildDataReport() {
     case 0x35: {
         auto ext = makeNunchuk();
         auto buttons = makeButtons(true);
+        auto accel = makeAccel();
 
         report.insert(report.end(), buttons.begin(), buttons.end());
+        report.insert(report.end(), accel.begin(), accel.end());
         report.insert(report.end(), ext.begin(), ext.end());
 
         while (report.size() < 1 + 2 + 3 + 16)
@@ -283,12 +326,21 @@ std::vector<uint8_t> WiiRemoteDevice::buildDataReport() {
     case 0x37: {
         auto ir = makeIRBasic();
         auto ext = makeNunchuk();
-
         auto buttons = makeButtons(true);
+        auto accel = makeAccel();
 
         report.insert(report.end(), buttons.begin(), buttons.end());
+        report.insert(report.end(), accel.begin(), accel.end());
         report.insert(report.end(), ir.begin(), ir.end());
         report.insert(report.end(), ext.begin(), ext.end());
+        break;
+    }
+
+    case 0x3D: {
+        auto ext = makeNunchuk();
+        report.insert(report.end(), ext.begin(), ext.end());
+        while (report.size() < 1 + 21)
+            report.push_back(0);
         break;
     }
 
@@ -296,9 +348,7 @@ std::vector<uint8_t> WiiRemoteDevice::buildDataReport() {
         return {};
     }
 
-    inputQueue.push_back(std::move(report));
-
-    return inputQueue.back();
+    return report;
 }
 
 void WiiRemoteDevice::handleOutputReport(uint8_t reportId,
@@ -308,20 +358,25 @@ void WiiRemoteDevice::handleOutputReport(uint8_t reportId,
 
     switch (reportId) {
     case 0x10:
-        if (!payload.empty())
+        if (!payload.empty()) {
             rumble = payload[0] & 0x01;
+            state->rumble = rumble;
+        }
         break;
 
     case 0x11:
         if (!payload.empty()) {
             rumble = payload[0] & 0x01;
             leds = payload[0] & 0xF0;
+            state->rumble = rumble;
+            state->leds = leds;
         }
         break;
 
     case 0x12:
         if (payload.size() >= 2) {
             rumble = payload[0] & 0x01;
+            state->rumble = rumble;
             continuousReporting = payload[0] & 0x04;
             reportMode = payload[1];
 
@@ -334,6 +389,7 @@ void WiiRemoteDevice::handleOutputReport(uint8_t reportId,
     case 0x1A:
         if (!payload.empty()) {
             rumble = payload[0] & 0x01;
+            state->rumble = rumble;
             irEnabled = (payload[0] & 0x04) != 0;
         }
         break;
@@ -341,6 +397,7 @@ void WiiRemoteDevice::handleOutputReport(uint8_t reportId,
     case 0x14:
         if (!payload.empty()) {
             rumble = payload[0] & 0x01;
+            state->rumble = rumble;
             speakerEnabled = (payload[0] & 0x04) != 0;
         }
         break;
@@ -462,6 +519,10 @@ void WiiRemoteDevice::update() {
     if (!state || !state->connected)
         return;
 
+    if (++updateCounter < 4096)
+        return;
+    updateCounter = 0;
+
     if (state->nunchukConnected != previousNunchukConnected) {
         previousNunchukConnected = state->nunchukConnected;
 
@@ -494,4 +555,83 @@ std::vector<uint8_t> WiiRemoteDevice::popInputReport() {
     inputQueue.pop_front();
 
     return result;
+}
+
+SDLWiiRemoteInput::~SDLWiiRemoteInput() { shutdown(); }
+
+bool SDLWiiRemoteInput::initialize(std::size_t index) {
+    shutdown();
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetGamepads(&count);
+    if (!ids || index >= static_cast<std::size_t>(count)) {
+        SDL_free(ids);
+        return false;
+    }
+    gamepad = SDL_OpenGamepad(ids[index]);
+    SDL_free(ids);
+    if (gamepad && SDL_GamepadHasSensor(gamepad, SDL_SENSOR_ACCEL))
+        SDL_SetGamepadSensorEnabled(gamepad, SDL_SENSOR_ACCEL, true);
+    return gamepad != nullptr;
+}
+
+bool SDLWiiRemoteInput::connected() const {
+    return gamepad && SDL_GamepadConnected(gamepad);
+}
+
+void SDLWiiRemoteInput::update(WiiRemoteState &state) {
+    if (!connected()) {
+        state.connected = false;
+        return;
+    }
+    state.connected = true;
+    state.a = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
+    state.b = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    state.one = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_WEST);
+    state.two = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_EAST);
+    state.plus = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_START);
+    state.minus = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_BACK);
+    state.home = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_GUIDE);
+    state.dpadUp = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
+    state.dpadDown = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+    state.dpadLeft = SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+    state.dpadRight =
+        SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+    state.nunchuk.stickX =
+        input::axisToU8(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTX));
+    state.nunchuk.stickY = input::invertedAxisToU8(
+        SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFTY));
+    state.nunchuk.c =
+        SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    state.nunchuk.z =
+        SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 8192;
+    const uint16_t irX = static_cast<uint16_t>(
+        input::axisToU8(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTX)) *
+        1023 / 255);
+    const uint16_t irY = static_cast<uint16_t>(
+        input::axisToU8(SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHTY)) *
+        767 / 255);
+    state.ir[0] = {static_cast<uint16_t>(std::max<int>(0, irX - 50)), irY, 4,
+                   true};
+    state.ir[1] = {static_cast<uint16_t>(std::min<int>(1023, irX + 50)), irY,
+                   4, true};
+    if (SDL_GamepadHasSensor(gamepad, SDL_SENSOR_ACCEL)) {
+        float acceleration[3]{};
+        if (SDL_GetGamepadSensorData(gamepad, SDL_SENSOR_ACCEL, acceleration,
+                                     3)) {
+            constexpr float gravity = 9.80665f;
+            state.accelX = acceleration[0] / gravity;
+            state.accelY = acceleration[1] / gravity;
+            state.accelZ = acceleration[2] / gravity;
+        }
+    }
+    SDL_RumbleGamepad(gamepad, state.rumble ? 0xFFFF : 0,
+                      state.rumble ? 0xFFFF : 0, 100);
+    SDL_SetGamepadLED(gamepad, 0, 0, state.leds ? 255 : 0);
+}
+
+void SDLWiiRemoteInput::shutdown() {
+    if (!gamepad)
+        return;
+    SDL_CloseGamepad(gamepad);
+    gamepad = nullptr;
 }

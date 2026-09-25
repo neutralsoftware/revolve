@@ -6,6 +6,7 @@
 
 struct GameCubeControllerState {
     bool connected = false;
+    bool rumble = false;
 
     bool a = false;
     bool b = false;
@@ -97,7 +98,11 @@ class GameCubeControllerDevice final : public SerialInterfaceDevice {
 
 class SDLGameCubeInput {
   public:
-    bool initialize();
+    ~SDLGameCubeInput();
+
+    bool initialize(std::size_t index);
+
+    bool connected() const;
 
     void update(GameCubeControllerState &state);
 

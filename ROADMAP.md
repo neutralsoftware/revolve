@@ -91,11 +91,11 @@ A from-scratch Wii emulator focused on correctness, understanding, and gradual h
 
 ## Input
 
-- [ ] Add GameCube Controller support
-- [ ] Add Wii Remote support
-- [ ] Add Wii Remote accelerometer support
-- [ ] Add Wii Remote IR support
-- [ ] Add Nunchuk support
+- [x] Add GameCube Controller support
+- [x] Add Wii Remote support
+- [x] Add Wii Remote accelerometer support
+- [x] Add Wii Remote IR support
+- [x] Add Nunchuk support
 - [ ] Add Bluetooth support for Wii Remotes
 
 ## Audio / DSP
