@@ -12,6 +12,7 @@ void IOS::init() {
     FSDevice::initializeNAND();
     networkDevice = std::make_shared<NetworkDevice>(*this);
     registerDevice("/dev/net/ip/top", networkDevice);
+    registerNetworkServices(*this);
     registerDevice("/dev/stm/immediate",
                    std::make_shared<STMImmediateDevice>());
     stmEventHook = std::make_shared<STMEventHookDevice>();

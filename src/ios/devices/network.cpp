@@ -281,17 +281,17 @@ IOSResult NetworkDevice::ioctl(const IOSIoctlRequest &request) {
             });
     }
     if (request.request == 0x0B) {
-        if (request.inSize < 8 || request.outSize % 8 ||
-            request.outSize > 24 * 8)
+        if (request.inSize < 8 || request.outSize % 12 ||
+            request.outSize > 24 * 12)
             return -28;
         const int64_t timeout =
             static_cast<int64_t>((uint64_t(word(0)) << 32) | word(4));
         const uint64_t start = SDL_GetTicks();
-        std::vector<std::pair<int32_t, uint16_t>> entries;
-        for (uint32_t i = 0; i < request.outSize; i += 8)
+        std::vector<std::pair<int32_t, uint32_t>> entries;
+        for (uint32_t i = 0; i < request.outSize; i += 12)
             entries.emplace_back(
                 static_cast<int32_t>(Bus::readPhysical32(request.outPtr + i)),
-                Bus::readPhysical16(request.outPtr + i + 4));
+                Bus::readPhysical32(request.outPtr + i + 4));
         return defer(
             request.ipcAddress,
             [this, entries, start, timeout, request]() -> IOSResult {
@@ -325,7 +325,7 @@ IOSResult NetworkDevice::ioctl(const IOSIoctlRequest &request) {
                         if (descriptor.revents & POLLNVAL)
                             returned |= 0x20;
                     }
-                    Bus::writePhysical16(request.outPtr + i * 8 + 6, returned);
+                    Bus::writePhysical32(request.outPtr + i * 12 + 8, returned);
                     ready += returned != 0;
                 }
                 if (ready || timeout == 0 ||
@@ -485,6 +485,70 @@ IOSResult NetworkDevice::ioctl(const IOSIoctlRequest &request) {
 
 IOSResult NetworkDevice::ioctlv(const IOSIoctlvRequest &request,
                                 const std::vector<IOSVector> &vectors) {
+    if (request.request == 0x1C) {
+        if (request.inCount != 1 || request.outCount != 2 ||
+            vectors.size() != 3 || vectors[0].size < 8 || vectors[2].size < 4)
+            return -28;
+        const uint32_t option = Bus::readPhysical32(vectors[0].address + 4);
+        uint32_t size = 0;
+        switch (option) {
+        case 0x1004:
+            size = 6;
+            break;
+        case 0x1005:
+            size = 4;
+            break;
+        case 0x4003:
+            size = 12;
+            break;
+        case 0x4005:
+            size = 4;
+            break;
+        case 0x4006:
+            size = 0;
+            break;
+        default:
+            return -51;
+        }
+        if (vectors[1].size < size)
+            return -28;
+        for (uint32_t i = 0; i < size; ++i)
+            Bus::writePhysical8(vectors[1].address + i, 0);
+        if (option == 0x1004) {
+            constexpr std::array<uint8_t, 6> mac{0x02, 0x52, 0x56,
+                                                 0x4C, 0x56, 0x01};
+            for (size_t i = 0; i < mac.size(); ++i)
+                Bus::writePhysical8(vectors[1].address + i, mac[i]);
+        } else if (option == 0x1005) {
+            Bus::writePhysical32(vectors[1].address, hostAddress() ? 1 : 0);
+        } else if (option == 0x4003) {
+            const auto ip = hostAddress();
+            Bus::writePhysical32(vectors[1].address, ip);
+            ifaddrs *interfaces = nullptr;
+            if (getifaddrs(&interfaces) == 0) {
+                for (auto *entry = interfaces; entry; entry = entry->ifa_next) {
+                    if (!entry->ifa_addr ||
+                        entry->ifa_addr->sa_family != AF_INET ||
+                        !entry->ifa_netmask)
+                        continue;
+                    const auto *address =
+                        reinterpret_cast<const sockaddr_in *>(entry->ifa_addr);
+                    if (ntohl(address->sin_addr.s_addr) != ip)
+                        continue;
+                    const auto mask =
+                        ntohl(reinterpret_cast<const sockaddr_in *>(
+                                  entry->ifa_netmask)
+                                  ->sin_addr.s_addr);
+                    Bus::writePhysical32(vectors[1].address + 4, mask);
+                    Bus::writePhysical32(vectors[1].address + 8, ip | ~mask);
+                    break;
+                }
+                freeifaddrs(interfaces);
+            }
+        }
+        Bus::writePhysical32(vectors[2].address, size);
+        return 0;
+    }
     if (request.request != 12 && request.request != 13)
         return -63;
     const bool sending = request.request == 13;
@@ -499,12 +563,12 @@ IOSResult NetworkDevice::ioctlv(const IOSIoctlvRequest &request,
         return -28;
     const int32_t id = Bus::readPhysical32(parameters.address);
     const uint32_t flags = Bus::readPhysical32(parameters.address + 4);
-    if (flags & ~7u)
+    if (flags & ~0x47u)
         return -28;
     auto socket = sockets.find(id);
     if (socket == sockets.end())
         return -8;
-    const bool nonblocking = socket->second.nonblocking || (flags & 4);
+    const bool nonblocking = socket->second.nonblocking || (flags & 0x44);
     std::optional<sockaddr_in> destination;
     if (sending && Bus::readPhysical32(parameters.address + 8)) {
         destination =
