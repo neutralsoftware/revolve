@@ -1,6 +1,8 @@
 #include "input/manager.h"
+#include "device.h"
 
 #include <SDL3/SDL.h>
+#include <algorithm>
 
 void InputManager::reset() {
     for (auto &controller : gameCubeControllers) {
@@ -61,10 +63,58 @@ void InputManager::updateKeyboard() {
     wm.minus = keys[SDL_SCANCODE_MINUS];
     wm.home = keys[SDL_SCANCODE_H];
 
-    wm.dpadUp = keys[SDL_SCANCODE_I];
-    wm.dpadDown = keys[SDL_SCANCODE_K];
-    wm.dpadLeft = keys[SDL_SCANCODE_J];
-    wm.dpadRight = keys[SDL_SCANCODE_L];
+    wm.dpadUp = keys[SDL_SCANCODE_UP];
+    wm.dpadDown = keys[SDL_SCANCODE_DOWN];
+    wm.dpadLeft = keys[SDL_SCANCODE_LEFT];
+    wm.dpadRight = keys[SDL_SCANCODE_RIGHT];
+
+    int nx = 128;
+    int ny = 128;
+
+    if (keys[SDL_SCANCODE_A])
+        nx = 30;
+    if (keys[SDL_SCANCODE_D])
+        nx = 225;
+
+    if (keys[SDL_SCANCODE_W])
+        ny = 225;
+    if (keys[SDL_SCANCODE_S])
+        ny = 30;
+
+    wm.nunchuk.stickX = static_cast<uint8_t>(nx);
+    wm.nunchuk.stickY = static_cast<uint8_t>(ny);
+
+    wm.nunchuk.c = keys[SDL_SCANCODE_Q];
+    wm.nunchuk.z = keys[SDL_SCANCODE_E];
+
+    float mouseX = 0;
+    float mouseY = 0;
+
+    SDL_GetMouseState(&mouseX, &mouseY);
+    int windowWidth = 0;
+    int windowHeight = 0;
+    SDL_GetWindowSize(Device::globalDevice->gx.renderer->window, &windowWidth,
+                      &windowHeight);
+
+    const float px = mouseX / float(windowWidth);
+    const float py = mouseY / float(windowHeight);
+
+    uint16_t irX = static_cast<uint16_t>(std::clamp(px, 0.0f, 1.0f) * 1023.0f);
+
+    uint16_t irY = static_cast<uint16_t>(std::clamp(py, 0.0f, 1.0f) * 767.0f);
+
+    constexpr int separation = 100;
+
+    wm.ir[0] = {
+        static_cast<uint16_t>(std::clamp<int>(irX - separation / 2, 0, 1023)),
+        irY, 4, true};
+
+    wm.ir[1] = {
+        static_cast<uint16_t>(std::clamp<int>(irX + separation / 2, 0, 1023)),
+        irY, 4, true};
+
+    wm.ir[2].visible = false;
+    wm.ir[3].visible = false;
 }
 
 void InputManager::updateGamepads() {
