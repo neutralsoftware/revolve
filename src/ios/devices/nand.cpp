@@ -95,8 +95,9 @@ int32_t fsError(const std::error_code &ec) {
 
 std::filesystem::path FSDevice::rootPath() {
     static const auto root = [] {
-        if (const char *configured = std::getenv("REVOLVE_NAND_PATH"))
-            return std::filesystem::absolute(configured);
+        if (const char *configured = std::getenv("REVOLVE_NAND_PATH");
+            configured && *configured)
+            return std::filesystem::absolute(configured).lexically_normal();
         char *pref = SDL_GetPrefPath("neutralsoftware", "Revolve");
         if (!pref)
             throw std::runtime_error("Cannot locate Revolve NAND directory");

@@ -28,11 +28,12 @@ int main(int argc, const char *argv[]) {
         std::cerr
             << "Usage: revolve [-S] [--real-wiimotes] <parse|exec> <file>\n"
             << "       revolve disc <image.iso|image.wbfs|image.rvz>\n"
+            << "       revolve [-S] [--real-wiimotes] menu\n"
             << "       revolve -S <file>\n";
         return 1;
     }
 
-    if (debug && arguments.size() == 1)
+    if (debug && arguments.size() == 1 && arguments[0] != "menu")
         arguments.insert(arguments.begin(), "exec");
 
     Device::createDevice();

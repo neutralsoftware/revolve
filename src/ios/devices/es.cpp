@@ -237,7 +237,7 @@ IOSResult ESDevice::ioctlv(const IOSIoctlvRequest &request,
     case 0x13: {
         const bool countOnly = request.request == 0x12;
         if (!shape(countOnly ? 1 : 2, 1) || vectors[0].size != 8 ||
-            (countOnly ? vectors[1].size != 4 : vectors[1].size != 4))
+            vectors[1].size != 4)
             return invalid;
         const auto ticket = titleTicket(readTitle(vectors[0].address));
         const auto view = ticketView(ticket);
