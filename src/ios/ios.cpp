@@ -17,6 +17,14 @@ void IOS::init() {
     registerDevice("/dev/di",
                    std::make_shared<DIDevice>(Device::globalDevice->memory,
                                               Device::globalDevice->disc));
+    bluetoothDevice = std::make_shared<BluetoothUSBDevice>(
+        *this, *Device::globalDevice->inputManager);
+    registerDevice("/dev/usb/oh1/57e/305", bluetoothDevice);
+}
+
+void IOS::update() {
+    if (bluetoothDevice)
+        bluetoothDevice->update();
 }
 
 void IOS::registerDevice(const std::string &path,
@@ -45,25 +53,15 @@ IOSRequest IOS::parseRequest(uint32_t address) {
 void IOS::submitRequest(uint32_t address) {
     IOSRequest request = parseRequest(address);
 
-    Logger::log("IOS", LogLevel::Info,
-                "IPC request @ 0x" + utils::toHexString(address) + " cmd=" +
-                    std::to_string(static_cast<uint32_t>(request.command)) +
-                    " fd=" + std::to_string(request.fd));
+    IOSResult result = dispatch(request);
 
-    int32_t result = dispatch(request);
+    if (!result.has_value())
+        return;
 
-    Bus::writePhysical32(request.address + 0x04, static_cast<uint32_t>(result));
-
-    Bus::writePhysical32(request.address + 0x08,
-                         static_cast<uint32_t>(request.command));
-
-    Bus::writePhysical32(request.address + 0x00,
-                         static_cast<uint32_t>(IOSCommand::Reply));
-
-    Device::globalDevice->ipc->replyFromStarlet(request.address);
+    completeRequest(address, *result);
 }
 
-int32_t IOS::dispatch(const IOSRequest &request) {
+IOSResult IOS::dispatch(const IOSRequest &request) {
     switch (request.command) {
     case IOSCommand::Open: {
         IOSOpenRequest open = parseOpenRequest(request);
@@ -215,26 +213,30 @@ IOSSeekRequest IOS::parseSeekRequest(const IOSRequest &request) {
 }
 
 IOSIoctlRequest IOS::parseIoctlRequest(const IOSRequest &request) {
-    IOSIoctlRequest ioctlRequest{};
+    IOSIoctlRequest result{};
 
-    ioctlRequest.request = request.args[0];
-    ioctlRequest.inPtr = request.args[1];
-    ioctlRequest.inSize = request.args[2];
-    ioctlRequest.outPtr = request.args[3];
-    ioctlRequest.outSize = request.args[4];
+    result.ipcAddress = request.address;
 
-    return ioctlRequest;
+    result.request = request.args[0];
+    result.inPtr = request.args[1];
+    result.inSize = request.args[2];
+    result.outPtr = request.args[3];
+    result.outSize = request.args[4];
+
+    return result;
 }
 
 IOSIoctlvRequest IOS::parseIoctlvRequest(const IOSRequest &request) {
-    IOSIoctlvRequest ioctlvRequest{};
+    IOSIoctlvRequest result{};
 
-    ioctlvRequest.request = request.args[0];
-    ioctlvRequest.inCount = request.args[1];
-    ioctlvRequest.outCount = request.args[2];
-    ioctlvRequest.vectorsAddress = request.args[3];
+    result.ipcAddress = request.address;
 
-    return ioctlvRequest;
+    result.request = request.args[0];
+    result.inCount = request.args[1];
+    result.outCount = request.args[2];
+    result.vectorsAddress = request.args[3];
+
+    return result;
 }
 
 std::vector<IOSVector> IOS::parseVectors(uint32_t address, uint32_t count) {
@@ -283,4 +285,18 @@ void IOS::prepareDiscBoot(uint64_t partitionOffset) {
     auto device = std::dynamic_pointer_cast<DIDevice>(devices.at("/dev/di"));
     if (device)
         device->prepareBoot(partitionOffset);
+}
+
+void IOS::completeRequest(uint32_t address, int32_t result) {
+    IOSRequest request = parseRequest(address);
+
+    Bus::writePhysical32(address + 0x04, static_cast<uint32_t>(result));
+
+    Bus::writePhysical32(address + 0x08,
+                         static_cast<uint32_t>(request.command));
+
+    Bus::writePhysical32(address + 0x00,
+                         static_cast<uint32_t>(IOSCommand::Reply));
+
+    Device::globalDevice->ipc->replyFromStarlet(address);
 }

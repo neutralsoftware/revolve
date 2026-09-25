@@ -8,6 +8,7 @@
 #include "cpu/interface.h"
 #include "cpu/memory_interface.h"
 #include "graphics/video_interface.h"
+#include "input/gamecube.h"
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -48,6 +49,11 @@ std::shared_ptr<Device> Device::createDevice() {
     globalDevice->vi->initialize();
 
     globalDevice->gx.initialize();
+
+    auto controller = std::make_shared<GameCubeControllerDevice>(
+        &globalDevice->inputManager->gameCube(0));
+
+    globalDevice->si->attachDevice(0, controller);
 
     Bus::writePhysical32(0x0020, 0x0D15EA5E);
     Bus::writePhysical32(0x0024, 0x00000001);
@@ -105,6 +111,8 @@ void Device::step() {
 
     cpu.advanceTime(cycles);
     scheduler.advance(cycles);
+    si->step(cycles);
+    ios.update();
 
     gx.run();
 }
@@ -121,6 +129,10 @@ void Device::start() {
                 running = false;
             }
         }
+
+        SDL_PumpEvents();
+
+        inputManager->update();
 
         if (!running)
             break;

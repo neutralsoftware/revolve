@@ -2,8 +2,8 @@
 #define REVOLVE_DEVICE
 
 #include "core/memory.h"
-#include "core/time.h"
 #include "core/system_hardware.h"
+#include "core/time.h"
 #include "cpu/broadway.h"
 #include "cpu/interface.h"
 #include "cpu/memory_interface.h"
@@ -12,6 +12,10 @@
 #include "graphics/gx.h"
 #include "graphics/video_interface.h"
 #include "graphics/wgpipe.h"
+#include "input/gamecube.h"
+#include "input/manager.h"
+#include "input/serial.h"
+#include "input/wiimote.h"
 #include "ios/ios.h"
 #include "ios/ipc.h"
 #include <memory>
@@ -41,7 +45,10 @@ class HollywoodInterruptController {
 
     uint32_t getFlags() const { return flags; }
     uint32_t getMask() const { return mask; }
-    void acknowledge(uint32_t value) { flags &= ~value; updatePI(); }
+    void acknowledge(uint32_t value) {
+        flags &= ~value;
+        updatePI();
+    }
 
     inline void setMask(uint32_t value) {
         mask = value;
@@ -98,6 +105,8 @@ class Device {
     std::shared_ptr<SerialInterface> si = std::make_shared<SerialInterface>();
     std::shared_ptr<ExpansionInterface> exi =
         std::make_shared<ExpansionInterface>();
+    std::shared_ptr<InputManager> inputManager =
+        std::make_shared<InputManager>();
 };
 
 #endif

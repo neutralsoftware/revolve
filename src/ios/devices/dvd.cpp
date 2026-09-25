@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <span>
 
-int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
+IOSResult DIDevice::ioctl(const IOSIoctlRequest &request) {
     switch (static_cast<DIIoctl>(request.request)) {
     case DIIoctl::ReadDiskID: {
         if (!disc || !disc->isOpen())
@@ -171,8 +171,8 @@ int32_t DIDevice::ioctl(const IOSIoctlRequest &request) {
     return static_cast<int32_t>(IOSError::Invalid);
 }
 
-int32_t DIDevice::ioctlv(const IOSIoctlvRequest &request,
-                         const std::vector<IOSVector> &vectors) {
+IOSResult DIDevice::ioctlv(const IOSIoctlvRequest &request,
+                           const std::vector<IOSVector> &vectors) {
 
     switch (static_cast<DIIoctl>(request.request)) {
 

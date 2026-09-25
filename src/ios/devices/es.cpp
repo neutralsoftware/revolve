@@ -1,8 +1,8 @@
 #include "core/utils.h"
 #include "ios/ios.h"
 
-int32_t ESDevice::ioctlv(const IOSIoctlvRequest &request,
-                         const std::vector<IOSVector> &vectors) {
+IOSResult ESDevice::ioctlv(const IOSIoctlvRequest &request,
+                           const std::vector<IOSVector> &vectors) {
     Logger::log("ES", LogLevel::Warning,
                 "Unimplemented ES ioctlv 0x" +
                     utils::toHexString(request.request));

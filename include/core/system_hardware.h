@@ -38,17 +38,6 @@ class DSPInterface : public MMIODevice {
     uint32_t arCount = 0;
 };
 
-class SerialInterface : public MMIODevice {
-  public:
-    uint32_t read(uint32_t offset, AccessSize size) override;
-    void write(uint32_t offset, uint32_t value, AccessSize size) override;
-    std::string getName() override { return "SerialInterface"; }
-
-  private:
-    void updateInterrupt();
-    std::array<uint32_t, SI_SIZE / 4> registers{};
-};
-
 class ExpansionInterface : public MMIODevice {
   public:
     ExpansionInterface();

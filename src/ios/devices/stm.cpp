@@ -3,7 +3,7 @@
 #include "ios/ios.h"
 #include <cstdint>
 
-int32_t STMImmediateDevice::ioctl(const IOSIoctlRequest &request) {
+IOSResult STMImmediateDevice::ioctl(const IOSIoctlRequest &request) {
     switch (request.request) {
     case 0x2001: // HotReset
         Logger::log("STM", LogLevel::Info, "HotReset requested");
@@ -31,7 +31,7 @@ int32_t STMImmediateDevice::ioctl(const IOSIoctlRequest &request) {
     }
 }
 
-int32_t STMEventHookDevice::ioctl(const IOSIoctlRequest &request) {
+IOSResult STMEventHookDevice::ioctl(const IOSIoctlRequest &request) {
     switch (request.request) {
     case 0x1000: // EventHook
         Logger::log("STM", LogLevel::Info, "EventHook requested");

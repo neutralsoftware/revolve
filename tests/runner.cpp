@@ -13,6 +13,7 @@
 #include <vector>
 
 int runBroadwaySuite();
+int runControllerSuite();
 int runDiscSuite();
 int runGXSuite();
 int runIOSSuite();
@@ -157,6 +158,8 @@ int main(int argc, char *argv[]) {
 
     if (suite == "broadway")
         return runBroadwaySuite();
+    if (suite == "controllers")
+        return runControllerSuite();
     if (suite == "disc")
         return runDiscSuite();
     if (suite == "gx" || suite == "graphics")
