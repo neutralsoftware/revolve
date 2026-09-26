@@ -51,6 +51,7 @@ class DSPInterface : public MMIODevice {
     uint16_t audioControl = 0;
     uint16_t audioBlocksLeft = 0;
     uint64_t audioAccumulator = 0;
+    bool audioCompletionPending = false;
 };
 
 class ExpansionInterface : public MMIODevice {

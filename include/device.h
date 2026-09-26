@@ -80,6 +80,8 @@ class Device {
     static std::shared_ptr<Device> createDevice();
 
     void step();
+    void runBatch(uint32_t instructionCount);
+    bool fastForwardIdle();
     void start();
     bool serviceHostEvents();
     void requestStop() { stopRequested = true; }
@@ -119,6 +121,8 @@ class Device {
         std::make_shared<AudioInterface>(pi.get());
 
   private:
+    void serviceDevices(uint64_t cycles);
+
     uint64_t peripheralCycles = 0;
     uint64_t iosCycles = 0;
 };

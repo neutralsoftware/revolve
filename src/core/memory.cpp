@@ -208,12 +208,24 @@ uint32_t Bus::read32(uint32_t addr) {
     }
     uint32_t physical =
         Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Read);
+    if (physical < 0x01800000)
+        return Device::globalDevice->memory.read32(physical, 1);
+    if (physical >= MEM2_PHYS_START &&
+        physical < MEM2_PHYS_START + 0x04000000)
+        return Device::globalDevice->memory.read32(physical - MEM2_PHYS_START,
+                                                   2);
     return readPhysical32(physical);
 }
 
 uint32_t Bus::fetch32(uint32_t addr) {
     uint32_t physical = Device::globalDevice->cpu.translateAddress(
         addr, MemoryAccess::Instruction);
+    if (physical < 0x01800000)
+        return Device::globalDevice->memory.read32(physical, 1);
+    if (physical >= MEM2_PHYS_START &&
+        physical < MEM2_PHYS_START + 0x04000000)
+        return Device::globalDevice->memory.read32(physical - MEM2_PHYS_START,
+                                                   2);
     return readPhysical32(physical);
 }
 

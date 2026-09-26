@@ -12,6 +12,7 @@ enum class CPRegister : uint32_t {
     Status = 0x00,
     Control = 0x02,
     Clear = 0x04,
+    PerformanceSelect = 0x06,
 
     Token = 0x0E,
 

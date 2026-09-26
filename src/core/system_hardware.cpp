@@ -91,6 +91,8 @@ void DSPInterface::write16(uint32_t offset, uint16_t value) {
         constexpr uint16_t pending = 0x00A8;
         constexpr uint16_t writable = 0x0D56;
         const bool wasHalted = (control & 4) != 0;
+        if (value & (1u << 3))
+            audioCompletionPending = false;
         control &= ~(value & pending);
         control = (control & ~writable) | (value & writable);
         control &= ~1u;
@@ -149,15 +151,7 @@ void DSPInterface::write16(uint32_t offset, uint16_t value) {
             audioCursor = audioAddress;
             audioBlocksLeft = value & 0x7FFF;
             audioAccumulator = 0;
-            Device::globalDevice->scheduler.schedule(
-                "AIDMAStart",
-                [this]() {
-                    if (audioControl & 0x8000) {
-                        control |= 1u << 3;
-                        updateInterrupt();
-                    }
-                },
-                200);
+            audioCompletionPending = false;
         }
         if (!(value & 0x8000)) {
             audioBlocksLeft = 0;
@@ -307,7 +301,7 @@ void ExpansionInterface::updateInterrupt() {
 }
 
 void DSPInterface::step(uint32_t cycles) {
-    if (!(audioControl & 0x8000))
+    if (!(audioControl & 0x8000) || audioCompletionPending)
         return;
     auto &device = *Device::globalDevice;
     const uint32_t rate = device.ai->dmaSampleRate();
@@ -318,9 +312,9 @@ void DSPInterface::step(uint32_t cycles) {
         std::array<int16_t, 16> samples{};
         for (uint32_t frame = 0; frame < 8; ++frame) {
             samples[frame * 2] = static_cast<int16_t>(
-                Bus::readPhysical16(audioCursor + frame * 4 + 2));
-            samples[frame * 2 + 1] = static_cast<int16_t>(
                 Bus::readPhysical16(audioCursor + frame * 4));
+            samples[frame * 2 + 1] = static_cast<int16_t>(
+                Bus::readPhysical16(audioCursor + frame * 4 + 2));
         }
         device.audio.submitSamples(samples, rate);
         if (audioBlocksLeft != 0) {
@@ -330,8 +324,10 @@ void DSPInterface::step(uint32_t cycles) {
         if (audioBlocksLeft == 0) {
             audioCursor = audioAddress;
             audioBlocksLeft = audioControl & 0x7FFF;
+            audioCompletionPending = true;
             control |= 1u << 3;
             updateInterrupt();
+            break;
         }
     }
 }

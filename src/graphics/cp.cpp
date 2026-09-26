@@ -75,6 +75,9 @@ uint16_t CommandProcessor::read16(uint32_t offset) const {
     case CPRegister::Token:
         return state.token;
 
+    case CPRegister::PerformanceSelect:
+        return 0;
+
     case CPRegister::FifoStartHi:
         return state.fifo.base >> 16;
 
@@ -165,6 +168,9 @@ void CommandProcessor::write16(uint32_t offset, uint16_t value) {
 
         updateInterrupt();
 
+        return;
+
+    case CPRegister::PerformanceSelect:
         return;
 
     case CPRegister::FifoStartHi:

@@ -595,6 +595,7 @@ void Broadway::executeMType(uint32_t instruction) {
 }
 
 uint32_t Broadway::executeInstruction() {
+    lastInstruction = 0;
     state.exceptionTaken = false;
     state.nia = state.cia + 4;
     if (deliverPendingException()) {
@@ -609,6 +610,7 @@ uint32_t Broadway::executeInstruction() {
     uint32_t instruction;
     try {
         instruction = Bus::fetch32(state.cia);
+        lastInstruction = instruction;
     } catch (const MemoryAccessException &) {
         if (!state.exceptionTaken) {
             Logger::log(

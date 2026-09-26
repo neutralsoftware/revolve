@@ -324,6 +324,10 @@ class Broadway {
         state.externalInterruptPending = asserted;
     }
 
+    bool isIdleLoop() const {
+        return lastInstruction == 0x48000000 && (state.msr & 0x8000) != 0;
+    }
+
     void start();
 
     // D Type instructions
@@ -384,6 +388,7 @@ class Broadway {
     static constexpr size_t translationCacheSize = 1024;
     std::array<std::array<TranslationCacheEntry, translationCacheSize>, 3>
         translationCache{};
+    uint32_t lastInstruction = 0;
 
     bool deliverPendingException();
     bool translateBAT(uint32_t address, MemoryAccess access,

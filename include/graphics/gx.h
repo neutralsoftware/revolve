@@ -997,6 +997,10 @@ class GXRenderer {
 
     std::shared_ptr<opal::Buffer> fullscreenBuffer;
     std::shared_ptr<opal::DrawingState> fullscreenDrawingState;
+    int presentationWidth = 0;
+    int presentationHeight = 0;
+    uint32_t presentationXFBWidth = 0;
+    uint32_t presentationXFBHeight = 0;
 
     std::vector<GXRenderVertex> vertices;
     std::vector<uint8_t> xfbRGBA;

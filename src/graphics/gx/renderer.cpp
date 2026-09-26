@@ -38,6 +38,16 @@ std::array<FullscreenVertex, 6> makeFullscreenVertices(float originX,
              {1.0f, 1.0f, right, top},
              {-1.0f, 1.0f, left, top}}};
 }
+
+std::array<FullscreenVertex, 6> makePresentationVertices(float scaleX,
+                                                         float scaleY) {
+    return {{{-scaleX, -scaleY, 0.0f, 1.0f},
+             {scaleX, -scaleY, 1.0f, 1.0f},
+             {scaleX, scaleY, 1.0f, 0.0f},
+             {-scaleX, -scaleY, 0.0f, 1.0f},
+             {scaleX, scaleY, 1.0f, 0.0f},
+             {-scaleX, scaleY, 0.0f, 0.0f}}};
+}
 } // namespace
 
 void GXRenderer::drawTriangle(const GXRenderVertex &a, const GXRenderVertex &b,
@@ -653,6 +663,30 @@ void GXRenderer::presentXFB() {
         copy.sourceWidth = EFB_WIDTH;
         copy.sourceHeight = EFB_HEIGHT;
         copyEFBToXFB(copy);
+    }
+
+    int width = 0;
+    int height = 0;
+    SDL_GetWindowSizeInPixels(window, &width, &height);
+    width = std::max(width, 1);
+    height = std::max(height, 1);
+    if (width != presentationWidth || height != presentationHeight ||
+        xfb.width != presentationXFBWidth ||
+        xfb.height != presentationXFBHeight) {
+        const float windowAspect = static_cast<float>(width) / height;
+        const float xfbAspect = static_cast<float>(xfb.width) / xfb.height;
+        float scaleX = 1.0f;
+        float scaleY = 1.0f;
+        if (windowAspect > xfbAspect)
+            scaleX = xfbAspect / windowAspect;
+        else
+            scaleY = windowAspect / xfbAspect;
+        const auto vertices = makePresentationVertices(scaleX, scaleY);
+        fullscreenBuffer->updateData(0, sizeof(vertices), vertices.data());
+        presentationWidth = width;
+        presentationHeight = height;
+        presentationXFBWidth = xfb.width;
+        presentationXFBHeight = xfb.height;
     }
 
     presentPipeline->bindTexture("xfbTexture", xfb.texture, 0);

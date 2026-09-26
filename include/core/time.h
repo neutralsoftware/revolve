@@ -28,6 +28,11 @@ struct Event {
 class Scheduler {
   public:
     tick now() const { return currentTime; }
+    tick ticksUntilNextEvent() const {
+        if (eventQueue.empty() || eventQueue.top().time <= currentTime)
+            return 0;
+        return eventQueue.top().time - currentTime;
+    }
 
     void advance(tick ticks);
 

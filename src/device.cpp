@@ -156,9 +156,6 @@ void Device::processIPC() {
 }
 
 void Device::step() {
-    constexpr uint64_t peripheralInterval = 4096;
-    constexpr uint64_t iosInterval = BROADWAY_CLOCK / 1000;
-
     cpu.setExternalInterrupt(pi->interruptPending());
 
     processIPC();
@@ -167,6 +164,13 @@ void Device::step() {
 
     cpu.advanceTime(cycles);
     scheduler.advance(cycles);
+
+    serviceDevices(cycles);
+}
+
+void Device::serviceDevices(uint64_t cycles) {
+    constexpr uint64_t peripheralInterval = 4096;
+    constexpr uint64_t iosInterval = BROADWAY_CLOCK / 1000;
 
     peripheralCycles += cycles;
     if (peripheralCycles >= peripheralInterval) {
@@ -184,6 +188,47 @@ void Device::step() {
 
     if (gx.hasPendingWork())
         gx.run();
+}
+
+void Device::runBatch(uint32_t instructionCount) {
+    constexpr uint32_t serviceInterval = 64;
+    uint32_t completed = 0;
+
+    while (completed < instructionCount && !stopRequested) {
+        cpu.setExternalInterrupt(pi->interruptPending());
+        processIPC();
+
+        const uint32_t count =
+            std::min(serviceInterval, instructionCount - completed);
+        uint64_t cycles = 0;
+        uint32_t executed = 0;
+        for (; executed < count; ++executed) {
+            cycles += cpu.executeInstruction();
+            if (cpu.isIdleLoop()) {
+                ++executed;
+                break;
+            }
+        }
+
+        cpu.advanceTime(cycles);
+        scheduler.advance(cycles);
+        serviceDevices(cycles);
+        completed += executed;
+
+        fastForwardIdle();
+    }
+}
+
+bool Device::fastForwardIdle() {
+    if (!cpu.isIdleLoop() || pi->interruptPending())
+        return false;
+    const uint64_t cycles = scheduler.ticksUntilNextEvent();
+    if (cycles == 0)
+        return false;
+    cpu.advanceTime(cycles);
+    scheduler.advance(cycles);
+    serviceDevices(cycles);
+    return true;
 }
 
 bool Device::serviceHostEvents() {
@@ -216,9 +261,7 @@ void Device::start() {
 
         if (!running)
             break;
-        for (uint32_t instruction = 0; instruction < 4096 && !stopRequested;
-             ++instruction)
-            step();
+        runBatch(16384);
         const uint64_t elapsedCycles = scheduler.now() - guestEpoch;
         const uint64_t guestNanoseconds =
             (elapsedCycles / BROADWAY_CLOCK) * 1000000000ULL +

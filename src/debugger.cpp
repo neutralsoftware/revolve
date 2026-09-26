@@ -1221,6 +1221,7 @@ void Debugger::stepFrame() {
         first = false;
 
         bool exception = executeOne(false);
+        Device::globalDevice->fastForwardIdle();
 
         if (checkWatchpoints())
             break;
@@ -1278,6 +1279,11 @@ void Debugger::continueExecution() {
                       << formatAddress(cpu.state.cia) << '\n';
             break;
         }
+        if (breakpoints.empty() && watchpoints.empty() && !stopOnException) {
+            Device::globalDevice->runBatch(4096);
+            steps += 4095;
+            continue;
+        }
         if (!first && breakpoints.contains(cpu.state.cia)) {
             std::cout << color("1;31", "breakpoint hit") << "  "
                       << formatAddress(cpu.state.cia) << '\n';
@@ -1285,6 +1291,7 @@ void Debugger::continueExecution() {
         }
         first = false;
         bool exception = executeOne(false);
+        Device::globalDevice->fastForwardIdle();
         if (checkWatchpoints())
             break;
         if (exception && stopOnException) {
