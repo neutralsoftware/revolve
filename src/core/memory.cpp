@@ -156,6 +156,12 @@ void Bus::writePhysical8(uint32_t addr, uint8_t value) {
 uint8_t Bus::read8(uint32_t addr) {
     uint32_t physical =
         Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Read);
+    if (physical < 0x01800000)
+        return Device::globalDevice->memory.read8(physical, 1);
+    if (physical >= MEM2_PHYS_START &&
+        physical < MEM2_PHYS_START + 0x04000000)
+        return Device::globalDevice->memory.read8(physical - MEM2_PHYS_START,
+                                                  2);
     ResolvedAddress resolved = resolveAddress(physical);
     Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
@@ -182,6 +188,12 @@ uint16_t Bus::read16(uint32_t addr) {
     }
     uint32_t physical =
         Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Read);
+    if (physical < 0x01800000)
+        return Device::globalDevice->memory.read16(physical, 1);
+    if (physical >= MEM2_PHYS_START &&
+        physical < MEM2_PHYS_START + 0x04000000)
+        return Device::globalDevice->memory.read16(physical - MEM2_PHYS_START,
+                                                   2);
     ResolvedAddress resolved = resolveAddress(physical);
     Memory &mem = Device::globalDevice->memory;
     switch (resolved.region) {
@@ -251,12 +263,21 @@ double Bus::readDouble(uint32_t addr) {
 void Bus::write8(uint32_t addr, uint8_t value) {
     uint32_t physical =
         Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Write);
-    ResolvedAddress resolved = resolveAddress(physical);
     Memory &mem = Device::globalDevice->memory;
     auto &cpu = Device::globalDevice->cpu;
     if (cpu.state.reservationValid &&
         (cpu.state.reservationAddress & ~31u) == (physical & ~31u))
         cpu.state.reservationValid = false;
+    if (physical < 0x01800000) {
+        mem.write8(physical, value, 1);
+        return;
+    }
+    if (physical >= MEM2_PHYS_START &&
+        physical < MEM2_PHYS_START + 0x04000000) {
+        mem.write8(physical - MEM2_PHYS_START, value, 2);
+        return;
+    }
+    ResolvedAddress resolved = resolveAddress(physical);
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write8(resolved.offset, value, 1);
@@ -285,13 +306,22 @@ void Bus::write16(uint32_t addr, uint16_t value) {
     }
     uint32_t physical =
         Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Write);
-    ResolvedAddress resolved = resolveAddress(physical);
     Memory &mem = Device::globalDevice->memory;
     auto &cpu = Device::globalDevice->cpu;
     if (cpu.state.reservationValid &&
         (cpu.state.reservationAddress & ~31u) >= (physical & ~31u) &&
         (cpu.state.reservationAddress & ~31u) <= ((physical + 1) & ~31u))
         cpu.state.reservationValid = false;
+    if (physical < 0x01800000) {
+        mem.write16(physical, value, 1);
+        return;
+    }
+    if (physical >= MEM2_PHYS_START &&
+        physical < MEM2_PHYS_START + 0x04000000) {
+        mem.write16(physical - MEM2_PHYS_START, value, 2);
+        return;
+    }
+    ResolvedAddress resolved = resolveAddress(physical);
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write16(resolved.offset, value, 1);
@@ -320,13 +350,22 @@ void Bus::write32(uint32_t addr, uint32_t value) {
     }
     uint32_t physical =
         Device::globalDevice->cpu.translateAddress(addr, MemoryAccess::Write);
-    ResolvedAddress resolved = resolveAddress(physical);
     Memory &mem = Device::globalDevice->memory;
     auto &cpu = Device::globalDevice->cpu;
     if (cpu.state.reservationValid &&
         (cpu.state.reservationAddress & ~31u) >= (physical & ~31u) &&
         (cpu.state.reservationAddress & ~31u) <= ((physical + 3) & ~31u))
         cpu.state.reservationValid = false;
+    if (physical < 0x01800000) {
+        mem.write32(physical, value, 1);
+        return;
+    }
+    if (physical >= MEM2_PHYS_START &&
+        physical < MEM2_PHYS_START + 0x04000000) {
+        mem.write32(physical - MEM2_PHYS_START, value, 2);
+        return;
+    }
+    ResolvedAddress resolved = resolveAddress(physical);
     switch (resolved.region) {
     case MemoryRegion::MEM1:
         mem.write32(resolved.offset, value, 1);

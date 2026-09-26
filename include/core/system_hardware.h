@@ -4,6 +4,7 @@
 #include "core/memory.h"
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <string>
 
 constexpr uint32_t DSP_BASE = 0x0C005000;
@@ -34,10 +35,28 @@ class DSPInterface : public MMIODevice {
     void write16(uint32_t offset, uint16_t value);
     void completeARAMTransfer();
     void updateInterrupt();
+    void queueDSPMail(uint32_t mail, bool interrupt);
+    void handleDSPMail(uint32_t mail);
+    void mixASND(bool clear);
+    void writeASNDOutput();
+    void mixAESND(bool clear);
+    void writeAESNDOutput();
 
     uint32_t mailToDSP = 0;
+    bool mailToDSPReady = false;
     uint32_t mailFromDSP = 0;
     bool mailFromDSPReady = false;
+    std::deque<uint32_t> pendingDSPMails;
+    uint32_t dspBootCommand = 0;
+    uint32_t dspGeneration = 0;
+    uint32_t asndVoiceAddress = 0;
+    uint32_t asndOutputAddress = 0;
+    uint32_t aesndParameterAddress = 0;
+    uint32_t aesndOutputAddress = 0;
+    uint8_t dspHLEState = 0;
+    uint8_t dspUploadWords = 0;
+    std::array<int16_t, 2048> asndOutput{};
+    std::array<int16_t, 192> aesndOutput{};
     bool initCodeLoaded = false;
     uint16_t control = 0x0004;
     uint16_t interruptControl = 0;
@@ -51,7 +70,6 @@ class DSPInterface : public MMIODevice {
     uint16_t audioControl = 0;
     uint16_t audioBlocksLeft = 0;
     uint64_t audioAccumulator = 0;
-    bool audioCompletionPending = false;
 };
 
 class ExpansionInterface : public MMIODevice {

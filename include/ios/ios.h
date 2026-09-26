@@ -450,8 +450,8 @@ class BluetoothUSBDevice final : public IOSDevice {
     std::array<WiiRemoteDevice *, 4> wiimotes{};
     std::array<BluetoothConnection, 4> connections{};
 
-    std::optional<PendingRead> pendingHCIRead;
-    std::optional<PendingRead> pendingACLRead;
+    std::deque<PendingRead> pendingHCIReads;
+    std::deque<PendingRead> pendingACLReads;
 
     std::deque<std::vector<uint8_t>> hciEvents;
     std::deque<std::vector<uint8_t>> aclPackets;

@@ -160,7 +160,10 @@ target_link_libraries(revolve_test PRIVATE OpenSSL::Crypto PkgConfig::ZSTD Opal:
 
 check_ipo_supported(RESULT REVOLVE_IPO_SUPPORTED)
 foreach(REVOLVE_TARGET revolve revolve_test)
-    target_compile_options(${REVOLVE_TARGET} PRIVATE $<$<CONFIG:Debug>:-O3>)
+    target_compile_options(${REVOLVE_TARGET} PRIVATE
+        $<$<CONFIG:Debug>:-O3>
+        $<$<CONFIG:Release>:-O3>
+        $<$<CONFIG:RelWithDebInfo>:-O3>)
     if(REVOLVE_IPO_SUPPORTED)
         set_property(TARGET ${REVOLVE_TARGET} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
     endif()

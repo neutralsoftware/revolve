@@ -191,15 +191,20 @@ void Device::serviceDevices(uint64_t cycles) {
 }
 
 void Device::runBatch(uint32_t instructionCount) {
-    constexpr uint32_t serviceInterval = 64;
+    constexpr uint32_t serviceInterval = 1024;
     uint32_t completed = 0;
 
     while (completed < instructionCount && !stopRequested) {
         cpu.setExternalInterrupt(pi->interruptPending());
         processIPC();
 
-        const uint32_t count =
+        uint32_t count =
             std::min(serviceInterval, instructionCount - completed);
+        const uint64_t eventDeadline = scheduler.ticksUntilNextEvent();
+        if (eventDeadline != 0)
+            count = std::min<uint32_t>(
+                count, static_cast<uint32_t>(
+                           std::min<uint64_t>(eventDeadline, UINT32_MAX)));
         uint64_t cycles = 0;
         uint32_t executed = 0;
         for (; executed < count; ++executed) {

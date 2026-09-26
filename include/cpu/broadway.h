@@ -379,15 +379,78 @@ class Broadway {
     void setupWiiHLEBootState();
 
   private:
+    using InstructionExecutor = void (Broadway::*)(uint32_t);
+
+    enum class CompiledOperation : uint8_t {
+        Generic,
+        ADDI,
+        ADDIS,
+        ORI,
+        ORIS,
+        XORI,
+        XORIS,
+        ANDI,
+        ANDIS,
+        MULLI,
+        ADDIC,
+        ADDICRecord,
+        LWZ,
+        LWZU,
+        STW,
+        STWU,
+        LBZ,
+        LBZU,
+        STB,
+        STBU,
+        LHZ,
+        LHZU,
+        LHA,
+        LHAU,
+        STH,
+        STHU,
+        CMPI,
+        CMPLI,
+        AND,
+        OR,
+        XOR,
+        ADD,
+        SUBF,
+        CMP,
+        CMPL,
+        Branch,
+        ConditionalBranch,
+        RLWINM
+    };
+
     struct TranslationCacheEntry {
         uint32_t tag = 0;
         uint32_t physicalPage = 0;
         bool valid = false;
     };
 
+    struct DecodedInstruction {
+        uint32_t tag = 0;
+        uint32_t context = 0;
+        uint32_t instruction = 0;
+        InstructionType type = InstructionType::X;
+        InstructionExecutor executor = nullptr;
+        CompiledOperation operation = CompiledOperation::Generic;
+        uint32_t immediate = 0;
+        uint32_t auxiliary = 0;
+        uint8_t field0 = 0;
+        uint8_t field1 = 0;
+        uint8_t field2 = 0;
+        bool floating = false;
+        bool quantized = false;
+        bool valid = false;
+    };
+
     static constexpr size_t translationCacheSize = 1024;
+    static constexpr size_t decodedInstructionCacheSize = 65536;
     std::array<std::array<TranslationCacheEntry, translationCacheSize>, 3>
         translationCache{};
+    std::array<DecodedInstruction, decodedInstructionCacheSize>
+        decodedInstructionCache{};
     uint32_t lastInstruction = 0;
 
     bool deliverPendingException();
@@ -396,6 +459,9 @@ class Broadway {
     uint32_t translatePage(uint32_t address, MemoryAccess access);
     bool protectionAllows(uint32_t protection, bool key, MemoryAccess access);
     bool branchCondition(uint32_t bo, uint32_t bi, bool useCTR);
+    InstructionExecutor executorFor(InstructionType type);
+    void compileInstruction(DecodedInstruction &entry);
+    void executeCompiled(const DecodedInstruction &entry);
     void executePaired(uint32_t instruction);
     void executeQuantized(uint32_t instruction, bool indexed);
 

@@ -136,6 +136,410 @@ InstructionType Broadway::getInstructionType(uint32_t instruction) {
     return InstructionType::X;
 }
 
+Broadway::InstructionExecutor Broadway::executorFor(InstructionType type) {
+    switch (type) {
+    case InstructionType::D:
+        return &Broadway::executeDType;
+    case InstructionType::I:
+        return &Broadway::executeIType;
+    case InstructionType::B:
+        return &Broadway::executeBType;
+    case InstructionType::SC:
+        return &Broadway::executeSCType;
+    case InstructionType::X:
+        return &Broadway::executeXType;
+    case InstructionType::XO:
+        return &Broadway::executeXOType;
+    case InstructionType::XFX:
+        return &Broadway::executeXFXType;
+    case InstructionType::XFL:
+        return &Broadway::executeXFLType;
+    case InstructionType::XL:
+        return &Broadway::executeXLType;
+    case InstructionType::M:
+        return &Broadway::executeMType;
+    case InstructionType::A:
+        return &Broadway::executeAType;
+    case InstructionType::PSQ_D:
+        return &Broadway::executePSQ_DType;
+    case InstructionType::PSQ_X:
+        return &Broadway::executePSQ_XType;
+    }
+    return &Broadway::executeXType;
+}
+
+void Broadway::compileInstruction(DecodedInstruction &entry) {
+    const uint32_t instruction = entry.instruction;
+    const uint32_t op = instruction >> 26;
+    entry.field0 = (instruction >> 21) & 31;
+    entry.field1 = (instruction >> 16) & 31;
+    entry.field2 = (instruction >> 11) & 31;
+    entry.immediate = instruction & 0xFFFF;
+    entry.auxiliary = 0;
+    entry.operation = CompiledOperation::Generic;
+    switch (op) {
+    case 7:
+        entry.operation = CompiledOperation::MULLI;
+        break;
+    case 10:
+        entry.operation = CompiledOperation::CMPLI;
+        break;
+    case 11:
+        entry.operation = CompiledOperation::CMPI;
+        break;
+    case 12:
+        entry.operation = CompiledOperation::ADDIC;
+        break;
+    case 13:
+        entry.operation = CompiledOperation::ADDICRecord;
+        break;
+    case 14:
+        entry.operation = CompiledOperation::ADDI;
+        break;
+    case 15:
+        entry.operation = CompiledOperation::ADDIS;
+        break;
+    case 16:
+        entry.operation = CompiledOperation::ConditionalBranch;
+        entry.immediate = instruction & 0xFFFC;
+        entry.auxiliary = instruction & 3;
+        break;
+    case 18:
+        entry.operation = CompiledOperation::Branch;
+        entry.immediate = instruction & 0x03FFFFFC;
+        entry.auxiliary = instruction & 3;
+        break;
+    case 21:
+        entry.operation = CompiledOperation::RLWINM;
+        entry.immediate = (instruction >> 11) & 31;
+        entry.auxiliary = utils::makeMask((instruction >> 6) & 31,
+                                          (instruction >> 1) & 31);
+        break;
+    case 24:
+        entry.operation = CompiledOperation::ORI;
+        break;
+    case 25:
+        entry.operation = CompiledOperation::ORIS;
+        break;
+    case 26:
+        entry.operation = CompiledOperation::XORI;
+        break;
+    case 27:
+        entry.operation = CompiledOperation::XORIS;
+        break;
+    case 28:
+        entry.operation = CompiledOperation::ANDI;
+        break;
+    case 29:
+        entry.operation = CompiledOperation::ANDIS;
+        break;
+    case 31: {
+        const uint32_t xo = (instruction >> 1) & 1023;
+        if (xo == 28)
+            entry.operation = CompiledOperation::AND;
+        else if (xo == 444)
+            entry.operation = CompiledOperation::OR;
+        else if (xo == 316)
+            entry.operation = CompiledOperation::XOR;
+        else if (xo == 266 && !(instruction & 0x400))
+            entry.operation = CompiledOperation::ADD;
+        else if (xo == 40 && !(instruction & 0x400))
+            entry.operation = CompiledOperation::SUBF;
+        else if (xo == 0)
+            entry.operation = CompiledOperation::CMP;
+        else if (xo == 32)
+            entry.operation = CompiledOperation::CMPL;
+        break;
+    }
+    case 32:
+        entry.operation = CompiledOperation::LWZ;
+        break;
+    case 33:
+        if (entry.field1 != 0 && entry.field1 != entry.field0)
+            entry.operation = CompiledOperation::LWZU;
+        break;
+    case 34:
+        entry.operation = CompiledOperation::LBZ;
+        break;
+    case 35:
+        if (entry.field1 != 0 && entry.field1 != entry.field0)
+            entry.operation = CompiledOperation::LBZU;
+        break;
+    case 36:
+        entry.operation = CompiledOperation::STW;
+        break;
+    case 37:
+        if (entry.field1 != 0)
+            entry.operation = CompiledOperation::STWU;
+        break;
+    case 38:
+        entry.operation = CompiledOperation::STB;
+        break;
+    case 39:
+        if (entry.field1 != 0)
+            entry.operation = CompiledOperation::STBU;
+        break;
+    case 40:
+        entry.operation = CompiledOperation::LHZ;
+        break;
+    case 41:
+        if (entry.field1 != 0 && entry.field1 != entry.field0)
+            entry.operation = CompiledOperation::LHZU;
+        break;
+    case 42:
+        entry.operation = CompiledOperation::LHA;
+        break;
+    case 43:
+        if (entry.field1 != 0 && entry.field1 != entry.field0)
+            entry.operation = CompiledOperation::LHAU;
+        break;
+    case 44:
+        entry.operation = CompiledOperation::STH;
+        break;
+    case 45:
+        if (entry.field1 != 0)
+            entry.operation = CompiledOperation::STHU;
+        break;
+    default:
+        break;
+    }
+}
+
+void Broadway::executeCompiled(const DecodedInstruction &entry) {
+    const uint32_t signedImmediate = static_cast<uint32_t>(
+        signExtend(entry.immediate, 16));
+    switch (entry.operation) {
+    case CompiledOperation::ADDI:
+        state.gpr[entry.field0] =
+            (entry.field1 == 0 ? 0 : state.gpr[entry.field1]) +
+            signedImmediate;
+        return;
+    case CompiledOperation::ADDIS:
+        state.gpr[entry.field0] =
+            (entry.field1 == 0 ? 0 : state.gpr[entry.field1]) +
+            (signedImmediate << 16);
+        return;
+    case CompiledOperation::ORI:
+        state.gpr[entry.field1] =
+            state.gpr[entry.field0] | entry.immediate;
+        return;
+    case CompiledOperation::ORIS:
+        state.gpr[entry.field1] =
+            state.gpr[entry.field0] | (entry.immediate << 16);
+        return;
+    case CompiledOperation::XORI:
+        state.gpr[entry.field1] =
+            state.gpr[entry.field0] ^ entry.immediate;
+        return;
+    case CompiledOperation::XORIS:
+        state.gpr[entry.field1] =
+            state.gpr[entry.field0] ^ (entry.immediate << 16);
+        return;
+    case CompiledOperation::ANDI: {
+        const uint32_t result = state.gpr[entry.field0] & entry.immediate;
+        state.gpr[entry.field1] = result;
+        state.updateCR0(result);
+        return;
+    }
+    case CompiledOperation::ANDIS: {
+        const uint32_t result =
+            state.gpr[entry.field0] & (entry.immediate << 16);
+        state.gpr[entry.field1] = result;
+        state.updateCR0(result);
+        return;
+    }
+    case CompiledOperation::MULLI:
+        state.gpr[entry.field0] = static_cast<uint32_t>(
+            static_cast<int64_t>(static_cast<int32_t>(state.gpr[entry.field1])) *
+            static_cast<int32_t>(signedImmediate));
+        return;
+    case CompiledOperation::ADDIC:
+    case CompiledOperation::ADDICRecord: {
+        const uint64_t result = static_cast<uint64_t>(state.gpr[entry.field1]) +
+                                signedImmediate;
+        state.gpr[entry.field0] = static_cast<uint32_t>(result);
+        state.setCA((result >> 32) != 0);
+        if (entry.operation == CompiledOperation::ADDICRecord)
+            state.updateCR0(state.gpr[entry.field0]);
+        return;
+    }
+    case CompiledOperation::LWZ:
+        state.gpr[entry.field0] = Bus::read32(
+            (entry.field1 == 0 ? 0 : state.gpr[entry.field1]) +
+            signedImmediate);
+        return;
+    case CompiledOperation::LWZU: {
+        const uint32_t address = state.gpr[entry.field1] + signedImmediate;
+        state.gpr[entry.field0] = Bus::read32(address);
+        state.gpr[entry.field1] = address;
+        return;
+    }
+    case CompiledOperation::STW:
+        Bus::write32((entry.field1 == 0 ? 0 : state.gpr[entry.field1]) +
+                         signedImmediate,
+                     state.gpr[entry.field0]);
+        return;
+    case CompiledOperation::STWU: {
+        const uint32_t address = state.gpr[entry.field1] + signedImmediate;
+        Bus::write32(address, state.gpr[entry.field0]);
+        state.gpr[entry.field1] = address;
+        return;
+    }
+    case CompiledOperation::LBZ:
+        state.gpr[entry.field0] = Bus::read8(
+            (entry.field1 == 0 ? 0 : state.gpr[entry.field1]) +
+            signedImmediate);
+        return;
+    case CompiledOperation::LBZU: {
+        const uint32_t address = state.gpr[entry.field1] + signedImmediate;
+        state.gpr[entry.field0] = Bus::read8(address);
+        state.gpr[entry.field1] = address;
+        return;
+    }
+    case CompiledOperation::STB:
+        Bus::write8((entry.field1 == 0 ? 0 : state.gpr[entry.field1]) +
+                        signedImmediate,
+                    static_cast<uint8_t>(state.gpr[entry.field0]));
+        return;
+    case CompiledOperation::STBU: {
+        const uint32_t address = state.gpr[entry.field1] + signedImmediate;
+        Bus::write8(address, static_cast<uint8_t>(state.gpr[entry.field0]));
+        state.gpr[entry.field1] = address;
+        return;
+    }
+    case CompiledOperation::LHZ:
+        state.gpr[entry.field0] = Bus::read16(
+            (entry.field1 == 0 ? 0 : state.gpr[entry.field1]) +
+            signedImmediate);
+        return;
+    case CompiledOperation::LHZU: {
+        const uint32_t address = state.gpr[entry.field1] + signedImmediate;
+        state.gpr[entry.field0] = Bus::read16(address);
+        state.gpr[entry.field1] = address;
+        return;
+    }
+    case CompiledOperation::LHA:
+        state.gpr[entry.field0] = static_cast<uint32_t>(signExtend(
+            Bus::read16((entry.field1 == 0 ? 0 : state.gpr[entry.field1]) +
+                        signedImmediate),
+            16));
+        return;
+    case CompiledOperation::LHAU: {
+        const uint32_t address = state.gpr[entry.field1] + signedImmediate;
+        state.gpr[entry.field0] = static_cast<uint32_t>(
+            signExtend(Bus::read16(address), 16));
+        state.gpr[entry.field1] = address;
+        return;
+    }
+    case CompiledOperation::STH:
+        Bus::write16((entry.field1 == 0 ? 0 : state.gpr[entry.field1]) +
+                         signedImmediate,
+                     static_cast<uint16_t>(state.gpr[entry.field0]));
+        return;
+    case CompiledOperation::STHU: {
+        const uint32_t address = state.gpr[entry.field1] + signedImmediate;
+        Bus::write16(address,
+                     static_cast<uint16_t>(state.gpr[entry.field0]));
+        state.gpr[entry.field1] = address;
+        return;
+    }
+    case CompiledOperation::CMPI: {
+        const int32_t left = static_cast<int32_t>(state.gpr[entry.field1]);
+        const int32_t right = static_cast<int32_t>(signedImmediate);
+        state.setCRField(entry.field0 >> 2,
+                         (left < right ? 8u : left > right ? 4u : 2u) |
+                             state.getSO());
+        return;
+    }
+    case CompiledOperation::CMPLI: {
+        const uint32_t left = state.gpr[entry.field1];
+        state.setCRField(entry.field0 >> 2,
+                         (left < entry.immediate
+                              ? 8u
+                              : left > entry.immediate ? 4u : 2u) |
+                             state.getSO());
+        return;
+    }
+    case CompiledOperation::AND:
+    case CompiledOperation::OR:
+    case CompiledOperation::XOR: {
+        const uint32_t left = state.gpr[entry.field0];
+        const uint32_t right = state.gpr[entry.field2];
+        const uint32_t result =
+            entry.operation == CompiledOperation::AND
+                ? left & right
+                : entry.operation == CompiledOperation::OR ? left | right
+                                                           : left ^ right;
+        state.gpr[entry.field1] = result;
+        if (entry.instruction & 1)
+            state.updateCR0(result);
+        return;
+    }
+    case CompiledOperation::ADD:
+    case CompiledOperation::SUBF: {
+        const uint32_t left = state.gpr[entry.field1];
+        const uint32_t right = state.gpr[entry.field2];
+        const uint32_t result = entry.operation == CompiledOperation::ADD
+                                    ? left + right
+                                    : right - left;
+        state.gpr[entry.field0] = result;
+        if (entry.instruction & 1)
+            state.updateCR0(result);
+        return;
+    }
+    case CompiledOperation::CMP:
+    case CompiledOperation::CMPL: {
+        const uint32_t left = state.gpr[entry.field1];
+        const uint32_t right = state.gpr[entry.field2];
+        uint32_t value = 0;
+        if (entry.operation == CompiledOperation::CMP) {
+            const int32_t signedLeft = static_cast<int32_t>(left);
+            const int32_t signedRight = static_cast<int32_t>(right);
+            value = signedLeft < signedRight
+                        ? 8u
+                        : signedLeft > signedRight ? 4u : 2u;
+        } else {
+            value = left < right ? 8u : left > right ? 4u : 2u;
+        }
+        state.setCRField(entry.field0 >> 2, value | state.getSO());
+        return;
+    }
+    case CompiledOperation::Branch: {
+        const uint32_t displacement = static_cast<uint32_t>(
+            signExtend(entry.immediate, 26));
+        state.nia = (entry.auxiliary & 2) ? displacement
+                                         : state.cia + displacement;
+        if (entry.auxiliary & 1)
+            state.spr[SPR::LR] = state.cia + 4;
+        return;
+    }
+    case CompiledOperation::ConditionalBranch: {
+        const uint32_t bo = entry.field0;
+        const uint32_t bi = entry.field1;
+        const uint32_t displacement = static_cast<uint32_t>(
+            signExtend(entry.immediate, 16));
+        if (branchCondition(bo, bi, true))
+            state.nia = (entry.auxiliary & 2) ? displacement
+                                             : state.cia + displacement;
+        if (entry.auxiliary & 1)
+            state.spr[SPR::LR] = state.cia + 4;
+        return;
+    }
+    case CompiledOperation::RLWINM: {
+        const uint32_t result =
+            std::rotl(state.gpr[entry.field0], int(entry.immediate)) &
+            entry.auxiliary;
+        state.gpr[entry.field1] = result;
+        if (entry.instruction & 1)
+            state.updateCR0(result);
+        return;
+    }
+    case CompiledOperation::Generic:
+        (this->*entry.executor)(entry.instruction);
+        return;
+    }
+}
+
 void Broadway::executeDType(uint32_t instruction) {
     uint32_t op = instruction >> 26;
 
@@ -498,6 +902,8 @@ void Broadway::invalidateTranslationCache() {
         for (auto &entry : cache)
             entry = {};
     }
+    for (auto &entry : decodedInstructionCache)
+        entry = {};
 }
 
 void Broadway::invalidateTranslationPage(uint32_t address) {
@@ -506,6 +912,13 @@ void Broadway::invalidateTranslationPage(uint32_t address) {
     for (auto &cache : translationCache) {
         auto &entry = cache[index];
         if ((entry.tag & 0xFFFFF000u) == virtualPage)
+            entry.valid = false;
+    }
+    for (uint32_t offset = 0; offset < 0x1000; offset += 4) {
+        auto &entry = decodedInstructionCache[
+            ((virtualPage + offset) >> 2) &
+            (decodedInstructionCacheSize - 1)];
+        if (entry.valid && (entry.tag & 0xFFFFF000u) == virtualPage)
             entry.valid = false;
     }
 }
@@ -607,10 +1020,33 @@ uint32_t Broadway::executeInstruction() {
         state.cia = state.nia;
         return 1;
     }
-    uint32_t instruction;
+    DecodedInstruction *decoded = nullptr;
     try {
-        instruction = Bus::fetch32(state.cia);
-        lastInstruction = instruction;
+        auto &entry = decodedInstructionCache[(state.cia >> 2) &
+                                              (decodedInstructionCacheSize - 1)];
+        const uint32_t context = state.msr & 0x00004020u;
+        if (!entry.valid || entry.tag != state.cia ||
+            entry.context != context) {
+            entry.tag = state.cia;
+            entry.context = context;
+            entry.instruction = Bus::fetch32(state.cia);
+            entry.type = getInstructionType(entry.instruction);
+            entry.executor = executorFor(entry.type);
+            compileInstruction(entry);
+            const uint32_t op = entry.instruction >> 26;
+            const uint32_t xo = (entry.instruction >> 1) & 1023;
+            entry.floating =
+                (op >= 48 && op <= 57) || op == 59 || op == 60 || op == 61 ||
+                op == 63 || (op == 4 && xo != 1014) ||
+                (op == 31 &&
+                 (xo == 535 || xo == 567 || xo == 599 || xo == 631 ||
+                  xo == 663 || xo == 695 || xo == 727 || xo == 759 ||
+                  xo == 983));
+            entry.quantized = op == 4 || entry.type == InstructionType::PSQ_D;
+            entry.valid = true;
+        }
+        decoded = &entry;
+        lastInstruction = entry.instruction;
     } catch (const MemoryAccessException &) {
         if (!state.exceptionTaken) {
             Logger::log(
@@ -624,71 +1060,19 @@ uint32_t Broadway::executeInstruction() {
         return 1;
     }
 
-    InstructionType type = getInstructionType(instruction);
-    uint32_t op = instruction >> 26;
-    uint32_t xo = (instruction >> 1) & 1023;
-    bool floating = (op >= 48 && op <= 57) || op == 59 || op == 60 ||
-                    op == 61 || op == 63 || (op == 4 && xo != 1014) ||
-                    (op == 31 && (xo == 535 || xo == 567 || xo == 599 ||
-                                  xo == 631 || xo == 663 || xo == 695 ||
-                                  xo == 727 || xo == 759 || xo == 983));
-    if (floating && !(state.msr & 0x2000)) {
+    if (decoded->floating && !(state.msr & 0x2000)) {
         raiseException(0x800);
         state.cia = state.nia;
         return 1;
     }
-    if ((op == 4 || type == InstructionType::PSQ_D) &&
-        !(state.spr[SPR::HID2] & 0x20000000)) {
+    if (decoded->quantized && !(state.spr[SPR::HID2] & 0x20000000)) {
         raiseException(0x700, 0x80000);
         state.cia = state.nia;
         return 1;
     }
 
     try {
-        switch (type) {
-        case InstructionType::D:
-            executeDType(instruction);
-            break;
-        case InstructionType::I:
-            executeIType(instruction);
-            break;
-        case InstructionType::B:
-            executeBType(instruction);
-            break;
-        case InstructionType::SC:
-            executeSCType(instruction);
-            break;
-        case InstructionType::X:
-            executeXType(instruction);
-            break;
-        case InstructionType::XO:
-            executeXOType(instruction);
-            break;
-        case InstructionType::XFX:
-            executeXFXType(instruction);
-            break;
-        case InstructionType::XFL:
-            executeXFLType(instruction);
-            break;
-        case InstructionType::XL:
-            executeXLType(instruction);
-            break;
-        case InstructionType::M:
-            executeMType(instruction);
-            break;
-        case InstructionType::A:
-            executeAType(instruction);
-            break;
-        case InstructionType::PSQ_D:
-            executePSQ_DType(instruction);
-            break;
-        case InstructionType::PSQ_X:
-            executePSQ_XType(instruction);
-            break;
-        default:
-            raiseException(0x700, 0x80000);
-            break;
-        }
+        executeCompiled(*decoded);
     } catch (const MemoryAccessException &) {
         if (!state.exceptionTaken) {
             Logger::log(

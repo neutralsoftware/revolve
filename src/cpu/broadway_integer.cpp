@@ -193,7 +193,6 @@ void Broadway::executeXLType(uint32_t instruction) {
         state.msr =
             (state.msr & ~0x87C0FFFFu) | (state.spr[SPR::SRR1] & 0x87C0FFFFu);
         state.msr &= ~0x40000u;
-        invalidateTranslationCache();
         state.nia = state.spr[SPR::SRR0] & ~3u;
         return;
     case 150:
@@ -337,7 +336,6 @@ void Broadway::executeXType(uint32_t instruction) {
             break;
         case 146:
             state.msr = source;
-            invalidateTranslationCache();
             break;
         case 210:
             state.sr[a & 15] = source;
@@ -365,7 +363,9 @@ void Broadway::executeXType(uint32_t instruction) {
     case 758:
     case 598:
     case 854:
+        return;
     case 982:
+        invalidateTranslationPage(address);
         return;
     case 1014:
         for (uint32_t i = 0; i < 32; i += 4)
