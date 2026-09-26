@@ -9,7 +9,7 @@ namespace {
 std::vector<uint8_t> bluetoothDevices() {
     std::vector<uint8_t> bytes(0x461);
     bytes[0] = 1;
-    constexpr std::array<uint8_t, 6> address{1, 0, 0, 0x1D, 0x19, 0};
+    constexpr std::array<uint8_t, 6> address{0, 0x19, 0x1D, 0, 0, 1};
     constexpr std::string_view name = "Nintendo RVL-CNT-01";
     for (size_t offset : {size_t{1}, size_t{1 + 10 * 0x46}}) {
         std::copy(address.begin(), address.end(), bytes.begin() + offset);
@@ -31,7 +31,14 @@ void ensureBluetoothDevice(const std::filesystem::path &config) {
     if (name == data.end())
         return;
     const size_t payload = static_cast<size_t>(name - data.begin()) + key.size() + 2;
-    if (payload + 0x461 > data.size() || data[payload] != 0)
+    if (payload + 0x461 > data.size())
+        return;
+    constexpr std::string_view nameValue = "Nintendo RVL-CNT-01";
+    const bool virtualDevice =
+        data[payload] == 0 ||
+        std::equal(nameValue.begin(), nameValue.end(),
+                   data.begin() + payload + 7);
+    if (!virtualDevice)
         return;
     const auto devices = bluetoothDevices();
     std::copy(devices.begin(), devices.end(), data.begin() + payload);

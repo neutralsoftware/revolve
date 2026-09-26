@@ -1645,8 +1645,6 @@ void GX::executeEfbCopy() {
 
     renderer->copyEFBToXFB(state.bp.copy);
     ++xfbCopyCount;
-    Logger::log("GX", LogLevel::Info,
-                "Guest XFB copy " + std::to_string(xfbCopyCount));
 
     if (state.bp.copy.clearAfterCopy) {
         renderer->clearEFB(state.bp.copy.clearColor, state.bp.copy.clearDepth);

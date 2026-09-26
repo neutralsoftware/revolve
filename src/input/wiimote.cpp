@@ -5,6 +5,8 @@
 #include <vector>
 
 WiiRemoteDevice::WiiRemoteDevice(WiiRemoteState *state) : state(state) {
+    if (state)
+        previousNunchukConnected = state->nunchukConnected;
     initializeEEPROM();
     initializeNunchukRegisters();
     initializeMotionPlusRegisters();

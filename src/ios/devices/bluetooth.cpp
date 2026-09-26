@@ -1,6 +1,7 @@
 
 #include "core/utils.h"
 #include "ios/ios.h"
+#include <iostream>
 
 BluetoothUSBDevice::BluetoothUSBDevice(IOS &ios, InputManager &inputManager)
     : ios(ios) {
@@ -68,6 +69,7 @@ BluetoothUSBDevice::handleInterrupt(const IOSIoctlvRequest &request,
         return IOS::error(IOSError::Invalid);
 
     const uint8_t endpoint = readU8(vectors[0].address);
+
     const uint16_t length = readBE16(vectors[1].address);
 
     if (endpoint != HCI_EVENT_ENDPOINT)
@@ -75,7 +77,6 @@ BluetoothUSBDevice::handleInterrupt(const IOSIoctlvRequest &request,
 
     if (!hciEvents.empty()) {
         auto event = std::move(hciEvents.front());
-
         hciEvents.pop_front();
 
         const std::size_t amount = std::min<std::size_t>(
@@ -84,6 +85,10 @@ BluetoothUSBDevice::handleInterrupt(const IOSIoctlvRequest &request,
         writeGuest(vectors[2].address, std::span(event).first(amount));
 
         return static_cast<int32_t>(amount);
+    }
+
+    if (pendingHCIRead) {
+        Logger::log("BT", LogLevel::Error, "HCI interrupt read overwritten");
     }
 
     pendingHCIRead = PendingRead{
@@ -135,21 +140,33 @@ BluetoothUSBDevice::handleBulk(const IOSIoctlvRequest &request,
 
         handleACLFromWii(packet);
 
+        if (packet.size() >= 2) {
+            const uint16_t handleFlags =
+                uint16_t(packet[0]) | (uint16_t(packet[1]) << 8);
+
+            const uint16_t handle = handleFlags & 0x0FFF;
+
+            sendNumberOfCompletedPackets(handle, 1);
+        }
+
         return static_cast<int32_t>(amount);
     }
 
     if (endpoint == ACL_IN_ENDPOINT) {
-        if (!aclPackets.empty()) {
+        if (!aclPackets.empty() && hciEvents.empty()) {
             auto packet = std::move(aclPackets.front());
-
             aclPackets.pop_front();
-
             const std::size_t writeSize =
                 std::min<std::size_t>(packet.size(), amount);
 
             writeGuest(vectors[2].address, std::span(packet).first(writeSize));
 
             return static_cast<int32_t>(writeSize);
+        }
+
+        if (pendingACLRead) {
+            Logger::log("BT", LogLevel::Error,
+                        "ACL-IN pending request overwritten");
         }
 
         pendingACLRead = PendingRead{
@@ -165,23 +182,32 @@ BluetoothUSBDevice::handleBulk(const IOSIoctlvRequest &request,
 }
 
 void BluetoothUSBDevice::queueACL(std::vector<uint8_t> packet) {
-    if (pendingACLRead) {
-        const std::size_t amount =
-            std::min<std::size_t>(packet.size(), pendingACLRead->capacity);
-
-        writeGuest(pendingACLRead->bufferAddress,
-                   std::span(packet).first(amount));
-
-        const uint32_t request = pendingACLRead->ipcAddress;
-
-        pendingACLRead.reset();
-
-        ios.completeRequest(request, static_cast<int32_t>(amount));
-
-        return;
-    }
-
     aclPackets.push_back(std::move(packet));
+    tryCompleteACLRead();
+}
+
+void BluetoothUSBDevice::tryCompleteACLRead() {
+    if (!pendingACLRead)
+        return;
+
+    if (aclPackets.empty())
+        return;
+
+    if (!hciEvents.empty())
+        return;
+
+    auto packet = std::move(aclPackets.front());
+    aclPackets.pop_front();
+
+    const std::size_t amount =
+        std::min<std::size_t>(packet.size(), pendingACLRead->capacity);
+
+    writeGuest(pendingACLRead->bufferAddress, std::span(packet).first(amount));
+
+    const uint32_t request = pendingACLRead->ipcAddress;
+    pendingACLRead.reset();
+
+    ios.completeRequest(request, static_cast<int32_t>(amount));
 }
 
 IOSResult
@@ -352,6 +378,7 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
     case HCI::Reset: {
         aclPackets.clear();
         scanEnable = 0;
+        connectionRequestDelay = 0;
         for (auto &connection : connections) {
             connection.basebandConnected = false;
             connection.incomingRequested = false;
@@ -364,6 +391,8 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
             connection.hidControlConfigured = false;
             connection.hidInterruptConfigured = false;
             connection.sdpConfigured = false;
+            connection.hidLinkState = HIDLinkState::None;
+            connection.hidRetryDelay = 0;
         }
         nextCID = 0x0040;
         nextSignalIdentifier = 1;
@@ -438,6 +467,36 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
         sendCommandComplete(opcode, response);
         break;
     }
+    case 0x041B: {
+        if (payload.size() < 2)
+            break;
+
+        const uint16_t handle =
+            (uint16_t(payload[0]) | (uint16_t(payload[1]) << 8)) & 0x0FFF;
+
+        auto *connection = findConnectionByHandle(handle);
+
+        sendCommandStatus(opcode, connection ? 0x00 : 0x02);
+
+        if (!connection)
+            break;
+
+        std::vector<uint8_t> event;
+
+        event.push_back(0x0B);
+        event.push_back(0x0B);
+
+        event.push_back(0x00);
+        appendLE16(event, handle);
+
+        constexpr std::array<uint8_t, 8> features{0xBC, 0x02, 0x04, 0x38,
+                                                  0x08, 0x00, 0x00, 0x00};
+
+        event.insert(event.end(), features.begin(), features.end());
+
+        queueHCIEvent(std::move(event));
+        break;
+    }
     case 0x0C14: {
         std::vector<uint8_t> response{0x00};
         constexpr char localName[] = "Nintendo RVL-CNT";
@@ -498,13 +557,62 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
         sendRemoteName(address);
         break;
     }
-    case 0x0409:
+    case 0x0409: {
+        if (payload.size() < 7)
+            break;
+
+        BluetoothAddress address{};
+        std::copy_n(payload.begin(), 6, address.bytes.begin());
+
+        const uint8_t requestedRole = payload[6];
+
+        auto *connection = findConnectionByAddress(address);
+
+        if (!connection || !connection->wiimote->isAvailable()) {
+            sendCommandStatus(opcode, 0x02);
+            break;
+        }
+
+        connection->basebandConnected = true;
+        connection->incomingRequested = false;
+        connection->hidControlConfigured = false;
+        connection->hidInterruptConfigured = false;
+        connection->sdpConfigured = false;
+
+        sendCommandStatus(opcode);
+
+        if (requestedRole == 0x00)
+            sendRoleChange(*connection, true);
+
+        sendConnectionComplete(*connection);
+
+        connection->hidLinkState = HIDLinkState::NeedControl;
+        connection->hidRetryDelay = 10;
+
+        break;
+    }
+    case 0x040A: {
+        if (payload.size() < 7)
+            break;
+
+        BluetoothAddress address{};
+        std::copy_n(payload.begin(), 6, address.bytes.begin());
+        auto *connection = findConnectionByAddress(address);
+        sendCommandStatus(opcode, connection ? 0x00 : 0x02);
+        if (connection) {
+            connection->basebandConnected = false;
+            connection->incomingRequested = false;
+            connection->hidLinkState = HIDLinkState::None;
+            connection->hidRetryDelay = 0;
+            connectionRequestDelay = 100;
+        }
+        break;
+    }
     case HCI::CreateConnection: {
         if (payload.size() < 6)
             break;
 
         BluetoothAddress address{};
-
         std::copy_n(payload.begin(), 6, address.bytes.begin());
 
         auto *connection = findConnectionByAddress(address);
@@ -516,9 +624,15 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
 
         connection->basebandConnected = true;
         connection->incomingRequested = false;
+        connection->hidControlConfigured = false;
+        connection->hidInterruptConfigured = false;
+        connection->sdpConfigured = false;
 
         sendCommandStatus(opcode);
         sendConnectionComplete(*connection);
+
+        connection->hidLinkState = HIDLinkState::NeedControl;
+        connection->hidRetryDelay = 10;
 
         break;
     }
@@ -535,6 +649,8 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
         connection->hidControlConfigured = false;
         connection->hidInterruptConfigured = false;
         connection->sdpConfigured = false;
+        connection->hidLinkState = HIDLinkState::None;
+        connection->hidRetryDelay = 0;
         std::vector<uint8_t> event{0x05, 0x04, 0x00};
         appendLE16(event, handle & 0x0FFF);
         event.push_back(payload[2]);
@@ -548,18 +664,57 @@ void BluetoothUSBDevice::handleHCICommand(std::span<const uint8_t> command) {
             break;
         }
         scanEnable = payload[0];
+        connectionRequestDelay = (scanEnable & 2) ? 10 : 0;
         const std::array<uint8_t, 1> response{0x00};
         sendCommandComplete(opcode, response);
         break;
     }
+    case 0x080D: {
+        if (payload.size() < 4) {
+            sendCommandStatus(opcode, 0x12);
+            break;
+        }
+
+        const uint16_t handle =
+            uint16_t(payload[0]) | (uint16_t(payload[1]) << 8);
+
+        auto *connection = findConnectionByHandle(handle & 0x0FFF);
+
+        sendCommandStatus(opcode, connection ? 0x00 : 0x02);
+
+        break;
+    }
     case 0x0C0D: {
-        queueHCIEvent({0x15, 0x01, 0x00});
+        if (payload.size() < 7)
+            break;
+
+        const bool readAll = payload[6] != 0;
+
+        uint16_t count = 0;
+
+        if (readAll && connections[0].wiimote->isAvailable()) {
+            count = 1;
+
+            std::vector<uint8_t> event;
+
+            event.push_back(0x15);
+            event.push_back(1 + 22 * count);
+
+            event.push_back(static_cast<uint8_t>(count));
+
+            event.insert(event.end(), connections[0].address.bytes.begin(),
+                         connections[0].address.bytes.end());
+
+            for (int i = 0; i < 16; ++i)
+                event.push_back(0xA0);
+
+            queueHCIEvent(std::move(event));
+        }
 
         std::vector<uint8_t> response;
-
         response.push_back(0x00);
         appendLE16(response, 255);
-        appendLE16(response, 0);
+        appendLE16(response, count);
 
         sendCommandComplete(opcode, response);
         break;
@@ -691,35 +846,137 @@ void BluetoothUSBDevice::handleL2CAPSignaling(BluetoothConnection &connection,
                 std::vector<uint8_t> configure;
                 appendLE16(configure, remoteCID);
                 appendLE16(configure, 0x0000);
+
+                configure.push_back(0x01);
+                configure.push_back(0x02);
+                appendLE16(configure, 185);
+
                 sendL2CAPSignal(connection, 0x04, nextSignalIdentifier++,
                                 configure);
             }
-        } else if (code == 0x04 && payload.size() >= 4) {
-            const uint16_t localCID =
+        } else if (code == 0x03 && payload.size() >= 8) {
+            const uint16_t dcid =
                 uint16_t(payload[0]) | (uint16_t(payload[1]) << 8);
-            std::vector<uint8_t> response;
-            appendLE16(response, localCID);
-            appendLE16(response, 0x0000);
-            appendLE16(response, 0x0000);
-            sendL2CAPSignal(connection, 0x05, identifier, response);
-            if (localCID == connection.sdpLocalCID)
-                connection.sdpConfigured = true;
-            if (localCID == connection.hidControlLocalCID)
-                connection.hidControlConfigured = true;
-            if (localCID == connection.hidInterruptLocalCID)
-                connection.hidInterruptConfigured = true;
-        } else if (code == 0x05 && payload.size() >= 6) {
-            const uint16_t remoteCID =
-                uint16_t(payload[0]) | (uint16_t(payload[1]) << 8);
+
+            const uint16_t scid =
+                uint16_t(payload[2]) | (uint16_t(payload[3]) << 8);
+
             const uint16_t result =
                 uint16_t(payload[4]) | (uint16_t(payload[5]) << 8);
-            if (result == 0) {
-                if (remoteCID == connection.sdpRemoteCID)
-                    connection.sdpConfigured = true;
-                if (remoteCID == connection.hidControlRemoteCID)
-                    connection.hidControlConfigured = true;
-                if (remoteCID == connection.hidInterruptRemoteCID)
-                    connection.hidInterruptConfigured = true;
+
+            const bool controlResponse =
+                scid == connection.hidControlLocalCID &&
+                connection.hidLinkState == HIDLinkState::ControlConnecting;
+            const bool interruptResponse =
+                scid == connection.hidInterruptLocalCID &&
+                connection.hidLinkState == HIDLinkState::InterruptConnecting;
+
+            if (!controlResponse && !interruptResponse) {
+                if (connection.hidLinkState == HIDLinkState::ControlConnecting)
+                    connection.hidLinkState = HIDLinkState::NeedControl;
+                else if (connection.hidLinkState ==
+                         HIDLinkState::InterruptConnecting)
+                    connection.hidLinkState = HIDLinkState::NeedInterrupt;
+                connection.hidRetryDelay = 100;
+                data = data.subspan(4 + length);
+                continue;
+            }
+
+            if (result == 0x0001) {
+                data = data.subspan(4 + length);
+                continue;
+            }
+
+            if (result != 0x0000) {
+                connection.hidLinkState = controlResponse
+                                              ? HIDLinkState::NeedControl
+                                              : HIDLinkState::NeedInterrupt;
+                connection.hidRetryDelay = 100;
+
+            } else {
+                if (controlResponse) {
+                    connection.hidControlRemoteCID = dcid;
+
+                    std::vector<uint8_t> configure;
+
+                    appendLE16(configure, dcid);
+                    appendLE16(configure, 0x0000);
+
+                    configure.push_back(0x01);
+                    configure.push_back(0x02);
+                    appendLE16(configure, 185);
+
+                    sendL2CAPSignal(connection, 0x04, nextSignalIdentifier++,
+                                    configure);
+
+                } else if (interruptResponse) {
+                    connection.hidInterruptRemoteCID = dcid;
+
+                    std::vector<uint8_t> configure;
+
+                    appendLE16(configure, dcid);
+                    appendLE16(configure, 0x0000);
+
+                    configure.push_back(0x01);
+                    configure.push_back(0x02);
+                    appendLE16(configure, 185);
+
+                    sendL2CAPSignal(connection, 0x04, nextSignalIdentifier++,
+                                    configure);
+                }
+            }
+        } else if (code == 0x04 && payload.size() >= 4) {
+            const uint16_t dcid =
+                uint16_t(payload[0]) | (uint16_t(payload[1]) << 8);
+
+            uint16_t scid = 0;
+
+            if (dcid == connection.hidControlLocalCID)
+                scid = connection.hidControlRemoteCID;
+            else if (dcid == connection.hidInterruptLocalCID)
+                scid = connection.hidInterruptRemoteCID;
+            else if (dcid == connection.sdpLocalCID)
+                scid = connection.sdpRemoteCID;
+
+            if (dcid != connection.hidControlLocalCID &&
+                dcid != connection.hidInterruptLocalCID &&
+                dcid != connection.sdpLocalCID) {
+                Logger::log("BT", LogLevel::Error,
+                            "CONFIG REQ for unknown DCID " +
+                                utils::toHexString(dcid));
+                return;
+            }
+
+            std::vector<uint8_t> response;
+
+            appendLE16(response, scid);
+            appendLE16(response, 0x0000);
+            appendLE16(response, 0x0000);
+
+            sendL2CAPSignal(connection, 0x05, identifier, response);
+        } else if (code == 0x05 && payload.size() >= 6) {
+            const uint16_t scid =
+                uint16_t(payload[0]) | (uint16_t(payload[1]) << 8);
+
+            const uint16_t result =
+                uint16_t(payload[4]) | (uint16_t(payload[5]) << 8);
+
+            if (result != 0)
+                return;
+
+            if (scid == connection.hidControlLocalCID) {
+                connection.hidControlConfigured = true;
+                if (connection.hidLinkState == HIDLinkState::ControlConnecting)
+                    connection.hidLinkState = HIDLinkState::NeedInterrupt;
+
+            }
+
+            else if (scid == connection.hidInterruptLocalCID) {
+                connection.hidInterruptConfigured = true;
+                if (connection.hidLinkState ==
+                    HIDLinkState::InterruptConnecting)
+                    connection.hidLinkState = HIDLinkState::Complete;
+
             }
         } else if (code == 0x06 && payload.size() >= 4) {
             sendL2CAPSignal(connection, 0x07, identifier, payload.first(4));
@@ -728,15 +985,22 @@ void BluetoothUSBDevice::handleL2CAPSignaling(BluetoothConnection &connection,
         } else if (code == 0x0A && payload.size() >= 2) {
             const uint16_t type =
                 uint16_t(payload[0]) | (uint16_t(payload[1]) << 8);
+
             std::vector<uint8_t> response;
+
             appendLE16(response, type);
-            appendLE16(response, type == 0x0002 ? 0x0000 : 0x0001);
+
             if (type == 0x0002) {
+                appendLE16(response, 0x0000);
+
+                response.push_back(0x04);
                 response.push_back(0x00);
                 response.push_back(0x00);
                 response.push_back(0x00);
-                response.push_back(0x00);
+            } else {
+                appendLE16(response, 0x0001);
             }
+
             sendL2CAPSignal(connection, 0x0B, identifier, response);
         } else {
             std::vector<uint8_t> response;
@@ -895,7 +1159,72 @@ void BluetoothUSBDevice::handleHID(BluetoothConnection &connection,
 }
 
 void BluetoothUSBDevice::update() {
-    for (auto &connection : connections) {
+    if (connectionRequestDelay > 0)
+        --connectionRequestDelay;
+
+    for (std::size_t i = 0; i < connections.size(); ++i) {
+        auto &connection = connections[i];
+
+        static std::array<uint8_t, 4> oldState{};
+
+        uint8_t state = 0;
+
+        if (connection.wiimote->isAvailable())
+            state |= 1;
+        if (connection.basebandConnected)
+            state |= 2;
+        if (connection.hidControlConfigured)
+            state |= 4;
+        if (connection.hidInterruptConfigured)
+            state |= 8;
+
+        if (oldState[i] != state) {
+            std::cout << "[BT] WiiRemote " << i
+                      << " available=" << connection.wiimote->isAvailable()
+                      << " baseband=" << connection.basebandConnected
+                      << " hidCtl=" << connection.hidControlConfigured
+                      << " hidInt=" << connection.hidInterruptConfigured
+                      << '\n';
+
+            oldState[i] = state;
+        }
+
+        if (connection.hidRetryDelay > 0)
+            --connection.hidRetryDelay;
+
+        if (connection.basebandConnected && connection.hidRetryDelay == 0) {
+            switch (connection.hidLinkState) {
+            case HIDLinkState::NeedControl: {
+                const uint16_t cid = nextCID++;
+
+                connection.hidControlLocalCID = cid;
+
+                requestL2CAPChannel(connection, PSM_HID_CONTROL, cid);
+
+                connection.hidLinkState = HIDLinkState::ControlConnecting;
+
+                break;
+            }
+
+            case HIDLinkState::NeedInterrupt: {
+                const uint16_t cid = nextCID++;
+
+                connection.hidInterruptLocalCID = cid;
+
+                requestL2CAPChannel(connection, PSM_HID_INTERRUPT, cid);
+
+                connection.hidLinkState = HIDLinkState::InterruptConnecting;
+
+                break;
+            }
+
+            default:
+                break;
+            }
+        }
+
+        tryCompleteACLRead();
+
         if (!connection.wiimote->isAvailable()) {
             connection.incomingRequested = false;
             if (connection.basebandConnected) {
@@ -903,6 +1232,8 @@ void BluetoothUSBDevice::update() {
                 connection.hidControlConfigured = false;
                 connection.hidInterruptConfigured = false;
                 connection.sdpConfigured = false;
+                connection.hidLinkState = HIDLinkState::None;
+                connection.hidRetryDelay = 0;
                 std::vector<uint8_t> event{0x05, 0x04, 0x00};
                 appendLE16(event, connection.handle);
                 event.push_back(0x08);
@@ -911,7 +1242,7 @@ void BluetoothUSBDevice::update() {
             continue;
         }
         if (!connection.basebandConnected && !connection.incomingRequested &&
-            (scanEnable & 2)) {
+            (scanEnable & 2) && connectionRequestDelay == 0) {
             std::vector<uint8_t> event{0x04, 0x0A};
             event.insert(event.end(), connection.address.bytes.begin(),
                          connection.address.bytes.end());
@@ -972,4 +1303,51 @@ void BluetoothUSBDevice::sendL2CAP(BluetoothConnection &connection,
     acl.insert(acl.end(), l2cap.begin(), l2cap.end());
 
     queueACL(std::move(acl));
+}
+
+void BluetoothUSBDevice::requestL2CAPChannel(BluetoothConnection &connection,
+                                             uint16_t psm, uint16_t localCID) {
+    std::vector<uint8_t> payload;
+
+    appendLE16(payload, psm);
+    appendLE16(payload, localCID);
+
+    const uint8_t identifier = nextSignalIdentifier++;
+    if (nextSignalIdentifier == 0)
+        nextSignalIdentifier = 1;
+
+    sendL2CAPSignal(connection, 0x02, identifier, payload);
+}
+
+void BluetoothUSBDevice::sendRoleChange(const BluetoothConnection &connection,
+                                        bool master) {
+    std::vector<uint8_t> event;
+
+    event.push_back(0x12);
+    event.push_back(0x08);
+
+    event.push_back(0x00);
+
+    event.insert(event.end(), connection.address.bytes.begin(),
+                 connection.address.bytes.end());
+
+    event.push_back(master ? 0x00 : 0x01);
+
+    queueHCIEvent(std::move(event));
+}
+
+void BluetoothUSBDevice::sendNumberOfCompletedPackets(uint16_t handle,
+                                                      uint16_t count) {
+
+    std::vector<uint8_t> event;
+
+    event.push_back(0x13);
+    event.push_back(0x05);
+
+    event.push_back(0x01);
+
+    appendLE16(event, handle);
+    appendLE16(event, count);
+
+    queueHCIEvent(std::move(event));
 }

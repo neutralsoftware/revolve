@@ -372,6 +372,15 @@ struct BluetoothAddress {
     std::array<uint8_t, 6> bytes{};
 };
 
+enum class HIDLinkState {
+    None,
+    NeedControl,
+    ControlConnecting,
+    NeedInterrupt,
+    InterruptConnecting,
+    Complete
+};
+
 struct BluetoothConnection {
     WiiRemoteDevice *wiimote = nullptr;
 
@@ -394,6 +403,9 @@ struct BluetoothConnection {
     bool hidControlConfigured = false;
     bool hidInterruptConfigured = false;
     bool sdpConfigured = false;
+
+    HIDLinkState hidLinkState = HIDLinkState::None;
+    uint16_t hidRetryDelay = 0;
 };
 
 enum class USBV0Request : uint32_t {
@@ -495,7 +507,17 @@ class BluetoothUSBDevice final : public IOSDevice {
     void sendL2CAPSignal(BluetoothConnection &connection, uint8_t code,
                          uint8_t identifier, std::span<const uint8_t> data);
 
+    void requestL2CAPChannel(BluetoothConnection &connection, uint16_t psm,
+                             uint16_t localCID);
+
+    void tryCompleteACLRead();
+
+    void sendRoleChange(const BluetoothConnection &connection, bool master);
+
+    void sendNumberOfCompletedPackets(uint16_t handle, uint16_t count);
+
     uint8_t scanEnable = 0;
+    uint16_t connectionRequestDelay = 0;
     uint16_t nextCID = 0x0040;
     uint8_t nextSignalIdentifier = 1;
 };
